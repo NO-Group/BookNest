@@ -7,7 +7,7 @@ import '../../../services/supabase_service.dart';
 class BookEditorScreen extends StatefulWidget {
   final String? clubId;
   
-  const BookEditorScreen({super.key, this.clubId});
+  const BookEditorScreen({Key? key, this.clubId}) : super(key: key);
 
   @override
   State<BookEditorScreen> createState() => _BookEditorScreenState();
@@ -153,6 +153,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
             
             const Divider(color: Color(0xFF222222), height: 1),
             
+            // v2.0.7 precise toolbar syntax
             Theme(
               data: ThemeData.dark().copyWith(
                 iconTheme: const IconThemeData(color: Colors.white70),
@@ -160,38 +161,30 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 color: const Color(0xFF141414),
-                child: quill.QuillToolbar.simple(
+                child: quill.QuillToolbar.basic(
                   controller: _quillController,
-                  configurations: const quill.QuillSimpleToolbarConfigurations(
-                    showFontFamily: false,
-                    showFontSize: false,
-                    showInlineCode: false,
-                    showColorButton: false,
-                    showBackgroundColorButton: false,
-                    showCodeBlock: false,
-                  ),
                 ),
               ),
             ),
             
             const Divider(color: Color(0xFF222222), height: 1),
             
+            // v2.0.7 precise editor syntax
             Expanded(
               child: Theme(
                 data: ThemeData.dark(),
                 child: Container(
                   color: const Color(0xFF0A0A0A),
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  child: quill.QuillEditor.basic(
+                  child: quill.QuillEditor(
                     controller: _quillController,
                     focusNode: _editorFocusNode,
                     scrollController: _scrollController,
-                    configurations: const quill.QuillEditorConfigurations(
-                      scrollable: true,
-                      autoFocus: false,
-                      padding: EdgeInsets.zero,
-                      expands: true,
-                    ),
+                    scrollable: true,
+                    autoFocus: false,
+                    padding: EdgeInsets.zero,
+                    expands: true,
+                    readOnly: false, // Required boolean in older versions
                   ),
                 ),
               ),
