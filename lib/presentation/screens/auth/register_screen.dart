@@ -40,7 +40,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       if (res.user != null && mounted) {
-        context.go('/library');
+        context.go('/feed');
       }
     } on AuthException catch (e) {
       if (mounted) {

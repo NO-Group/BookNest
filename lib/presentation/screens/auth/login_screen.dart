@@ -31,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (res.user != null && mounted) {
-        context.go('/library');
+        context.go('/feed');
       }
     } on AuthException catch (e) {
       if (mounted) {

@@ -22,7 +22,7 @@ class _SplashScreenState extends State<SplashScreen> {
     
     final session = SupabaseService().auth.currentSession;
     if (session != null) {
-      context.go('/clubs');
+      context.go('/feed');
     } else {
       context.go('/login');
     }

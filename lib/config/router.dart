@@ -4,12 +4,23 @@ import '../presentation/screens/splash/splash_screen.dart';
 import '../presentation/screens/auth/login_screen.dart';
 import '../presentation/screens/auth/register_screen.dart';
 import '../presentation/screens/main_shell.dart';
+import '../presentation/screens/feed/feed_screen.dart';
+import '../presentation/screens/discover/discover_screen.dart';
 import '../presentation/screens/books/books_library_screen.dart';
 import '../presentation/screens/books/book_editor_screen.dart';
 import '../presentation/screens/books/publish_details_screen.dart';
-import '../presentation/screens/discover/discover_screen.dart';
-import '../presentation/screens/clubs/clubs_list_screen.dart';
+import '../presentation/screens/dms/dm_list_screen.dart';
 import '../presentation/screens/profile/profile_screen.dart';
+import '../presentation/screens/feed/create_quote_screen.dart';
+import '../presentation/screens/feed/create_news_screen.dart';
+import '../presentation/screens/feed/create_poll_screen.dart';
+import '../presentation/screens/feed/create_event_screen.dart';
+import '../presentation/screens/feed/create_reel_screen.dart';
+import '../presentation/screens/discover/create_club_screen.dart';
+import '../presentation/screens/discover/create_community_screen.dart';
+import '../presentation/screens/discover/create_organization_screen.dart';
+import '../presentation/screens/discover/create_school_screen.dart';
+import '../presentation/screens/clubs/club_detail_screen.dart';
 import '../services/supabase_service.dart';
 
 /// Routes that must never be reached while signed out.
@@ -33,7 +44,7 @@ String? _redirect(BuildContext context, GoRouterState state) {
   }
 
   // Already signed in users are sent away from the login/register screens.
-  if (isAuthRoute) return '/library';
+  if (isAuthRoute) return '/feed';
 
   return null;
 }
@@ -68,18 +79,64 @@ final GoRouter appRouter = GoRouter(
         return PublishDetailsScreen(bookId: bookId);
       },
     ),
+    // Feed content creation routes (fullscreen, hide the nav bar).
+    GoRoute(
+      path: '/create/quote',
+      builder: (context, state) => const CreateQuoteScreen(),
+    ),
+    GoRoute(
+      path: '/create/news',
+      builder: (context, state) => const CreateNewsScreen(),
+    ),
+    GoRoute(
+      path: '/create/poll',
+      builder: (context, state) => const CreatePollScreen(),
+    ),
+    GoRoute(
+      path: '/create/event',
+      builder: (context, state) => const CreateEventScreen(),
+    ),
+    GoRoute(
+      path: '/create/reel',
+      builder: (context, state) => const CreateReelScreen(),
+    ),
+    // Discover creation routes (fullscreen, hide the nav bar).
+    GoRoute(
+      path: '/create/club',
+      builder: (context, state) => const CreateClubScreen(),
+    ),
+    GoRoute(
+      path: '/create/community',
+      builder: (context, state) => const CreateCommunityScreen(),
+    ),
+    GoRoute(
+      path: '/create/organization',
+      builder: (context, state) => const CreateOrganizationScreen(),
+    ),
+    GoRoute(
+      path: '/create/school',
+      builder: (context, state) => const CreateSchoolScreen(),
+    ),
+    GoRoute(
+      path: '/club/:id',
+      builder: (context, state) => ClubDetailScreen(
+        clubId: state.pathParameters['id'] ?? '',
+      ),
+    ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) =>
           MainShell(navigationShell: navigationShell),
       branches: [
+        // Tab 1: Feed
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/library',
-              builder: (context, state) => const BooksLibraryScreen(),
+              path: '/feed',
+              builder: (context, state) => const FeedScreen(),
             ),
           ],
         ),
+        // Tab 2: Discover
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -88,14 +145,25 @@ final GoRouter appRouter = GoRouter(
             ),
           ],
         ),
+        // Tab 3: Books (center FAB)
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/clubs',
-              builder: (context, state) => const ClubsListScreen(),
+              path: '/books',
+              builder: (context, state) => const BooksLibraryScreen(),
             ),
           ],
         ),
+        // Tab 4: Messages
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/dms',
+              builder: (context, state) => const DMListScreen(),
+            ),
+          ],
+        ),
+        // Tab 5: Profile
         StatefulShellBranch(
           routes: [
             GoRoute(
