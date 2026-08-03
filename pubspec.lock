@@ -238,14 +238,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.4.2"
-  flutter_colorpicker:
-    dependency: transitive
-    description:
-      name: flutter_colorpicker
-      sha256: "3410869743dc4e4493a0a865c119b091452f5ea5d93e703f62415a320625e871"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.5.0"
   flutter_inappwebview:
     dependency: transitive
     description:
@@ -318,14 +310,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.35"
-  flutter_quill:
-    dependency: "direct main"
-    description:
-      name: flutter_quill
-      sha256: "936dacffbeb42a40ad8632bc097597c9d542aeaf6530ee114ee3b3983a4e5d74"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.7"
   flutter_riverpod:
     dependency: "direct main"
     description:
@@ -688,14 +672,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.11.1"
-  photo_view:
-    dependency: transitive
-    description:
-      name: photo_view
-      sha256: aedb4371e5bf67546ecd92aed341df714f9de5db7c417ce7538a91c2b43d931a
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.12.0"
   platform:
     dependency: transitive
     description:
