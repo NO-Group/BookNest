@@ -31,8 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (res.user != null && mounted) {
-        //books/books_library_screen.dart
-        context.go('/books');
+        context.go('/library');
       }
     } on AuthException catch (e) {
       if (mounted) {

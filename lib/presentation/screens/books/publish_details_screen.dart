@@ -1,154 +1,320 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
+import '../../../core/utils/auth_guard.dart';
+import '../../../services/supabase_service.dart';
+
+/// Chapter reader view for a single book.
+///
+/// Pulls the book metadata from `club_books` and its chapters from
+/// `book_chapters` by [bookId], then renders the first chapter's raw Markdown.
+/// The bottom action bar (Like, Comment, Share, Bookmark) is strictly guarded
+/// by [AuthGuard].
 class PublishDetailsScreen extends StatefulWidget {
-  final String initialTitle;
-  final dynamic quillDocumentJson;
+  final String bookId;
 
-  const PublishDetailsScreen({
-    super.key,
-    required this.initialTitle,
-    required this.quillDocumentJson,
-  });
+  const PublishDetailsScreen({super.key, required this.bookId});
 
   @override
   State<PublishDetailsScreen> createState() => _PublishDetailsScreenState();
 }
 
 class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
-  late final TextEditingController _titleController;
-  final _teaserController = TextEditingController();
-  final _summaryController = TextEditingController();
-  bool _isSaving = false;
+  Map<String, dynamic>? _book;
+  Map<String, dynamic>? _chapter;
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController(text: widget.initialTitle);
+    _loadBook();
   }
 
-  Future<void> _finalPublish() async {
-    if (_titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Title cannot be empty'), backgroundColor: Colors.red),
-      );
-      return;
-    }
-
-    setState(() => _isSaving = true);
-
+  Future<void> _loadBook() async {
     try {
-      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-      if (currentUserId == null) throw Exception('User not authenticated');
+      final supabase = SupabaseService().client;
 
-      await Supabase.instance.client.from('club_books').insert({
-        'title': _titleController.text.trim(),
-        'description': _summaryController.text.trim(),
-        'content_format': 'json',
-        'added_by': currentUserId,
-        'metadata': {
-          'teaser': _teaserController.text.trim(),
-          'rich_content': widget.quillDocumentJson,
-        }
+      final bookResponse = await supabase
+          .from('club_books')
+          .select()
+          .eq('id', widget.bookId)
+          .maybeSingle();
+
+      final chaptersResponse = await supabase
+          .from('book_chapters')
+          .select()
+          .eq('club_book_id', widget.bookId)
+          .order('chapter_number', ascending: true);
+
+      if (!mounted) return;
+
+      setState(() {
+        _book = bookResponse == null
+            ? null
+            : Map<String, dynamic>.from(bookResponse);
+        _chapter = chaptersResponse.isEmpty
+            ? null
+            : Map<String, dynamic>.from(chaptersResponse.first as Map);
+        _isLoading = false;
+        if (_book == null) _error = 'This book could not be found.';
       });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Book published successfully!'), backgroundColor: Colors.green),
-        );
-        context.go('/home');
-      }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _error = 'Could not load this book: $e';
+      });
     }
   }
 
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _teaserController.dispose();
-    _summaryController.dispose();
-    super.dispose();
+  void _guard(ActionHandler action) {
+    AuthGuard.run(context, action);
+  }
+
+  String _formatDate(dynamic raw) {
+    if (raw == null) return '';
+    try {
+      final date = DateTime.parse(raw.toString()).toLocal();
+      return DateFormat('MMM d, yyyy').format(date);
+    } catch (_) {
+      return '';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1E1E1E),
+      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text('Publish Details', style: TextStyle(color: Colors.white)),
+        backgroundColor: const Color(0xFF121212),
+        elevation: 1,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => context.pop(),
+        ),
+        title: const Text(
+          'Reading',
+          style: TextStyle(color: Colors.white, fontSize: 18),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Book Title', style: TextStyle(color: Colors.grey, fontSize: 14)),
-            const SizedBox(height: 8),
-            _buildTextField(controller: _titleController, hintText: 'Enter title'),
-            const SizedBox(height: 20),
-            
-            const Text('Teaser (Short Hook)', style: TextStyle(color: Colors.grey, fontSize: 14)),
-            const SizedBox(height: 8),
-            _buildTextField(controller: _teaserController, hintText: 'Write a short hook to grab readers...', maxLines: 2),
-            const SizedBox(height: 20),
+      body: _buildBody(),
+      bottomNavigationBar: _book == null ? null : _buildActionBar(),
+    );
+  }
 
-            const Text('Summary', style: TextStyle(color: Colors.grey, fontSize: 14)),
-            const SizedBox(height: 8),
-            _buildTextField(controller: _summaryController, hintText: 'Provide a full summary of the book...', maxLines: 5),
-            const SizedBox(height: 40),
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF00D4FF)),
+      );
+    }
 
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: _isSaving ? null : _finalPublish,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00FFFF),
-                  foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: _isSaving
-                    ? const CircularProgressIndicator(color: Colors.black)
-                    : const Text('Confirm & Publish', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 56, color: Color(0xFF444444)),
+              const SizedBox(height: 16),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 15),
               ),
-            ),
-          ],
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: _loadBook,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
         ),
+      );
+    }
+
+    final book = _book!;
+    final title = (book['title'] as String?) ?? 'Untitled';
+    final author = (book['author'] as String?) ?? 'Unknown author';
+    final description = (book['description'] as String?) ?? '';
+    final chapterTitle = (_chapter?['title'] as String?) ?? 'Chapter';
+    final content = (_chapter?['content'] as String?) ?? '';
+
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: Color(0xFF222222))),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'by $author',
+                style: const TextStyle(color: Color(0xFF888888), fontSize: 14),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                [
+                  if (chapterTitle.isNotEmpty) chapterTitle,
+                  if (_formatDate(book['created_at']).isNotEmpty)
+                    'Published ${_formatDate(book['created_at'])}',
+                ].join(' · '),
+                style: const TextStyle(color: Color(0xFF666666), fontSize: 12),
+              ),
+              if (description.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.6,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        Markdown(
+      data: content.isEmpty ? '*(No content published yet.)*' : content,
+      selectable: true,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+      styleSheet: MarkdownStyleSheet(
+        h1: const TextStyle(
+          color: Colors.white,
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+        ),
+        h2: const TextStyle(
+          color: Colors.white,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
+        p: const TextStyle(
+          color: Colors.white70,
+          fontSize: 16,
+          height: 1.7,
+        ),
+        listBullet: const TextStyle(color: Color(0xFF00D4FF)),
+        blockquoteDecoration: BoxDecoration(
+          color: const Color(0xFF141414),
+          borderRadius: BorderRadius.circular(8),
+          border: const Border(left: BorderSide(color: Color(0xFF00D4FF), width: 3)),
+        ),
+        blockquote: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
+        horizontalRuleDecoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: Color(0xFF222222))),
+        ),
+        code: const TextStyle(color: Color(0xFF00D4FF), backgroundColor: Color(0xFF141414)),
+      ),
+      ),
+      ],
+    );
+  }
+
+  Widget _buildActionBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF121212),
+        border: const Border(top: BorderSide(color: Color(0xFF222222))),
+      ),
+      padding: EdgeInsets.only(
+        left: 8,
+        right: 8,
+        top: 8,
+        bottom: MediaQuery.of(context).padding.bottom + 8,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _ActionButton(
+            icon: Icons.favorite_border,
+            label: 'Like',
+            onPressed: () =>
+                _guard(() => _toast('Thanks for the like!')),
+          ),
+          _ActionButton(
+            icon: Icons.comment_outlined,
+            label: 'Comment',
+            onPressed: () => _guard(() => _toast('Comments coming soon.')),
+          ),
+          _ActionButton(
+            icon: Icons.bookmark_border,
+            label: 'Bookmark',
+            onPressed: () => _guard(() => _toast('Bookmarked this book.')),
+          ),
+          _ActionButton(
+            icon: Icons.share_outlined,
+            label: 'Share',
+            onPressed: () => _guard(() => _toast('Share link copied.')),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildTextField({required TextEditingController controller, required String hintText, int maxLines = 1}) {
-    return TextField(
-      controller: controller,
-      maxLines: maxLines,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        hintText: hintText,
-        hintStyle: const TextStyle(color: Colors.white54),
-        filled: true,
-        fillColor: const Color(0xFF2A2A2A),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+  void _toast(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFF00D4FF),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+typedef ActionHandler = void Function();
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: const Color(0xFF00D4FF), size: 22),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+          ],
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );
   }

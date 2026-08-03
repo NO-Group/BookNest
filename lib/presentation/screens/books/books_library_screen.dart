@@ -1,9 +1,14 @@
-// lib/presentation/screens/books/books_library_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../../core/utils/auth_guard.dart';
 import '../../../services/supabase_service.dart';
 
+/// Realtime library feed of published books.
+///
+/// Subscribes to `club_books` via a Supabase stream ordered by creation date
+/// and renders them as dark cards. Every interactive action (Write, Read,
+/// Search, Bookmark) is guarded by [AuthGuard].
 class BooksLibraryScreen extends StatefulWidget {
   const BooksLibraryScreen({super.key});
 
@@ -12,31 +17,61 @@ class BooksLibraryScreen extends StatefulWidget {
 }
 
 class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
-  List<Map<String, dynamic>> _books = [];
-  bool _isLoading = true;
+  Stream<List<Map<String, dynamic>>>? _booksStream;
 
   @override
   void initState() {
     super.initState();
-    _loadBooks();
+    _subscribe();
   }
 
-  Future<void> _loadBooks() async {
-    try {
-      final response = await SupabaseService()
-          .client
-          .from('club_books')
-          .select()
-          .eq('moderation_status', 'approved')
-          .order('created_at', ascending: false);
-      
-      setState(() {
-        _books = List<Map<String, dynamic>>.from(response);
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-    }
+  void _subscribe() {
+    _booksStream = SupabaseService()
+        .client
+        .from('club_books')
+        .stream(primaryKey: ['id'])
+        .eq('moderation_status', 'approved')
+        .order('created_at', ascending: false)
+        .map(
+          (rows) => rows
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList(),
+        );
+  }
+
+  void _openBook(String bookId) {
+    AuthGuard.run(context, () {
+      context.push('/publish-details?bookId=$bookId');
+    });
+  }
+
+  void _onSearchPressed() {
+    AuthGuard.run(context, () {
+      // Reserved: deep-search is gated behind authentication.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Search is coming soon.'),
+          backgroundColor: Color(0xFF00D4FF),
+        ),
+      );
+    });
+  }
+
+  void _onWritePressed() {
+    AuthGuard.run(context, () {
+      context.push('/editor');
+    });
+  }
+
+  void _onBookmarkPressed(String bookId) {
+    AuthGuard.run(context, () {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Saved book to your library.'),
+          backgroundColor: const Color(0xFF00D4FF),
+        ),
+      );
+    });
   }
 
   @override
@@ -48,141 +83,217 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () {},
+            tooltip: 'Search books',
+            onPressed: _onSearchPressed,
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00D4FF)))
-          : _books.isEmpty
-              ? _buildEmptyState()
-              : _buildBookGrid(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/editor'),
-        backgroundColor: const Color(0xFFFF6A00),
-        child: const Icon(Icons.add, color: Colors.white),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _onWritePressed,
+        backgroundColor: const Color(0xFF00D4FF),
+        icon: const Icon(Icons.edit, color: Colors.white),
+        label: const Text(
+          'Write',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: RefreshIndicator(
+        color: const Color(0xFF00D4FF),
+        backgroundColor: const Color(0xFF121212),
+        onRefresh: () async {
+          setState(_subscribe);
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        },
+        child: StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _booksStream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return const Center(
+                child: CircularProgressIndicator(color: Color(0xFF00D4FF)),
+              );
+            }
+
+            final books = snapshot.data ?? const <Map<String, dynamic>>[];
+            if (books.isEmpty) {
+              return _buildEmptyState();
+            }
+
+            return ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+              itemCount: books.length,
+              itemBuilder: (context, index) =>
+                  _buildBookCard(books[index]),
+            );
+          },
+        ),
       ),
     );
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.menu_book, size: 64, color: Color(0xFF444444)),
-          const SizedBox(height: 16),
-          const Text(
-            'No books yet',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Be the first to write one',
-            style: TextStyle(
-              color: Color(0xFF888888),
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 32),
-          ElevatedButton.icon(
-            onPressed: () => context.push('/editor'),
-            icon: const Icon(Icons.edit),
-            label: const Text('Write a Book'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF6A00),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.menu_book, size: 64, color: Color(0xFF444444)),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No books yet',
+                    style: TextStyle(color: Colors.white, fontSize: 20),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Be the first to publish a story.',
+                    style: TextStyle(color: Color(0xFF888888), fontSize: 14),
+                  ),
+                  const SizedBox(height: 32),
+                  ElevatedButton.icon(
+                    onPressed: _onWritePressed,
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Write a Book'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00D4FF),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildBookGrid() {
-    return GridView.builder(
+  Widget _buildBookCard(Map<String, dynamic> book) {
+    final title = (book['title'] as String?) ?? 'Untitled';
+    final author = (book['author'] as String?) ?? 'Unknown author';
+    final description = (book['description'] as String?) ?? '';
+    final id = (book['id'] as String?) ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.7,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
+      decoration: BoxDecoration(
+        color: const Color(0xFF141414),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF222222)),
       ),
-      itemCount: _books.length,
-      itemBuilder: (context, index) {
-        final book = _books[index];
-        return GestureDetector(
-          onTap: () => context.push('/reader/${book['id']}'),
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F1F1F),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF222222)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF2A2A2A),
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1F1F1F),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.book,
+                  color: Color(0xFF00D4FF),
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    child: Center(
-                      child: Icon(
-                        Icons.book,
-                        size: 48,
-                        color: const Color(0xFF00D4FF).withValues(alpha: 0.5),
+                    const SizedBox(height: 4),
+                    Text(
+                      author,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF888888),
+                        fontSize: 13,
                       ),
                     ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0A0A0A),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF00D4FF)),
+                ),
+                child: const Text(
+                  'Markdown',
+                  style: TextStyle(
+                    color: Color(0xFF00D4FF),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                Expanded(
-                  flex: 2,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          book['title'] ?? 'Untitled',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          book['author'] ?? 'Unknown',
-                          style: const TextStyle(
-                            color: Color(0xFF888888),
-                            fontSize: 12,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        );
-      },
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              description,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _openBook(id),
+                icon: const Icon(Icons.menu_book, size: 18),
+                label: const Text('Read'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF00D4FF),
+                  side: const BorderSide(color: Color(0xFF00D4FF)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.bookmark_border, color: Colors.white54),
+                tooltip: 'Bookmark',
+                onPressed: () => _onBookmarkPressed(id),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

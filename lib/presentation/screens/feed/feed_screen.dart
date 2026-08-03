@@ -1025,7 +1025,7 @@ class _ArticlePostCard extends StatelessWidget {
               ),
               const Spacer(),
               TextButton(
-                onPressed: () => context.push('/reader/${post['id']}'),
+                onPressed: () => context.push('/publish-details?bookId=${post['id']}'),
                 child: const Text(
                   'Read',
                   style: TextStyle(color: Color(0xFF00D4FF)),
