@@ -21,10 +21,29 @@ import '../presentation/screens/discover/create_community_screen.dart';
 import '../presentation/screens/discover/create_organization_screen.dart';
 import '../presentation/screens/discover/create_school_screen.dart';
 import '../presentation/screens/clubs/club_detail_screen.dart';
+import '../presentation/screens/discover/community_detail_screen.dart';
+import '../presentation/screens/discover/organization_detail_screen.dart';
+import '../presentation/screens/discover/school_detail_screen.dart';
 import '../services/supabase_service.dart';
 
 /// Routes that must never be reached while signed out.
-const Set<String> _protectedRoutes = {'/editor', '/publish-details'};
+///
+/// Covers the fullscreen editor/reader plus every "create" flow, since those
+/// handlers read [SupabaseService().auth.currentUser] and would otherwise
+/// throw for anonymous visitors.
+const Set<String> _protectedRoutes = {
+  '/editor',
+  '/publish-details',
+  '/create/club',
+  '/create/community',
+  '/create/organization',
+  '/create/school',
+  '/create/quote',
+  '/create/news',
+  '/create/poll',
+  '/create/event',
+  '/create/reel',
+};
 
 /// Global auth redirect.
 ///
@@ -121,6 +140,24 @@ final GoRouter appRouter = GoRouter(
       path: '/club/:id',
       builder: (context, state) => ClubDetailScreen(
         clubId: state.pathParameters['id'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/community/:id',
+      builder: (context, state) => CommunityDetailScreen(
+        id: state.pathParameters['id'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/organization/:id',
+      builder: (context, state) => OrganizationDetailScreen(
+        id: state.pathParameters['id'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/school/:id',
+      builder: (context, state) => SchoolDetailScreen(
+        id: state.pathParameters['id'] ?? '',
       ),
     ),
     StatefulShellRoute.indexedStack(

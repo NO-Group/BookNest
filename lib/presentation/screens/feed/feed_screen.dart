@@ -262,7 +262,7 @@ class _FeedScreenState extends State<FeedScreen>
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF00D4FF).withValues(alpha: 0.3),
+                                color: const Color(0xFF00D4FF).withOpacity(0.3),
                                 blurRadius: 16,
                                 offset: const Offset(0, 4),
                               ),
@@ -300,7 +300,7 @@ class _FeedScreenState extends State<FeedScreen>
           border: Border.all(color: const Color(0xFF222222)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -485,7 +485,7 @@ class _QuotePostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF00D4FF).withValues(alpha: 0.1),
+              color: const Color(0xFF00D4FF).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -613,7 +613,7 @@ class _NewsPostCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFF6A00).withValues(alpha: 0.1),
+                    color: const Color(0xFFFF6A00).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
@@ -694,7 +694,7 @@ class _PollPostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF00D4FF).withValues(alpha: 0.1),
+              color: const Color(0xFF00D4FF).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -782,7 +782,7 @@ class _EventPostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFFF6A00).withValues(alpha: 0.1),
+              color: const Color(0xFFFF6A00).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -897,7 +897,7 @@ class _ReelPostCard extends StatelessWidget {
                 width: 60,
                 height: 60,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00D4FF).withValues(alpha: 0.9),
+                  color: const Color(0xFF00D4FF).withOpacity(0.9),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -913,7 +913,7 @@ class _ReelPostCard extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.7),
+                    color: Colors.black.withOpacity(0.7),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -980,7 +980,7 @@ class _ArticlePostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFFF6A00).withValues(alpha: 0.1),
+              color: const Color(0xFFFF6A00).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(

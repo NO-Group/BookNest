@@ -61,7 +61,7 @@ class _BookNestBottomNavState extends State<BookNestBottomNav>
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
+                  color: Colors.black.withOpacity(0.3),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -73,10 +73,10 @@ class _BookNestBottomNavState extends State<BookNestBottomNav>
                 filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
+                    color: Colors.white.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.15),
+                      color: Colors.white.withOpacity(0.15),
                       width: 1,
                     ),
                   ),
@@ -109,7 +109,7 @@ class _BookNestBottomNavState extends State<BookNestBottomNav>
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFF6A00).withValues(alpha: 0.4),
+                          color: const Color(0xFFFF6A00).withOpacity(0.4),
                           blurRadius: 16,
                           offset: const Offset(0, 6),
                         ),
@@ -128,12 +128,12 @@ class _BookNestBottomNavState extends State<BookNestBottomNav>
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                const Color(0xFFFFD000).withValues(alpha: 0.8),
-                                const Color(0xFFFF6A00).withValues(alpha: 0.8),
+                                const Color(0xFFFFD000).withOpacity(0.8),
+                                const Color(0xFFFF6A00).withOpacity(0.8),
                               ],
                             ),
                             border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.4),
+                              color: Colors.white.withOpacity(0.4),
                               width: 1.5,
                             ),
                           ),
@@ -166,9 +166,9 @@ class _BookNestBottomNavState extends State<BookNestBottomNav>
         decoration: isSelected
             ? BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFFFF6A00).withValues(alpha: 0.2),
+                color: const Color(0xFFFF6A00).withOpacity(0.2),
                 border: Border.all(
-                  color: const Color(0xFFFF6A00).withValues(alpha: 0.3),
+                  color: const Color(0xFFFF6A00).withOpacity(0.3),
                   width: 1,
                 ),
               )
@@ -180,7 +180,7 @@ class _BookNestBottomNavState extends State<BookNestBottomNav>
           size: 24,
           color: isSelected
               ? const Color(0xFFFFD000)
-              : Colors.white.withValues(alpha: 0.6),
+              : Colors.white.withOpacity(0.6),
         ),
       ),
     );

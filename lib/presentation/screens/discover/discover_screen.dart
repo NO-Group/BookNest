@@ -263,7 +263,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                           border: Border.all(color: const Color(0xFF222222)),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.3),
+                              color: Colors.black.withOpacity(0.3),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
@@ -425,7 +425,7 @@ class _DiscoverCard extends StatelessWidget {
                       child: Icon(
                         _typeIcon,
                         size: 40,
-                        color: _typeColor.withValues(alpha: 0.3),
+                        color: _typeColor.withOpacity(0.3),
                       ),
                     )
                   : null,
@@ -442,7 +442,7 @@ class _DiscoverCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: _typeColor.withValues(alpha: 0.1),
+                          color: _typeColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
