@@ -1,0 +1,13 @@
+{
+  "name": "Codespace with Flutter",
+  "build": { "dockerfile": "Dockerfile" },
+  "postCreateCommand": "flutter doctor -v",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Dart-Code.flutter"
+      ]
+    }
+  },
+  "remoteUser": "vscode"
+}
