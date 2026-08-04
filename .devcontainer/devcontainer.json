@@ -1,11 +1,12 @@
 {
-  "name": "Codespace with Flutter",
+  "name": "Codespace with Flutter + Android Emulator",
   "build": { "dockerfile": "Dockerfile" },
-  "postCreateCommand": "flutter doctor -v",
+  "postCreateCommand": "flutter doctor -v && yes | flutter doctor --android-licenses",
   "customizations": {
     "vscode": {
       "extensions": [
-        "Dart-Code.flutter"
+        "Dart-Code.flutter",
+        "ms-vscode.cpptools"
       ]
     }
   },
