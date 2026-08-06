@@ -24,7 +24,8 @@ class PublishDetailsScreen extends StatefulWidget {
   State<PublishDetailsScreen> createState() => _PublishDetailsScreenState();
 }
 
-class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
+class _PublishDetailsScreenState extends State<PublishDetailsScreen>
+    with WidgetsBindingObserver {
   Map<String, dynamic>? _book;
   Map<String, dynamic>? _chapter;
   bool _isLoading = true;
@@ -36,7 +37,23 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadBook();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_book != null && _readingSessionId == null) {
+        unawaited(_startReadingSession());
+      }
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      if (_readingSessionId != null) {
+        unawaited(_finishReadingSession());
+      }
+    }
   }
 
   Future<void> _loadBook() async {
@@ -304,6 +321,7 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _readingHeartbeat?.cancel();
     unawaited(_finishReadingSession());
     super.dispose();
