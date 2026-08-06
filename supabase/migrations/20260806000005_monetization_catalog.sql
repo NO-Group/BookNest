@@ -126,6 +126,25 @@ create or replace function public.current_gem_discount() returns integer languag
  select coalesce(max(sp.gem_discount_percent),0) from public.user_subscriptions us join public.subscription_plans sp on sp.id=us.plan_id where us.user_id=auth.uid() and us.status='active' and now() between us.starts_at and us.ends_at;
 $$;
 
+-- BookWorm allowance: monthly reading minutes divided by 12, rounded down.
+-- This function grants only the ungranted delta and is safe to call repeatedly.
+create or replace function public.sync_bookworm_allowance(target_subscription uuid)
+returns integer language plpgsql security definer set search_path=public as $$
+declare sub public.user_subscriptions; earned integer; granted integer; delta integer; period_key text; period_start timestamptz;
+begin
+ select us.* into sub from public.user_subscriptions us join public.subscription_plans sp on sp.id=us.plan_id where us.id=target_subscription and us.user_id=auth.uid() and sp.code='bookworm' and us.status='active' and now() between us.starts_at and us.ends_at;
+ if sub.id is null then raise exception 'Active BookWorm subscription not found'; end if;
+ period_start := date_trunc('month', greatest(sub.starts_at, now() - interval '1 month'));
+ period_key := to_char(period_start,'YYYY-MM');
+ select floor(coalesce(sum(minutes),0)::numeric / 12)::integer into earned from public.reading_sessions where user_id=auth.uid() and started_at >= period_start and started_at < period_start + interval '1 month';
+ select coalesce(sum(amount),0) into granted from public.gem_ledger where user_id=auth.uid() and reason='subscription_allowance' and metadata->>'subscription_id'=target_subscription::text and metadata->>'period'=period_key;
+ delta := greatest(earned-granted,0);
+ if delta > 0 then insert into public.gem_ledger(user_id,amount,reason,metadata) values(auth.uid(),delta,'subscription_allowance',jsonb_build_object('subscription_id',target_subscription,'period',period_key)); end if;
+ return delta;
+end;
+$$;
+grant execute on function public.sync_bookworm_allowance(uuid) to authenticated;
+
 alter table public.orders enable row level security;
 alter table public.gem_ledger enable row level security;
 alter table public.book_unlocks enable row level security;
