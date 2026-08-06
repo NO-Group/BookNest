@@ -10,6 +10,8 @@ import '../presentation/screens/books/books_library_screen.dart';
 import '../presentation/screens/books/book_editor_screen.dart';
 import '../presentation/screens/books/publish_details_screen.dart';
 import '../presentation/screens/dms/dm_list_screen.dart';
+import '../presentation/screens/chat/chat_detail_screen.dart';
+import '../presentation/screens/chat/chat_models.dart';
 import '../presentation/screens/profile/profile_screen.dart';
 import '../presentation/screens/feed/create_quote_screen.dart';
 import '../presentation/screens/feed/create_news_screen.dart';
@@ -159,6 +161,22 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => SchoolDetailScreen(
         id: state.pathParameters['id'] ?? '',
       ),
+    ),
+    GoRoute(
+      path: '/chat/:id',
+      builder: (context, state) {
+        final extra = state.extra;
+        final chat = extra is BookNestChat
+            ? extra
+            : BookNestChat(
+                id: state.pathParameters['id'] ?? '',
+                type: BookNestChatType.dm,
+                title: 'Direct message',
+                canPost: true,
+                canLeave: true,
+              );
+        return ChatDetailScreen(chat: chat);
+      },
     ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) =>

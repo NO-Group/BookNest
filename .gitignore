@@ -1,3 +1,8 @@
+# Local credentials - never commit or bundle these
+creds/
+*.env
+.env*
+
 # Miscellaneous
 *.class
 *.log

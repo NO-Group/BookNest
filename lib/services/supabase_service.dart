@@ -22,19 +22,21 @@ class SupabaseService {
   SupabaseClient get supabase => client;
   GoTrueClient get auth => client.auth;
 
-  // Create profile after signup
+  /// Updates the authenticated user's public profile through a SECURITY
+  /// DEFINER function. Private fields and wallet values never pass through
+  /// the public `profiles` table from the client.
   Future<void> createProfile({
     required String userId,
     required String username,
     String? displayName,
     String? phoneNumber,
   }) async {
-    await client.from('profiles').insert({
-      'id': userId,
-      'username': username,
-      'display_name': displayName ?? username,
-      'phone_number': phoneNumber,
-      'gems': 77, // Welcome bonus
+    if (auth.currentUser?.id != userId) {
+      throw StateError('Cannot update another user profile.');
+    }
+    await client.rpc('update_my_profile', params: {
+      'p_display_name': displayName ?? username,
+      'p_phone_number': phoneNumber,
     });
   }
 }
