@@ -1,10 +1,13 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart;
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/utils/auth_guard.dart';
 import '../../../services/supabase_service.dart';
+import '../../../services/reading_session_service.dart';
 
 /// Chapter reader view for a single book.
 ///
@@ -26,6 +29,9 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
   Map<String, dynamic>? _chapter;
   bool _isLoading = true;
   String? _error;
+  String? _readingSessionId;
+  Timer? _readingHeartbeat;
+  final _readingSessions = ReadingSessionService();
 
   @override
   void initState() {
@@ -61,6 +67,7 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
         _isLoading = false;
         if (_book == null) _error = 'This book could not be found.';
       });
+      if (_book != null) unawaited(_startReadingSession());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -68,6 +75,28 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
         _error = 'Could not load this book: $e';
       });
     }
+  }
+
+  Future<void> _startReadingSession() async {
+    try {
+      final sessionId = await _readingSessions.start(widget.bookId);
+      if (!mounted || sessionId == null) return;
+      setState(() => _readingSessionId = sessionId);
+      _readingHeartbeat = Timer.periodic(const Duration(minutes: 2), (_) {
+        final active = _readingSessionId;
+        if (active != null) unawaited(_readingSessions.heartbeat(active));
+      });
+    } catch (_) {
+      // Reading analytics must never prevent a user from reading a book.
+    }
+  }
+
+  Future<void> _finishReadingSession() async {
+    final sessionId = _readingSessionId;
+    if (sessionId == null) return;
+    _readingSessionId = null;
+    _readingHeartbeat?.cancel();
+    try { await _readingSessions.finish(sessionId); } catch (_) {}
   }
 
   void _guard(ActionHandler action) {
@@ -271,6 +300,13 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _readingHeartbeat?.cancel();
+    unawaited(_finishReadingSession());
+    super.dispose();
   }
 
   void _toast(String message) {
