@@ -1,0 +1,3 @@
+# Edge Functions authenticate requests themselves where noted.
+[functions.paystack-webhook]
+verify_jwt = false
