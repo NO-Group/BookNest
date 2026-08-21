@@ -5,12 +5,20 @@ import 'package:booknest/config/router.dart';
 import 'package:booknest/config/theme.dart';
 
 void main() {
-  test('BookNest dark theme uses the dark background and cyan accent', () {
+  test('BookNest dark theme uses the N.O deep-blue background and primary', () {
     final theme = BookNestTheme.darkTheme;
 
     expect(theme.brightness, Brightness.dark);
-    expect(theme.scaffoldBackgroundColor, const Color(0xFF0A0A0A));
-    expect(theme.colorScheme.primary, const Color(0xFF00D4FF));
+    expect(theme.scaffoldBackgroundColor, BookNestColors.bgDark);
+    expect(theme.colorScheme.primary, BookNestColors.deepBlueBright);
+  });
+
+  test('BookNest light theme uses the N.O white background and deep blue', () {
+    final theme = BookNestTheme.lightTheme;
+
+    expect(theme.brightness, Brightness.light);
+    expect(theme.scaffoldBackgroundColor, BookNestColors.bgLight);
+    expect(theme.colorScheme.primary, BookNestColors.deepBlue);
   });
 
   test('Router boots to the splash screen', () {

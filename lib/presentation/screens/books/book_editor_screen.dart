@@ -2,17 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../services/supabase_service.dart';
+import '../../../config/theme.dart';
 
-/// Native Markdown writing screen.
+/// Native Markdown writing screen, reused everywhere a book is created:
+/// - Feed "Article" / Books library "Write" → no context (personal book).
+/// - Community library "Write" → `communityId` set; drafts land in the
+///   community library, published books stay linked to the community.
+/// - Drafts resume via `bookId` (from Profile "My Drafts" or a community
+///   library draft) — the title/chapter are loaded and can be saved again or
+///   published.
 ///
-/// Uses a plain [TextEditingController] and Dart's native selection APIs
-/// (replaceRange / TextSelection) to apply formatting, with zero third-party
-/// rich-text editor packages. Publishing writes the book row into `club_books`
-/// and its first chapter into `book_chapters`.
+/// Toolbar applies formatting with Dart's native selection APIs
+/// (replaceRange / TextSelection); publishing writes `club_books` (pending)
+/// plus its first `book_chapters` row. **Save draft** writes/updates a
+/// `club_books` row with `moderation_status = 'draft'`.
 class BookEditorScreen extends StatefulWidget {
   final String? clubId;
+  final String? communityId;
+  final String? bookId;
 
-  const BookEditorScreen({super.key, this.clubId});
+  const BookEditorScreen({
+    super.key,
+    this.clubId,
+    this.communityId,
+    this.bookId,
+  });
 
   @override
   State<BookEditorScreen> createState() => _BookEditorScreenState();
@@ -22,7 +36,45 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
   final FocusNode _contentFocusNode = FocusNode();
-  bool _isPublishing = false;
+  bool _isSaving = false;
+  bool _loadedDraft = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.bookId != null) {
+      _loadDraft();
+    }
+  }
+
+  Future<void> _loadDraft() async {
+    final bookId = widget.bookId!;
+    try {
+      final supabase = SupabaseService().client;
+      final book = await supabase
+          .from('club_books')
+          .select('id, title, description')
+          .eq('id', bookId)
+          .maybeSingle();
+      final chapters = await supabase
+          .from('book_chapters')
+          .select('title, content')
+          .eq('club_book_id', bookId)
+          .order('chapter_number', ascending: true)
+          .limit(1);
+      if (!mounted) return;
+      if (book != null) {
+        _titleController.text = book['title']?.toString() ?? '';
+      }
+      if (chapters.isNotEmpty) {
+        final chapter = Map<String, dynamic>.from(chapters.first as Map);
+        _contentController.text = chapter['content']?.toString() ?? '';
+      }
+      _loadedDraft = true;
+    } catch (_) {
+      // Non-fatal: open an empty editor if the draft could not load.
+    }
+  }
 
   @override
   void dispose() {
@@ -94,10 +146,14 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
     _contentFocusNode.requestFocus();
   }
 
-  Future<void> _publishBook() async {
-    final title = _titleController.text.trim();
-    final content = _contentController.text.trim();
+  String _descriptionFromContent(String content) {
+    if (content.isEmpty) return '';
+    return content.length > 200 ? '${content.substring(0, 200)}…' : content;
+  }
 
+  /// Persists the current book row + first chapter with the given status.
+  Future<void> _persist(String status, {required bool isDraft}) async {
+    final title = _titleController.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -107,8 +163,8 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
       );
       return;
     }
-
-    if (content.isEmpty) {
+    final content = _contentController.text.trim();
+    if (!isDraft && content.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please write at least one chapter.'),
@@ -118,7 +174,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
       return;
     }
 
-    setState(() => _isPublishing = true);
+    setState(() => _isSaving = true);
 
     try {
       final supabase = SupabaseService().client;
@@ -127,38 +183,72 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
         throw Exception('You must be signed in to publish.');
       }
 
-      final description = content.length > 200
-          ? '${content.substring(0, 200)}…'
-          : content;
+      final description = _descriptionFromContent(content);
+      final bookId = widget.bookId;
 
-      final bookResponse = await supabase.from('club_books').insert({
-        'club_id': widget.clubId,
-        'title': title,
-        'author': user.email ?? user.userMetadata?['username'] ?? 'Anonymous',
-        'description': description,
-        'content_format': 'markdown',
-        'moderation_status': 'pending',
-        'added_by': user.id,
-      }).select();
+      if (bookId != null) {
+        // Update the existing draft/book row.
+        await supabase
+            .from('club_books')
+            .update({
+              'title': title,
+              'description': description,
+              'moderation_status': status,
+            })
+            .eq('id', bookId);
 
-      if (bookResponse.isEmpty) {
-        throw Exception('Failed to create the book record.');
+        final chapter = await supabase
+            .from('book_chapters')
+            .select('id')
+            .eq('club_book_id', bookId)
+            .eq('chapter_number', 1)
+            .maybeSingle();
+        if (chapter != null) {
+          await supabase
+              .from('book_chapters')
+              .update({'title': 'Chapter 1', 'content': content})
+              .eq('id', chapter['id']);
+        } else {
+          await supabase.from('book_chapters').insert({
+            'club_book_id': bookId,
+            'chapter_number': 1,
+            'title': 'Chapter 1',
+            'content': content,
+          });
+        }
+      } else {
+        final bookResponse = await supabase.from('club_books').insert({
+          'club_id': widget.clubId,
+          'community_id': widget.communityId,
+          'title': title,
+          'author': user.email ?? user.userMetadata?['username'] ?? 'Anonymous',
+          'description': description,
+          'content_format': 'markdown',
+          'moderation_status': status,
+          'added_by': user.id,
+        }).select();
+
+        if (bookResponse.isEmpty) {
+          throw Exception('Failed to create the book record.');
+        }
+
+        final newBookId = bookResponse.first['id'];
+
+        await supabase.from('book_chapters').insert({
+          'club_book_id': newBookId,
+          'chapter_number': 1,
+          'title': 'Chapter 1',
+          'content': _contentController.text,
+        });
       }
-
-      final bookId = bookResponse.first['id'];
-
-      await supabase.from('book_chapters').insert({
-        'club_book_id': bookId,
-        'chapter_number': 1,
-        'title': 'Chapter 1',
-        'content': _contentController.text,
-      });
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Book submitted for review.'),
-          backgroundColor: Color(0xFF00D4FF),
+        SnackBar(
+          content: Text(
+            isDraft ? 'Draft saved.' : 'Book submitted for review.',
+          ),
+          backgroundColor: NOC.accent,
         ),
       );
       context.pop();
@@ -166,12 +256,12 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not publish: $e'),
+          content: Text('Could not ${isDraft ? 'save draft' : 'publish'}: $e'),
           backgroundColor: Colors.redAccent,
         ),
       );
     } finally {
-      if (mounted) setState(() => _isPublishing = false);
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -183,7 +273,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: IconButton(
-        icon: Icon(icon, color: Colors.white70),
+        icon: Icon(icon, color: NOC.textMuted),
         tooltip: tooltip,
         onPressed: onPressed,
         visualDensity: VisualDensity.compact,
@@ -194,37 +284,48 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor: NOC.surface,
         elevation: 1,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon:  Icon(Icons.arrow_back, color: NOC.text),
           onPressed: () => context.pop(),
         ),
-        title: const Text(
-          'Write Book',
-          style: TextStyle(color: Colors.white, fontSize: 18),
+        title: Text(
+          _loadedDraft ? 'Edit Book' : 'Write Book',
+          style:  TextStyle(color: NOC.text, fontSize: 18),
         ),
         actions: [
           Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: TextButton.icon(
+              onPressed: _isSaving ? null : () => _persist('draft', isDraft: true),
+              icon:  Icon(Icons.save_outlined, size: 18, color: NOC.accent),
+              label:  Text(
+                'Save',
+                style: TextStyle(color: NOC.accent, fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.only(right: 12),
             child: TextButton.icon(
-              onPressed: _isPublishing ? null : _publishBook,
-              icon: _isPublishing
-                  ? const SizedBox(
+              onPressed: _isSaving ? null : () => _persist('pending', isDraft: false),
+              icon: _isSaving
+                  ?  SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Color(0xFF00D4FF),
+                        color: NOC.accent,
                       ),
                     )
                   : const Icon(Icons.rocket_launch, size: 18),
-              label: const Text(
+              label:  Text(
                 'Publish',
                 style: TextStyle(
-                  color: Color(0xFF00D4FF),
+                  color: NOC.accent,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
@@ -241,21 +342,21 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: TextField(
                 controller: _titleController,
-                style: const TextStyle(
-                  color: Colors.white,
+                style:  TextStyle(
+                  color: NOC.text,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
-                decoration: const InputDecoration(
+                decoration:  InputDecoration(
                   hintText: 'Book Title',
-                  hintStyle: TextStyle(color: Color(0xFF444444)),
+                  hintStyle: TextStyle(color: NOC.textFaint),
                   border: InputBorder.none,
                 ),
               ),
             ),
-            const Divider(color: Color(0xFF222222), height: 1),
+             Divider(color: NOC.border, height: 1),
             Container(
-              color: const Color(0xFF141414),
+              color: NOC.surfaceAlt,
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -296,25 +397,19 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                 ),
               ),
             ),
-            const Divider(color: Color(0xFF222222), height: 1),
+             Divider(color: NOC.border, height: 1),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 child: TextField(
                   controller: _contentController,
                   focusNode: _contentFocusNode,
                   maxLines: null,
                   keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    height: 1.7,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText:
-                        'Start writing your story...\n\nUse the toolbar to format, or type Markdown directly.',
-                    hintStyle: TextStyle(color: Color(0xFF555555)),
+                  style:  TextStyle(color: NOC.text, fontSize: 16, height: 1.7),
+                  decoration:  InputDecoration(
+                    hintText: 'Write your story... Use the toolbar to format, or type Markdown directly.',
+                    hintStyle: TextStyle(color: NOC.textFaint),
                     border: InputBorder.none,
                   ),
                   onTapOutside: (_) => _contentFocusNode.unfocus(),

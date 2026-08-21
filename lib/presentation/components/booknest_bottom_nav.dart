@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../config/theme.dart';
 
 class BookNestBottomNav extends StatefulWidget {
   final int currentIndex;
@@ -73,10 +74,10 @@ class _BookNestBottomNavState extends State<BookNestBottomNav>
                 filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: NOC.surfaceAlt.withOpacity(0.55),
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.15),
+                      color: NOC.border.withOpacity(0.6),
                       width: 1,
                     ),
                   ),
@@ -109,7 +110,7 @@ class _BookNestBottomNavState extends State<BookNestBottomNav>
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFF6A00).withOpacity(0.4),
+                          color: NOC.accent.withOpacity(0.4),
                           blurRadius: 16,
                           offset: const Offset(0, 6),
                         ),
@@ -124,22 +125,22 @@ class _BookNestBottomNavState extends State<BookNestBottomNav>
                           height: 64,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            gradient: LinearGradient(
+                            gradient: const LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                const Color(0xFFFFD000).withOpacity(0.8),
-                                const Color(0xFFFF6A00).withOpacity(0.8),
+                                Color(0xFF1E4FD6),
+                                Color(0xFF00D4FF),
                               ],
                             ),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.4),
+                              color: NOC.onAccent.withOpacity(0.4),
                               width: 1.5,
                             ),
                           ),
-                          child: const Icon(
+                          child:  Icon(
                             Icons.menu_book,
-                            color: Colors.white,
+                            color: NOC.text,
                             size: 28,
                           ),
                         ),
@@ -166,9 +167,9 @@ class _BookNestBottomNavState extends State<BookNestBottomNav>
         decoration: isSelected
             ? BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFFFF6A00).withOpacity(0.2),
+                color: NOC.hot.withOpacity(0.2),
                 border: Border.all(
-                  color: const Color(0xFFFF6A00).withOpacity(0.3),
+                  color: NOC.hot.withOpacity(0.3),
                   width: 1,
                 ),
               )
@@ -179,8 +180,8 @@ class _BookNestBottomNavState extends State<BookNestBottomNav>
           icon,
           size: 24,
           color: isSelected
-              ? const Color(0xFFFFD000)
-              : Colors.white.withOpacity(0.6),
+              ? NOC.gold
+              : NOC.text.withOpacity(0.6),
         ),
       ),
     );

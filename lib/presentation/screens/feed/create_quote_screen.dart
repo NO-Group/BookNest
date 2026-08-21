@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../services/supabase_service.dart';
+import '../../../config/theme.dart';
 
 class CreateQuoteScreen extends StatefulWidget {
   const CreateQuoteScreen({super.key});
@@ -35,9 +36,9 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
       if (mounted) {
         context.pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+           SnackBar(
             content: Text('Quote posted!'),
-            backgroundColor: Color(0xFF00D4FF),
+            backgroundColor: NOC.accent,
           ),
         );
       }
@@ -55,19 +56,19 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       appBar: AppBar(
         title: const Text('Share a Quote'),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _publishQuote,
             child: _isLoading
-                ? const SizedBox(
+                ?  SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: NOC.text),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFF00D4FF))),
+                :  Text('Post', style: TextStyle(color: NOC.accent)),
           ),
         ],
       ),
@@ -81,16 +82,16 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF1F1F1F),
+                color: NOC.surfaceAlt,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF222222)),
+                border: Border.all(color: NOC.border),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
+                   Icon(
                     Icons.format_quote,
-                    color: Color(0xFF00D4FF),
+                    color: NOC.accent,
                     size: 32,
                   ),
                   const SizedBox(height: 16),
@@ -98,8 +99,8 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                     '"${_contentController.text.isEmpty ? 'Your quote will appear here' : _contentController.text}"',
                     style: TextStyle(
                       color: _contentController.text.isEmpty
-                          ? const Color(0xFF444444)
-                          : Colors.white,
+                          ? NOC.textFaint
+                          : NOC.text,
                       fontSize: 18,
                       fontStyle: FontStyle.italic,
                       height: 1.5,
@@ -112,7 +113,7 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                         width: 3,
                         height: 20,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF00D4FF),
+                          color: NOC.accent,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -121,8 +122,8 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                         '— ${_authorController.text.isEmpty ? 'Author name' : _authorController.text}',
                         style: TextStyle(
                           color: _authorController.text.isEmpty
-                              ? const Color(0xFF444444)
-                              : const Color(0xFF888888),
+                              ? NOC.textFaint
+                              : NOC.textMuted,
                           fontSize: 14,
                         ),
                       ),
@@ -134,10 +135,10 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
             const SizedBox(height: 32),
 
             // Inputs
-            const Text(
+             Text(
               'Quote',
               style: TextStyle(
-                color: Color(0xFF888888),
+                color: NOC.textMuted,
                 fontSize: 14,
               ),
             ),
@@ -145,13 +146,13 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
             TextField(
               controller: _contentController,
               onChanged: (_) => setState(() {}),
-              style: const TextStyle(color: Colors.white),
+              style:  TextStyle(color: NOC.text),
               maxLines: 4,
               decoration: InputDecoration(
                 hintText: 'Enter the quote...',
-                hintStyle: const TextStyle(color: Color(0xFF444444)),
+                hintStyle:  TextStyle(color: NOC.textFaint),
                 filled: true,
-                fillColor: const Color(0xFF1F1F1F),
+                fillColor: NOC.surfaceAlt,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -159,10 +160,10 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+             Text(
               'Author',
               style: TextStyle(
-                color: Color(0xFF888888),
+                color: NOC.textMuted,
                 fontSize: 14,
               ),
             ),
@@ -170,12 +171,12 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
             TextField(
               controller: _authorController,
               onChanged: (_) => setState(() {}),
-              style: const TextStyle(color: Colors.white),
+              style:  TextStyle(color: NOC.text),
               decoration: InputDecoration(
                 hintText: 'Who said this?',
-                hintStyle: const TextStyle(color: Color(0xFF444444)),
+                hintStyle:  TextStyle(color: NOC.textFaint),
                 filled: true,
-                fillColor: const Color(0xFF1F1F1F),
+                fillColor: NOC.surfaceAlt,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,

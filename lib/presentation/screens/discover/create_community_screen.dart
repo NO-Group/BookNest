@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../services/supabase_service.dart';
+import '../../../config/theme.dart';
 
 class CreateCommunityScreen extends StatefulWidget {
   const CreateCommunityScreen({super.key});
@@ -23,8 +24,9 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
 
     try {
       final userId = SupabaseService().auth.currentUser!.id;
-      
-      // 1. Create community
+
+      // Create the community. The database trigger automatically creates the
+      // default Announcements group + Chat group (and the owner's memberships).
       final communityResponse = await SupabaseService()
           .client
           .from('communities')
@@ -38,13 +40,7 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
 
       final communityId = communityResponse[0]['id'];
 
-      // 2. Create Announcements group automatically
-      await SupabaseService().client.from('announcement_groups').insert({
-        'community_id': communityId,
-        'name': '${_nameController.text.trim()} Announcements',
-      });
-
-      // 3. Owner joins as member
+      // 2. Owner joins as member (triggers seed them into the default groups).
       await SupabaseService().client.from('community_members').insert({
         'community_id': communityId,
         'user_id': userId,
@@ -54,9 +50,9 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
       if (mounted) {
         context.pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+           SnackBar(
             content: Text('Community created!'),
-            backgroundColor: Color(0xFF00D4FF),
+            backgroundColor: NOC.accent,
           ),
         );
       }
@@ -74,19 +70,19 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       appBar: AppBar(
         title: const Text('New Community'),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _createCommunity,
             child: _isLoading
-                ? const SizedBox(
+                ?  SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: NOC.text),
                   )
-                : const Text('Create', style: TextStyle(color: Color(0xFF00D4FF))),
+                :  Text('Create', style: TextStyle(color: NOC.accent)),
           ),
         ],
       ),
@@ -100,21 +96,21 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
               width: double.infinity,
               height: 160,
               decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
+                color: NOC.border,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: const Color(0xFF444444),
+                  color: NOC.textFaint,
                   style: BorderStyle.solid,
                 ),
               ),
-              child: const Column(
+              child:  Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.add_photo_alternate, size: 40, color: Color(0xFF444444)),
+                  Icon(Icons.add_photo_alternate, size: 40, color: NOC.textFaint),
                   SizedBox(height: 8),
                   Text(
                     'Add cover photo',
-                    style: TextStyle(color: Color(0xFF666666), fontSize: 14),
+                    style: TextStyle(color: NOC.textFaint, fontSize: 14),
                   ),
                 ],
               ),
@@ -122,21 +118,21 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
             const SizedBox(height: 24),
             TextField(
               controller: _nameController,
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
+              style:  TextStyle(color: NOC.text, fontSize: 20, fontWeight: FontWeight.bold),
+              decoration:  InputDecoration(
                 hintText: 'Community name',
-                hintStyle: TextStyle(color: Color(0xFF444444)),
+                hintStyle: TextStyle(color: NOC.textFaint),
                 border: InputBorder.none,
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _descriptionController,
-              style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
+              style:  TextStyle(color: NOC.text, fontSize: 16, height: 1.6),
               maxLines: 4,
-              decoration: const InputDecoration(
+              decoration:  InputDecoration(
                 hintText: 'What is this community about?',
-                hintStyle: TextStyle(color: Color(0xFF444444)),
+                hintStyle: TextStyle(color: NOC.textFaint),
                 border: InputBorder.none,
               ),
             ),
@@ -144,17 +140,17 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF1F1F1F),
+                color: NOC.surfaceAlt,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Row(
+              child:  Row(
                 children: [
-                  Icon(Icons.info_outline, color: Color(0xFF888888), size: 20),
+                  Icon(Icons.info_outline, color: NOC.textMuted, size: 20),
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'An Announcements group will be created automatically. You can add Clubs, Organizations, and Schools later.',
-                      style: TextStyle(color: Color(0xFF888888), fontSize: 12, height: 1.5),
+                      'An Announcements group (admins only) and a Chat group will be created automatically. You can add more groups and link Clubs, Organizations, and Schools later.',
+                      style: TextStyle(color: NOC.textMuted, fontSize: 12, height: 1.5),
                     ),
                   ),
                 ],

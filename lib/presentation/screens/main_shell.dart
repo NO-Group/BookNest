@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../components/booknest_bottom_nav.dart';
+import '../../config/theme.dart';
 
 /// Persistent shell layout wrapping the primary [StatefulNavigationShell].
 ///
@@ -24,7 +25,7 @@ class MainShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       body: navigationShell,
       bottomNavigationBar: BookNestBottomNav(
         currentIndex: navigationShell.currentIndex,

@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../services/supabase_service.dart';
+import '../../../config/theme.dart';
 
 class CreateOrganizationScreen extends StatefulWidget {
   const CreateOrganizationScreen({super.key});
@@ -35,22 +36,34 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
     try {
       final userId = SupabaseService().auth.currentUser!.id;
 
-      await SupabaseService().client.from('organizations').insert({
-        'name': _nameController.text.trim(),
-        'description': _descriptionController.text.trim(),
-        'mission': _missionController.text.trim(),
-        'org_type': _selectedType,
-        'owner_id': userId,
-        'vice_moderator_id': null,
-        'is_verified': false,
+      final orgResponse = await SupabaseService()
+          .client
+          .from('organizations')
+          .insert({
+            'name': _nameController.text.trim(),
+            'description': _descriptionController.text.trim(),
+            'mission': _missionController.text.trim(),
+            'org_type': _selectedType,
+            'owner_id': userId,
+            'vice_moderator_id': null,
+            'is_verified': false,
+          })
+          .select();
+
+      // Owner joins as a member (seeds them into the default chat group).
+      final orgId = orgResponse[0]['id'];
+      await SupabaseService().client.from('organization_members').insert({
+        'organization_id': orgId,
+        'user_id': userId,
+        'role': 'owner',
       });
 
       if (mounted) {
         context.pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+           SnackBar(
             content: Text('Organization created!'),
-            backgroundColor: Color(0xFFFF6A00),
+            backgroundColor: NOC.hot,
           ),
         );
       }
@@ -68,19 +81,19 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       appBar: AppBar(
         title: const Text('New Organization'),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _createOrganization,
             child: _isLoading
-                ? const SizedBox(
+                ?  SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: NOC.text),
                   )
-                : const Text('Create', style: TextStyle(color: Color(0xFFFF6A00))),
+                :  Text('Create', style: TextStyle(color: NOC.hot)),
           ),
         ],
       ),
@@ -92,19 +105,19 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
             width: double.infinity,
             height: 160,
             decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
+              color: NOC.border,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: const Color(0xFF444444),
+                color: NOC.textFaint,
                 style: BorderStyle.solid,
               ),
             ),
-            child: const Column(
+            child:  Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.add_photo_alternate, size: 40, color: Color(0xFF444444)),
+                Icon(Icons.add_photo_alternate, size: 40, color: NOC.textFaint),
                 SizedBox(height: 8),
-                Text('Add cover photo', style: TextStyle(color: Color(0xFF666666), fontSize: 14)),
+                Text('Add cover photo', style: TextStyle(color: NOC.textFaint, fontSize: 14)),
               ],
             ),
           ),
@@ -113,17 +126,17 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
           // Name
           TextField(
             controller: _nameController,
-            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-            decoration: const InputDecoration(
+            style:  TextStyle(color: NOC.text, fontSize: 20, fontWeight: FontWeight.bold),
+            decoration:  InputDecoration(
               hintText: 'Organization name',
-              hintStyle: TextStyle(color: Color(0xFF444444)),
+              hintStyle: TextStyle(color: NOC.textFaint),
               border: InputBorder.none,
             ),
           ),
           const SizedBox(height: 16),
 
           // Type selector
-          const Text('Organization Type', style: TextStyle(color: Color(0xFF888888), fontSize: 14)),
+           Text('Organization Type', style: TextStyle(color: NOC.textMuted, fontSize: 14)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -136,14 +149,14 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFFFF6A00) : const Color(0xFF1F1F1F),
+                    color: isSelected ? NOC.hot : NOC.surfaceAlt,
                     borderRadius: BorderRadius.circular(20),
-                    border: isSelected ? null : Border.all(color: const Color(0xFF222222)),
+                    border: isSelected ? null : Border.all(color: NOC.border),
                   ),
                   child: Text(
                     type,
                     style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.white,
+                      color: isSelected ? NOC.text : NOC.text,
                       fontSize: 13,
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                     ),
@@ -157,28 +170,28 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
           // Description
           TextField(
             controller: _descriptionController,
-            style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
+            style:  TextStyle(color: NOC.text, fontSize: 16, height: 1.6),
             maxLines: 3,
-            decoration: const InputDecoration(
+            decoration:  InputDecoration(
               hintText: 'What does your organization do?',
-              hintStyle: TextStyle(color: Color(0xFF444444)),
+              hintStyle: TextStyle(color: NOC.textFaint),
               border: InputBorder.none,
             ),
           ),
           const SizedBox(height: 16),
 
           // Mission
-          const Text('Mission Statement', style: TextStyle(color: Color(0xFF888888), fontSize: 14)),
+           Text('Mission Statement', style: TextStyle(color: NOC.textMuted, fontSize: 14)),
           const SizedBox(height: 8),
           TextField(
             controller: _missionController,
-            style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.6),
+            style:  TextStyle(color: NOC.text, fontSize: 14, height: 1.6),
             maxLines: 3,
             decoration: InputDecoration(
               hintText: 'Your mission...',
-              hintStyle: const TextStyle(color: Color(0xFF444444)),
+              hintStyle:  TextStyle(color: NOC.textFaint),
               filled: true,
-              fillColor: const Color(0xFF1F1F1F),
+              fillColor: NOC.surfaceAlt,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
@@ -191,15 +204,15 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF1F1F1F),
+              color: NOC.surfaceAlt,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Column(
+            child:  Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Organization Features',
-                  style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: NOC.text, fontSize: 14, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 12),
                 _FeatureRow(icon: Icons.verified, text: 'Verified badge (after review)'),
@@ -238,12 +251,12 @@ class _FeatureRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: const Color(0xFF00D4FF)),
+        Icon(icon, size: 16, color: NOC.accent),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(color: Color(0xFF888888), fontSize: 12),
+            style:  TextStyle(color: NOC.textMuted, fontSize: 12),
           ),
         ),
       ],

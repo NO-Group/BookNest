@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../config/theme.dart';
 
 class ReaderScreen extends StatelessWidget {
   final String bookId;
@@ -8,15 +9,15 @@ class ReaderScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0A0A0A),
-        title: Text('Book $bookId', style: const TextStyle(color: Colors.white)),
+        backgroundColor: NOC.bg,
+        title: Text('Book $bookId', style:  TextStyle(color: NOC.text)),
       ),
-      body: const Center(
+      body:  Center(
         child: Text(
           'Reader',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: NOC.text),
         ),
       ),
     );

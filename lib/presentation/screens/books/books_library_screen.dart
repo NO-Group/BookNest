@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/auth_guard.dart';
 import '../../../services/supabase_service.dart';
+import '../../../config/theme.dart';
 
 /// Realtime library feed of published books.
 ///
@@ -49,9 +50,9 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
     AuthGuard.run(context, () {
       // Reserved: deep-search is gated behind authentication.
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+         SnackBar(
           content: Text('Search is coming soon.'),
-          backgroundColor: Color(0xFF00D4FF),
+          backgroundColor: NOC.accent,
         ),
       );
     });
@@ -68,7 +69,7 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Saved book to your library.'),
-          backgroundColor: const Color(0xFF00D4FF),
+          backgroundColor: NOC.accent,
         ),
       );
     });
@@ -77,7 +78,7 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       appBar: AppBar(
         title: const Text('Library'),
         actions: [
@@ -90,16 +91,16 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _onWritePressed,
-        backgroundColor: const Color(0xFF00D4FF),
-        icon: const Icon(Icons.edit, color: Colors.white),
-        label: const Text(
+        backgroundColor: NOC.accent,
+        icon:  Icon(Icons.edit, color: NOC.onAccent),
+        label:  Text(
           'Write',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: NOC.onAccent, fontWeight: FontWeight.bold),
         ),
       ),
       body: RefreshIndicator(
-        color: const Color(0xFF00D4FF),
-        backgroundColor: const Color(0xFF121212),
+        color: NOC.accent,
+        backgroundColor: NOC.surface,
         onRefresh: () async {
           setState(_subscribe);
           await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -109,8 +110,8 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting &&
                 !snapshot.hasData) {
-              return const Center(
-                child: CircularProgressIndicator(color: Color(0xFF00D4FF)),
+              return  Center(
+                child: CircularProgressIndicator(color: NOC.accent),
               );
             }
 
@@ -144,16 +145,16 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.menu_book, size: 64, color: Color(0xFF444444)),
+                   Icon(Icons.menu_book, size: 64, color: NOC.textFaint),
                   const SizedBox(height: 16),
-                  const Text(
+                   Text(
                     'No books yet',
-                    style: TextStyle(color: Colors.white, fontSize: 20),
+                    style: TextStyle(color: NOC.text, fontSize: 20),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                   Text(
                     'Be the first to publish a story.',
-                    style: TextStyle(color: Color(0xFF888888), fontSize: 14),
+                    style: TextStyle(color: NOC.textMuted, fontSize: 14),
                   ),
                   const SizedBox(height: 32),
                   ElevatedButton.icon(
@@ -161,8 +162,8 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
                     icon: const Icon(Icons.edit),
                     label: const Text('Write a Book'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00D4FF),
-                      foregroundColor: Colors.white,
+                      backgroundColor: NOC.accent,
+                      foregroundColor: NOC.onAccent,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
                         vertical: 12,
@@ -186,14 +187,15 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
     final author = (book['author'] as String?) ?? 'Unknown author';
     final description = (book['description'] as String?) ?? '';
     final id = (book['id'] as String?) ?? '';
+    final views = (book['views'] as num?)?.toInt() ?? 0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF141414),
+        color: NOC.surfaceAlt,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: NOC.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,12 +207,12 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1F1F1F),
+                  color: NOC.surfaceAlt,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
+                child:  Icon(
                   Icons.book,
-                  color: Color(0xFF00D4FF),
+                  color: NOC.accent,
                   size: 26,
                 ),
               ),
@@ -223,8 +225,8 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style:  TextStyle(
+                        color: NOC.text,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -234,8 +236,8 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
                       author,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF888888),
+                      style:  TextStyle(
+                        color: NOC.textMuted,
                         fontSize: 13,
                       ),
                     ),
@@ -245,14 +247,14 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0A0A0A),
+                  color: NOC.bg,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFF00D4FF)),
+                  border: Border.all(color: NOC.accent),
                 ),
-                child: const Text(
+                child:  Text(
                   'Markdown',
                   style: TextStyle(
-                    color: Color(0xFF00D4FF),
+                    color: NOC.accent,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -266,7 +268,7 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
               description,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
+              style:  TextStyle(color: NOC.textMuted, fontSize: 13, height: 1.5),
             ),
           ],
           const SizedBox(height: 14),
@@ -277,16 +279,27 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
                 icon: const Icon(Icons.menu_book, size: 18),
                 label: const Text('Read'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF00D4FF),
-                  side: const BorderSide(color: Color(0xFF00D4FF)),
+                  foregroundColor: NOC.accent,
+                  side:  BorderSide(color: NOC.accent),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
               ),
               const Spacer(),
+              Row(
+                children: [
+                   Icon(Icons.visibility, color: NOC.textFaint, size: 16),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$views',
+                    style:  TextStyle(color: NOC.textFaint, fontSize: 12),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
               IconButton(
-                icon: const Icon(Icons.bookmark_border, color: Colors.white54),
+                icon:  Icon(Icons.bookmark_border, color: NOC.textFaint),
                 tooltip: 'Bookmark',
                 onPressed: () => _onBookmarkPressed(id),
               ),

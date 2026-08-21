@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/utils/auth_guard.dart';
 import '../../../services/supabase_service.dart';
+import '../../../config/theme.dart';
 
 /// Chapter reader view for a single book.
 ///
@@ -31,6 +32,12 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
   void initState() {
     super.initState();
     _loadBook();
+    // Fire-and-forget read tracking (powers the Hot 🔥 algorithm). Deduped
+    // server-side to one read per user per book per day.
+    SupabaseService().client.rpc(
+      'record_book_read',
+      params: {'book_id': widget.bookId},
+    );
   }
 
   Future<void> _loadBook() async {
@@ -87,17 +94,17 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor: NOC.surface,
         elevation: 1,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon:  Icon(Icons.arrow_back, color: NOC.text),
           onPressed: () => context.pop(),
         ),
-        title: const Text(
+        title:  Text(
           'Reading',
-          style: TextStyle(color: Colors.white, fontSize: 18),
+          style: TextStyle(color: NOC.text, fontSize: 18),
         ),
       ),
       body: _buildBody(),
@@ -107,8 +114,8 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF00D4FF)),
+      return  Center(
+        child: CircularProgressIndicator(color: NOC.accent),
       );
     }
 
@@ -119,12 +126,12 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 56, color: Color(0xFF444444)),
+               Icon(Icons.error_outline, size: 56, color: NOC.textFaint),
               const SizedBox(height: 16),
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70, fontSize: 15),
+                style:  TextStyle(color: NOC.textMuted, fontSize: 15),
               ),
               const SizedBox(height: 24),
               OutlinedButton.icon(
@@ -144,6 +151,7 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
     final description = (book['description'] as String?) ?? '';
     final chapterTitle = (_chapter?['title'] as String?) ?? 'Chapter';
     final content = (_chapter?['content'] as String?) ?? '';
+    final views = (book['views'] as num?)?.toInt() ?? 0;
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -151,16 +159,16 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: Color(0xFF222222))),
+          decoration:  BoxDecoration(
+            border: Border(bottom: BorderSide(color: NOC.border)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.white,
+                style:  TextStyle(
+                  color: NOC.text,
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
                   height: 1.3,
@@ -169,7 +177,7 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
               const SizedBox(height: 8),
               Text(
                 'by $author',
-                style: const TextStyle(color: Color(0xFF888888), fontSize: 14),
+                style:  TextStyle(color: NOC.textMuted, fontSize: 14),
               ),
               const SizedBox(height: 4),
               Text(
@@ -177,15 +185,16 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
                   if (chapterTitle.isNotEmpty) chapterTitle,
                   if (_formatDate(book['created_at']).isNotEmpty)
                     'Published ${_formatDate(book['created_at'])}',
+                  if (views > 0) '$views views',
                 ].join(' · '),
-                style: const TextStyle(color: Color(0xFF666666), fontSize: 12),
+                style:  TextStyle(color: NOC.textFaint, fontSize: 12),
               ),
               if (description.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
                   description,
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  style:  TextStyle(
+                    color: NOC.textMuted,
                     fontSize: 14,
                     height: 1.6,
                     fontStyle: FontStyle.italic,
@@ -200,32 +209,32 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
       selectable: true,
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
       styleSheet: MarkdownStyleSheet(
-        h1: const TextStyle(
-          color: Colors.white,
+        h1:  TextStyle(
+          color: NOC.text,
           fontSize: 24,
           fontWeight: FontWeight.bold,
         ),
-        h2: const TextStyle(
-          color: Colors.white,
+        h2:  TextStyle(
+          color: NOC.text,
           fontSize: 20,
           fontWeight: FontWeight.bold,
         ),
-        p: const TextStyle(
-          color: Colors.white70,
+        p:  TextStyle(
+          color: NOC.textMuted,
           fontSize: 16,
           height: 1.7,
         ),
-        listBullet: const TextStyle(color: Color(0xFF00D4FF)),
+        listBullet:  TextStyle(color: NOC.accent),
         blockquoteDecoration: BoxDecoration(
-          color: const Color(0xFF141414),
+          color: NOC.surfaceAlt,
           borderRadius: BorderRadius.circular(8),
-          border: const Border(left: BorderSide(color: Color(0xFF00D4FF), width: 3)),
+          border:  Border(left: BorderSide(color: NOC.accent, width: 3)),
         ),
-        blockquote: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
-        horizontalRuleDecoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: Color(0xFF222222))),
+        blockquote:  TextStyle(color: NOC.textMuted, fontSize: 15, height: 1.6),
+        horizontalRuleDecoration:  BoxDecoration(
+          border: Border(top: BorderSide(color: NOC.border)),
         ),
-        code: const TextStyle(color: Color(0xFF00D4FF), backgroundColor: Color(0xFF141414)),
+        code:  TextStyle(color: NOC.accent, backgroundColor: NOC.surfaceAlt),
       ),
       ),
       ],
@@ -235,8 +244,8 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
   Widget _buildActionBar() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF121212),
-        border: const Border(top: BorderSide(color: Color(0xFF222222))),
+        color: NOC.surface,
+        border:  Border(top: BorderSide(color: NOC.border)),
       ),
       padding: EdgeInsets.only(
         left: 8,
@@ -277,7 +286,7 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: const Color(0xFF00D4FF),
+        backgroundColor: NOC.accent,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -307,11 +316,11 @@ class _ActionButton extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: const Color(0xFF00D4FF), size: 22),
+            Icon(icon, color: NOC.accent, size: 22),
             const SizedBox(height: 4),
             Text(
               label,
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
+              style:  TextStyle(color: NOC.textMuted, fontSize: 11),
             ),
           ],
         ),

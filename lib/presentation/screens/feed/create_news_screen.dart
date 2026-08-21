@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../services/supabase_service.dart';
+import '../../../config/theme.dart';
 
 class CreateNewsScreen extends StatefulWidget {
   const CreateNewsScreen({super.key});
@@ -37,9 +38,9 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
       if (mounted) {
         context.pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+           SnackBar(
             content: Text('News posted!'),
-            backgroundColor: Color(0xFFFF6A00),
+            backgroundColor: NOC.hot,
           ),
         );
       }
@@ -57,19 +58,19 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       appBar: AppBar(
         title: const Text('Share News'),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _publishNews,
             child: _isLoading
-                ? const SizedBox(
+                ?  SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: NOC.text),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFFFF6A00))),
+                :  Text('Post', style: TextStyle(color: NOC.hot)),
           ),
         ],
       ),
@@ -80,21 +81,21 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
           children: [
             TextField(
               controller: _titleController,
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
+              style:  TextStyle(color: NOC.text, fontSize: 20, fontWeight: FontWeight.bold),
+              decoration:  InputDecoration(
                 hintText: 'Headline',
-                hintStyle: TextStyle(color: Color(0xFF444444), fontSize: 20),
+                hintStyle: TextStyle(color: NOC.textFaint, fontSize: 20),
                 border: InputBorder.none,
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _contentController,
-              style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
+              style:  TextStyle(color: NOC.text, fontSize: 16, height: 1.6),
               maxLines: 10,
-              decoration: const InputDecoration(
+              decoration:  InputDecoration(
                 hintText: 'Write the news story...',
-                hintStyle: TextStyle(color: Color(0xFF444444)),
+                hintStyle: TextStyle(color: NOC.textFaint),
                 border: InputBorder.none,
               ),
             ),
@@ -102,20 +103,20 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFF1F1F1F),
+                color: NOC.surfaceAlt,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.link, color: Color(0xFF888888), size: 20),
+                   Icon(Icons.link, color: NOC.textMuted, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
                       controller: _sourceController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
+                      style:  TextStyle(color: NOC.text),
+                      decoration:  InputDecoration(
                         hintText: 'Source URL (optional)',
-                        hintStyle: TextStyle(color: Color(0xFF666666)),
+                        hintStyle: TextStyle(color: NOC.textFaint),
                         border: InputBorder.none,
                       ),
                     ),

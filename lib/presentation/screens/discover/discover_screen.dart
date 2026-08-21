@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../services/supabase_service.dart';
+import '../../../config/theme.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -27,11 +28,11 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
   final List<String> _filters = ['All', 'Clubs', 'Organizations', 'Schools', 'Communities'];
 
-  final List<_CreateOption> _createOptions = const [
-    _CreateOption(label: 'New Club', icon: Icons.menu_book, color: Color(0xFF00D4FF), route: '/create/club'),
-    _CreateOption(label: 'New Organization', icon: Icons.business, color: Color(0xFFFF6A00), route: '/create/organization'),
-    _CreateOption(label: 'New School', icon: Icons.school, color: Color(0xFF00D4FF), route: '/create/school'),
-    _CreateOption(label: 'New Community', icon: Icons.account_tree, color: Color(0xFFFF6A00), route: '/create/community'),
+  final List<_CreateOption> _createOptions =  [
+    _CreateOption(label: 'New Club', icon: Icons.menu_book, color: NOC.accent, route: '/create/club'),
+    _CreateOption(label: 'New Organization', icon: Icons.business, color: NOC.hot, route: '/create/organization'),
+    _CreateOption(label: 'New School', icon: Icons.school, color: NOC.accent, route: '/create/school'),
+    _CreateOption(label: 'New Community', icon: Icons.account_tree, color: NOC.hot, route: '/create/community'),
   ];
 
   @override
@@ -104,7 +105,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       body: Stack(
         children: [
           SafeArea(
@@ -116,10 +117,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                       Text(
                         'Discover',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: NOC.text,
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
                         ),
@@ -135,13 +136,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF1F1F1F),
+                                  color: NOC.surfaceAlt,
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: const Color(0xFF222222)),
+                                  border: Border.all(color: NOC.border),
                                 ),
-                                child: const Icon(
+                                child:  Icon(
                                   Icons.add,
-                                  color: Color(0xFF00D4FF),
+                                  color: NOC.accent,
                                   size: 20,
                                 ),
                               ),
@@ -157,13 +158,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   child: TextField(
-                    style: const TextStyle(color: Colors.white),
+                    style:  TextStyle(color: NOC.text),
                     decoration: InputDecoration(
                       hintText: 'Search communities, clubs, schools...',
-                      hintStyle: const TextStyle(color: Color(0xFF666666)),
-                      prefixIcon: const Icon(Icons.search, color: Color(0xFF666666)),
+                      hintStyle:  TextStyle(color: NOC.textFaint),
+                      prefixIcon:  Icon(Icons.search, color: NOC.textFaint),
                       filled: true,
-                      fillColor: const Color(0xFF1F1F1F),
+                      fillColor: NOC.surfaceAlt,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
                         borderSide: BorderSide.none,
@@ -191,17 +192,17 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             decoration: BoxDecoration(
                               color: isActive
-                                  ? const Color(0xFF00D4FF)
-                                  : const Color(0xFF1F1F1F),
+                                  ? NOC.accent
+                                  : NOC.surfaceAlt,
                               borderRadius: BorderRadius.circular(20),
                               border: isActive
                                   ? null
-                                  : Border.all(color: const Color(0xFF222222)),
+                                  : Border.all(color: NOC.border),
                             ),
                             child: Text(
                               filter,
                               style: TextStyle(
-                                color: isActive ? const Color(0xFF0A0A0A) : Colors.white,
+                                color: isActive ? NOC.onAccent : NOC.text,
                                 fontSize: 13,
                                 fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                               ),
@@ -218,8 +219,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                 // Items list
                 Expanded(
                   child: _isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(color: Color(0xFF00D4FF)),
+                      ?  Center(
+                          child: CircularProgressIndicator(color: NOC.accent),
                         )
                       : _filteredItems.isEmpty
                           ? _buildEmptyState()
@@ -258,9 +259,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1F1F1F),
+                          color: NOC.surfaceAlt,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF222222)),
+                          border: Border.all(color: NOC.border),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.3),
@@ -276,8 +277,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                             const SizedBox(width: 10),
                             Text(
                               option.label,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style:  TextStyle(
+                                color: NOC.text,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -297,20 +298,20 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   }
 
   Widget _buildEmptyState() {
-    return const Center(
+    return  Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.explore_outlined, size: 64, color: Color(0xFF444444)),
+          Icon(Icons.explore_outlined, size: 64, color: NOC.textFaint),
           SizedBox(height: 16),
           Text(
             'Nothing here yet',
-            style: TextStyle(color: Colors.white, fontSize: 18),
+            style: TextStyle(color: NOC.text, fontSize: 18),
           ),
           SizedBox(height: 8),
           Text(
             'Be the first to create something',
-            style: TextStyle(color: Color(0xFF888888), fontSize: 14),
+            style: TextStyle(color: NOC.textMuted, fontSize: 14),
           ),
         ],
       ),
@@ -346,15 +347,15 @@ class _DiscoverCard extends StatelessWidget {
   Color get _typeColor {
     switch (item['type']) {
       case 'community':
-        return const Color(0xFF00D4FF);
+        return NOC.accent;
       case 'club':
-        return const Color(0xFFFF6A00);
+        return NOC.hot;
       case 'organization':
-        return const Color(0xFF00D4FF);
+        return NOC.accent;
       case 'school':
-        return const Color(0xFFFF6A00);
+        return NOC.hot;
       default:
-        return const Color(0xFF888888);
+        return NOC.textMuted;
     }
   }
 
@@ -400,9 +401,9 @@ class _DiscoverCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1F1F1F),
+          color: NOC.surfaceAlt,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF222222)),
+          border: Border.all(color: NOC.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -411,7 +412,7 @@ class _DiscoverCard extends StatelessWidget {
             Container(
               height: 120,
               decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
+                color: NOC.border,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 image: item['cover_image_url'] != null
                     ? DecorationImage(
@@ -457,15 +458,15 @@ class _DiscoverCard extends StatelessWidget {
                       ),
                       if (item['is_verified'] == true) ...[
                         const SizedBox(width: 8),
-                        const Icon(Icons.verified, color: Color(0xFF00D4FF), size: 16),
+                         Icon(Icons.verified, color: NOC.accent, size: 16),
                       ],
                     ],
                   ),
                   const SizedBox(height: 10),
                   Text(
                     item['name'] ?? 'Unnamed',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style:  TextStyle(
+                      color: NOC.text,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
@@ -473,8 +474,8 @@ class _DiscoverCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     item['description'] ?? 'No description',
-                    style: const TextStyle(
-                      color: Color(0xFF888888),
+                    style:  TextStyle(
+                      color: NOC.textMuted,
                       fontSize: 13,
                       height: 1.4,
                     ),
@@ -484,23 +485,23 @@ class _DiscoverCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Icon(Icons.people, size: 14, color: Color(0xFF888888)),
+                       Icon(Icons.people, size: 14, color: NOC.textMuted),
                       const SizedBox(width: 6),
                       Text(
                         '$_memberCount members',
-                        style: const TextStyle(
-                          color: Color(0xFF888888),
+                        style:  TextStyle(
+                          color: NOC.textMuted,
                           fontSize: 12,
                         ),
                       ),
                       if (item['type'] == 'school' && item['location'] != null) ...[
                         const SizedBox(width: 16),
-                        const Icon(Icons.location_on, size: 14, color: Color(0xFF888888)),
+                         Icon(Icons.location_on, size: 14, color: NOC.textMuted),
                         const SizedBox(width: 6),
                         Text(
                           item['location'],
-                          style: const TextStyle(
-                            color: Color(0xFF888888),
+                          style:  TextStyle(
+                            color: NOC.textMuted,
                             fontSize: 12,
                           ),
                         ),

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
@@ -21,6 +23,7 @@ class SupabaseService {
 
   SupabaseClient get supabase => client;
   GoTrueClient get auth => client.auth;
+  StorageService get storage => client.storage;
 
   // Create profile after signup
   Future<void> createProfile({
@@ -36,5 +39,51 @@ class SupabaseService {
       'phone_number': phoneNumber,
       'gems': 77, // Welcome bonus
     });
+  }
+
+  /// Ensures the signed-in user has a `profiles` row, creating one from their
+  /// auth metadata if missing.
+  ///
+  /// This fixes a real gap: profiles were only created at sign-up, so users
+  /// whose sign-up had no session yet (e.g. email confirmation required) or
+  /// accounts created before the helper existed had no profile row, which
+  /// broke profile screens and DM search.
+  Future<void> ensureProfileForCurrentUser() async {
+    final user = auth.currentUser;
+    if (user == null) return;
+
+    final existing = await client
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle();
+    if (existing != null) return;
+
+    final metadata = user.userMetadata ?? const <String, dynamic>{};
+    final username = (metadata['username'] as String?)?.trim();
+    final phone = (metadata['phone'] as String?)?.trim();
+    await createProfile(
+      userId: user.id,
+      username: username != null && username.isNotEmpty
+          ? username
+          : (user.email ?? 'reader').split('@').first,
+      displayName: username,
+      phoneNumber: phone,
+    );
+  }
+
+  /// Uploads an image to a public bucket (upsert) and returns its public URL.
+  Future<String> uploadPublicImage({
+    required String bucket,
+    required String path,
+    required Uint8List bytes,
+    String contentType = 'image/jpeg',
+  }) async {
+    await client.storage.from(bucket).upload(
+          path,
+          bytes,
+          fileOptions: FileOptions(upsert: true, contentType: contentType),
+        );
+    return client.storage.from(bucket).getPublicUrl(path);
   }
 }

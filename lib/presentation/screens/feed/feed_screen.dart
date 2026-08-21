@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../services/supabase_service.dart';
+import '../../../config/theme.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
@@ -32,13 +33,13 @@ class _FeedScreenState extends State<FeedScreen>
     'Article',
   ];
 
-  final List<_PostType> _postTypes = const [
-    _PostType(label: 'Quote', icon: Icons.format_quote, color: Color(0xFF00D4FF)),
-    _PostType(label: 'News', icon: Icons.newspaper, color: Color(0xFFFF6A00)),
-    _PostType(label: 'Poll', icon: Icons.poll, color: Color(0xFF00D4FF)),
-    _PostType(label: 'Event', icon: Icons.event, color: Color(0xFFFF6A00)),
-    _PostType(label: 'Reel', icon: Icons.videocam, color: Color(0xFF00D4FF)),
-    _PostType(label: 'Article', icon: Icons.article, color: Color(0xFFFF6A00)),
+  final List<_PostType> _postTypes =  [
+    _PostType(label: 'Quote', icon: Icons.format_quote, color: NOC.accent),
+    _PostType(label: 'News', icon: Icons.newspaper, color: NOC.hot),
+    _PostType(label: 'Poll', icon: Icons.poll, color: NOC.accent),
+    _PostType(label: 'Event', icon: Icons.event, color: NOC.hot),
+    _PostType(label: 'Reel', icon: Icons.videocam, color: NOC.accent),
+    _PostType(label: 'Article', icon: Icons.article, color: NOC.hot),
   ];
 
   @override
@@ -119,7 +120,7 @@ class _FeedScreenState extends State<FeedScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       body: Stack(
         children: [
           // Main content
@@ -132,10 +133,10 @@ class _FeedScreenState extends State<FeedScreen>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                       Text(
                         'Feed',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: NOC.text,
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
                         ),
@@ -143,11 +144,11 @@ class _FeedScreenState extends State<FeedScreen>
                       Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.search, color: Colors.white),
+                            icon:  Icon(Icons.search, color: NOC.text),
                             onPressed: () {},
                           ),
                           IconButton(
-                            icon: const Icon(Icons.notifications_none, color: Colors.white),
+                            icon:  Icon(Icons.notifications_none, color: NOC.text),
                             onPressed: () {},
                           ),
                         ],
@@ -175,17 +176,17 @@ class _FeedScreenState extends State<FeedScreen>
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             decoration: BoxDecoration(
                               color: isActive
-                                  ? const Color(0xFF00D4FF)
-                                  : const Color(0xFF1F1F1F),
+                                  ? NOC.accent
+                                  : NOC.surfaceAlt,
                               borderRadius: BorderRadius.circular(20),
                               border: isActive
                                   ? null
-                                  : Border.all(color: const Color(0xFF222222)),
+                                  : Border.all(color: NOC.border),
                             ),
                             child: Text(
                               filter,
                               style: TextStyle(
-                                color: isActive ? const Color(0xFF0A0A0A) : Colors.white,
+                                color: isActive ? NOC.onAccent : NOC.text,
                                 fontSize: 13,
                                 fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                               ),
@@ -202,8 +203,8 @@ class _FeedScreenState extends State<FeedScreen>
                 // Posts list
                 Expanded(
                   child: _isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(color: Color(0xFF00D4FF)),
+                      ?  Center(
+                          child: CircularProgressIndicator(color: NOC.accent),
                         )
                       : _filteredPosts.isEmpty
                           ? _buildEmptyState()
@@ -258,11 +259,11 @@ class _FeedScreenState extends State<FeedScreen>
                           width: 56,
                           height: 56,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF00D4FF),
+                            color: NOC.accent,
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF00D4FF).withOpacity(0.3),
+                                color: NOC.accent.withOpacity(0.3),
                                 blurRadius: 16,
                                 offset: const Offset(0, 4),
                               ),
@@ -295,9 +296,9 @@ class _FeedScreenState extends State<FeedScreen>
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1F1F1F),
+          color: NOC.surfaceAlt,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF222222)),
+          border: Border.all(color: NOC.border),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.3),
@@ -313,8 +314,8 @@ class _FeedScreenState extends State<FeedScreen>
             const SizedBox(width: 8),
             Text(
               type.label,
-              style: const TextStyle(
-                color: Colors.white,
+              style:  TextStyle(
+                color: NOC.text,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
@@ -326,20 +327,20 @@ class _FeedScreenState extends State<FeedScreen>
   }
 
   Widget _buildEmptyState() {
-    return const Center(
+    return  Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             Icons.feed_outlined,
             size: 64,
-            color: Color(0xFF444444),
+            color: NOC.textFaint,
           ),
           SizedBox(height: 16),
           Text(
             'No posts yet',
             style: TextStyle(
-              color: Colors.white,
+              color: NOC.text,
               fontSize: 18,
             ),
           ),
@@ -347,7 +348,7 @@ class _FeedScreenState extends State<FeedScreen>
           Text(
             'Tap the stylus to create your first post',
             style: TextStyle(
-              color: Color(0xFF888888),
+              color: NOC.textMuted,
               fontSize: 14,
             ),
           ),
@@ -381,7 +382,7 @@ class _StylusPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white
+      ..color = NOC.onAccent
       ..style = PaintingStyle.fill;
 
     final width = size.width;
@@ -413,7 +414,7 @@ class _StylusPainter extends CustomPainter {
 
     // Nib hole
     final holePaint = Paint()
-      ..color = const Color(0xFF00D4FF)
+      ..color = NOC.accent
       ..style = PaintingStyle.fill;
 
     canvas.drawPath(bodyPath, paint);
@@ -474,9 +475,9 @@ class _QuotePostCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: NOC.surfaceAlt,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: NOC.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -485,13 +486,13 @@ class _QuotePostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF00D4FF).withOpacity(0.1),
+              color: NOC.accent.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Text(
+            child:  Text(
               'QUOTE',
               style: TextStyle(
-                color: Color(0xFF00D4FF),
+                color: NOC.accent,
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1,
@@ -503,8 +504,8 @@ class _QuotePostCard extends StatelessWidget {
           // Quote content with quotation marks
           Text(
             '"${post['content'] ?? ''}"',
-            style: const TextStyle(
-              color: Colors.white,
+            style:  TextStyle(
+              color: NOC.text,
               fontSize: 18,
               fontStyle: FontStyle.italic,
               height: 1.5,
@@ -519,15 +520,15 @@ class _QuotePostCard extends StatelessWidget {
                 width: 3,
                 height: 20,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00D4FF),
+                  color: NOC.accent,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(width: 10),
               Text(
                 '— ${post['metadata']?['quote_author'] ?? author}',
-                style: const TextStyle(
-                  color: Color(0xFF888888),
+                style:  TextStyle(
+                  color: NOC.textMuted,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
@@ -541,11 +542,11 @@ class _QuotePostCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 14,
-                backgroundColor: const Color(0xFF2A2A2A),
+                backgroundColor: NOC.border,
                 child: Text(
                   author[0].toUpperCase(),
-                  style: const TextStyle(
-                    color: Color(0xFF00D4FF),
+                  style:  TextStyle(
+                    color: NOC.accent,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -554,18 +555,18 @@ class _QuotePostCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 author,
-                style: const TextStyle(
-                  color: Color(0xFF888888),
+                style:  TextStyle(
+                  color: NOC.textMuted,
                   fontSize: 12,
                 ),
               ),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.favorite_border, color: Color(0xFF888888), size: 20),
+                icon:  Icon(Icons.favorite_border, color: NOC.textMuted, size: 20),
                 onPressed: () {},
               ),
               IconButton(
-                icon: const Icon(Icons.share_outlined, color: Color(0xFF888888), size: 20),
+                icon:  Icon(Icons.share_outlined, color: NOC.textMuted, size: 20),
                 onPressed: () {},
               ),
             ],
@@ -588,9 +589,9 @@ class _NewsPostCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: NOC.surfaceAlt,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: NOC.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -613,13 +614,13 @@ class _NewsPostCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFF6A00).withOpacity(0.1),
+                    color: NOC.hot.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
+                  child:  Text(
                     'NEWS',
                     style: TextStyle(
-                      color: Color(0xFFFF6A00),
+                      color: NOC.hot,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1,
@@ -629,8 +630,8 @@ class _NewsPostCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   post['title'] ?? 'Untitled',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style:  TextStyle(
+                    color: NOC.text,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
@@ -638,8 +639,8 @@ class _NewsPostCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   post['content'] ?? '',
-                  style: const TextStyle(
-                    color: Color(0xFF888888),
+                  style:  TextStyle(
+                    color: NOC.textMuted,
                     fontSize: 14,
                     height: 1.5,
                   ),
@@ -651,13 +652,13 @@ class _NewsPostCard extends StatelessWidget {
                   children: [
                     Text(
                       'By $author',
-                      style: const TextStyle(
-                        color: Color(0xFF888888),
+                      style:  TextStyle(
+                        color: NOC.textMuted,
                         fontSize: 12,
                       ),
                     ),
                     const Spacer(),
-                    const Icon(Icons.arrow_forward, color: Color(0xFF00D4FF), size: 16),
+                     Icon(Icons.arrow_forward, color: NOC.accent, size: 16),
                   ],
                 ),
               ],
@@ -684,9 +685,9 @@ class _PollPostCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: NOC.surfaceAlt,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: NOC.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -694,13 +695,13 @@ class _PollPostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF00D4FF).withOpacity(0.1),
+              color: NOC.accent.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Text(
+            child:  Text(
               'POLL',
               style: TextStyle(
-                color: Color(0xFF00D4FF),
+                color: NOC.accent,
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1,
@@ -710,8 +711,8 @@ class _PollPostCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             post['content'] ?? 'Poll question?',
-            style: const TextStyle(
-              color: Colors.white,
+            style:  TextStyle(
+              color: NOC.text,
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -722,9 +723,9 @@ class _PollPostCard extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
+                color: NOC.border,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF222222)),
+                border: Border.all(color: NOC.border),
               ),
               child: Row(
                 children: [
@@ -733,13 +734,13 @@ class _PollPostCard extends StatelessWidget {
                     height: 20,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFF888888)),
+                      border: Border.all(color: NOC.textMuted),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Text(
                     option,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    style:  TextStyle(color: NOC.text, fontSize: 14),
                   ),
                 ],
               ),
@@ -748,8 +749,8 @@ class _PollPostCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             '$author • ${post['metadata']?['votes'] ?? 0} votes',
-            style: const TextStyle(
-              color: Color(0xFF888888),
+            style:  TextStyle(
+              color: NOC.textMuted,
               fontSize: 12,
             ),
           ),
@@ -772,9 +773,9 @@ class _EventPostCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: NOC.surfaceAlt,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: NOC.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -782,13 +783,13 @@ class _EventPostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFFF6A00).withOpacity(0.1),
+              color: NOC.hot.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Text(
+            child:  Text(
               'EVENT',
               style: TextStyle(
-                color: Color(0xFFFF6A00),
+                color: NOC.hot,
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1,
@@ -798,8 +799,8 @@ class _EventPostCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             post['title'] ?? 'Event',
-            style: const TextStyle(
-              color: Colors.white,
+            style:  TextStyle(
+              color: NOC.text,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -807,22 +808,22 @@ class _EventPostCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.calendar_today, color: Color(0xFF00D4FF), size: 16),
+               Icon(Icons.calendar_today, color: NOC.accent, size: 16),
               const SizedBox(width: 8),
               Text(
                 post['metadata']?['date'] ?? 'TBD',
-                style: const TextStyle(color: Color(0xFF888888), fontSize: 14),
+                style:  TextStyle(color: NOC.textMuted, fontSize: 14),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Row(
             children: [
-              const Icon(Icons.location_on, color: Color(0xFF00D4FF), size: 16),
+               Icon(Icons.location_on, color: NOC.accent, size: 16),
               const SizedBox(width: 8),
               Text(
                 post['metadata']?['location'] ?? 'Online',
-                style: const TextStyle(color: Color(0xFF888888), fontSize: 14),
+                style:  TextStyle(color: NOC.textMuted, fontSize: 14),
               ),
             ],
           ),
@@ -832,8 +833,8 @@ class _EventPostCard extends StatelessWidget {
             child: ElevatedButton(
               onPressed: () {},
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00D4FF),
-                foregroundColor: const Color(0xFF0A0A0A),
+                backgroundColor: NOC.accent,
+                foregroundColor: NOC.onAccent,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -859,9 +860,9 @@ class _ReelPostCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: NOC.surfaceAlt,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: NOC.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -872,7 +873,7 @@ class _ReelPostCard extends StatelessWidget {
               Container(
                 height: 240,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2A2A2A),
+                  color: NOC.border,
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(16),
                   ),
@@ -884,11 +885,11 @@ class _ReelPostCard extends StatelessWidget {
                       : null,
                 ),
                 child: post['metadata']?['thumbnail_url'] == null
-                    ? const Center(
+                    ?  Center(
                         child: Icon(
                           Icons.videocam,
                           size: 48,
-                          color: Color(0xFF444444),
+                          color: NOC.textFaint,
                         ),
                       )
                     : null,
@@ -897,12 +898,12 @@ class _ReelPostCard extends StatelessWidget {
                 width: 60,
                 height: 60,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00D4FF).withOpacity(0.9),
+                  color: NOC.accent.withOpacity(0.9),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child:  Icon(
                   Icons.play_arrow,
-                  color: Colors.white,
+                  color: NOC.text,
                   size: 32,
                 ),
               ),
@@ -918,8 +919,8 @@ class _ReelPostCard extends StatelessWidget {
                   ),
                   child: Text(
                     post['metadata']?['duration'] ?? '0:00',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style:  TextStyle(
+                      color: NOC.text,
                       fontSize: 12,
                     ),
                   ),
@@ -934,8 +935,8 @@ class _ReelPostCard extends StatelessWidget {
               children: [
                 Text(
                   post['title'] ?? 'Untitled Reel',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style:  TextStyle(
+                    color: NOC.text,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
@@ -943,8 +944,8 @@ class _ReelPostCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   '$author • ${post['metadata']?['views'] ?? 0} views',
-                  style: const TextStyle(
-                    color: Color(0xFF888888),
+                  style:  TextStyle(
+                    color: NOC.textMuted,
                     fontSize: 12,
                   ),
                 ),
@@ -970,9 +971,9 @@ class _ArticlePostCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: NOC.surfaceAlt,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: NOC.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -980,13 +981,13 @@ class _ArticlePostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFFF6A00).withOpacity(0.1),
+              color: NOC.hot.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Text(
+            child:  Text(
               'ARTICLE',
               style: TextStyle(
-                color: Color(0xFFFF6A00),
+                color: NOC.hot,
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1,
@@ -996,8 +997,8 @@ class _ArticlePostCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             post['title'] ?? 'Untitled Article',
-            style: const TextStyle(
-              color: Colors.white,
+            style:  TextStyle(
+              color: NOC.text,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -1005,8 +1006,8 @@ class _ArticlePostCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             post['content'] ?? '',
-            style: const TextStyle(
-              color: Color(0xFF888888),
+            style:  TextStyle(
+              color: NOC.textMuted,
               fontSize: 14,
               height: 1.5,
             ),
@@ -1018,17 +1019,17 @@ class _ArticlePostCard extends StatelessWidget {
             children: [
               Text(
                 'By $author',
-                style: const TextStyle(
-                  color: Color(0xFF888888),
+                style:  TextStyle(
+                  color: NOC.textMuted,
                   fontSize: 12,
                 ),
               ),
               const Spacer(),
               TextButton(
                 onPressed: () => context.push('/publish-details?bookId=${post['id']}'),
-                child: const Text(
+                child:  Text(
                   'Read',
-                  style: TextStyle(color: Color(0xFF00D4FF)),
+                  style: TextStyle(color: NOC.accent),
                 ),
               ),
             ],
@@ -1052,13 +1053,13 @@ class _DefaultPostCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: NOC.surfaceAlt,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: NOC.border),
       ),
       child: Text(
         post['content'] ?? '',
-        style: const TextStyle(color: Colors.white),
+        style:  TextStyle(color: NOC.text),
       ),
     );
   }

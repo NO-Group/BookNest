@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../services/supabase_service.dart';
+import '../../../config/theme.dart';
 
 class CreateReelScreen extends StatefulWidget {
   const CreateReelScreen({super.key});
@@ -38,9 +39,9 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
       if (mounted) {
         context.pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+           SnackBar(
             content: Text('Reel placeholder created! Video upload coming soon.'),
-            backgroundColor: Color(0xFF00D4FF),
+            backgroundColor: NOC.accent,
           ),
         );
       }
@@ -58,19 +59,19 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       appBar: AppBar(
         title: const Text('Create Reel'),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _publishReel,
             child: _isLoading
-                ? const SizedBox(
+                ?  SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: NOC.text),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFF00D4FF))),
+                :  Text('Post', style: TextStyle(color: NOC.accent)),
           ),
         ],
       ),
@@ -84,26 +85,26 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
               width: double.infinity,
               height: 240,
               decoration: BoxDecoration(
-                color: const Color(0xFF1F1F1F),
+                color: NOC.surfaceAlt,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: const Color(0xFF444444),
+                  color: NOC.textFaint,
                   style: BorderStyle.solid,
                 ),
               ),
-              child: const Column(
+              child:  Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
                     Icons.videocam,
                     size: 48,
-                    color: Color(0xFF444444),
+                    color: NOC.textFaint,
                   ),
                   SizedBox(height: 16),
                   Text(
                     'Video upload coming soon',
                     style: TextStyle(
-                      color: Color(0xFF888888),
+                      color: NOC.textMuted,
                       fontSize: 14,
                     ),
                   ),
@@ -111,7 +112,7 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
                   Text(
                     'For now, create a placeholder reel',
                     style: TextStyle(
-                      color: Color(0xFF444444),
+                      color: NOC.textFaint,
                       fontSize: 12,
                     ),
                   ),
@@ -121,21 +122,21 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
             const SizedBox(height: 32),
             TextField(
               controller: _titleController,
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
+              style:  TextStyle(color: NOC.text, fontSize: 18, fontWeight: FontWeight.bold),
+              decoration:  InputDecoration(
                 hintText: 'Reel title',
-                hintStyle: TextStyle(color: Color(0xFF444444)),
+                hintStyle: TextStyle(color: NOC.textFaint),
                 border: InputBorder.none,
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _descriptionController,
-              style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.6),
+              style:  TextStyle(color: NOC.text, fontSize: 14, height: 1.6),
               maxLines: 3,
-              decoration: const InputDecoration(
+              decoration:  InputDecoration(
                 hintText: 'Description...',
-                hintStyle: TextStyle(color: Color(0xFF444444)),
+                hintStyle: TextStyle(color: NOC.textFaint),
                 border: InputBorder.none,
               ),
             ),

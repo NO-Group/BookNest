@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../services/supabase_service.dart';
+import '../../../config/theme.dart';
 
 class CreateSchoolScreen extends StatefulWidget {
   const CreateSchoolScreen({super.key});
@@ -35,23 +36,35 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
     try {
       final userId = SupabaseService().auth.currentUser!.id;
 
-      await SupabaseService().client.from('schools').insert({
-        'name': _nameController.text.trim(),
-        'description': _descriptionController.text.trim(),
-        'location': _locationController.text.trim(),
-        'website': _websiteController.text.trim(),
-        'school_type': _schoolType,
-        'owner_id': userId,
-        'vice_moderator_id': null,
-        'is_verified': false,
+      final schoolResponse = await SupabaseService()
+          .client
+          .from('schools')
+          .insert({
+            'name': _nameController.text.trim(),
+            'description': _descriptionController.text.trim(),
+            'location': _locationController.text.trim(),
+            'website': _websiteController.text.trim(),
+            'school_type': _schoolType,
+            'owner_id': userId,
+            'vice_moderator_id': null,
+            'is_verified': false,
+          })
+          .select();
+
+      // Owner joins as a member (seeds them into the default chat group).
+      final schoolId = schoolResponse[0]['id'];
+      await SupabaseService().client.from('school_members').insert({
+        'school_id': schoolId,
+        'user_id': userId,
+        'role': 'owner',
       });
 
       if (mounted) {
         context.pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+           SnackBar(
             content: Text('School registered!'),
-            backgroundColor: Color(0xFF00D4FF),
+            backgroundColor: NOC.accent,
           ),
         );
       }
@@ -69,19 +82,19 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       appBar: AppBar(
         title: const Text('Register School'),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _createSchool,
             child: _isLoading
-                ? const SizedBox(
+                ?  SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: NOC.text),
                   )
-                : const Text('Register', style: TextStyle(color: Color(0xFF00D4FF))),
+                :  Text('Register', style: TextStyle(color: NOC.accent)),
           ),
         ],
       ),
@@ -93,19 +106,19 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
             width: double.infinity,
             height: 160,
             decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
+              color: NOC.border,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: const Color(0xFF444444),
+                color: NOC.textFaint,
                 style: BorderStyle.solid,
               ),
             ),
-            child: const Column(
+            child:  Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.add_photo_alternate, size: 40, color: Color(0xFF444444)),
+                Icon(Icons.add_photo_alternate, size: 40, color: NOC.textFaint),
                 SizedBox(height: 8),
-                Text('Add school photo', style: TextStyle(color: Color(0xFF666666), fontSize: 14)),
+                Text('Add school photo', style: TextStyle(color: NOC.textFaint, fontSize: 14)),
               ],
             ),
           ),
@@ -114,17 +127,17 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
           // Name
           TextField(
             controller: _nameController,
-            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-            decoration: const InputDecoration(
+            style:  TextStyle(color: NOC.text, fontSize: 20, fontWeight: FontWeight.bold),
+            decoration:  InputDecoration(
               hintText: 'School name',
-              hintStyle: TextStyle(color: Color(0xFF444444)),
+              hintStyle: TextStyle(color: NOC.textFaint),
               border: InputBorder.none,
             ),
           ),
           const SizedBox(height: 16),
 
           // Type
-          const Text('School Type', style: TextStyle(color: Color(0xFF888888), fontSize: 14)),
+           Text('School Type', style: TextStyle(color: NOC.textMuted, fontSize: 14)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -137,14 +150,14 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF00D4FF) : const Color(0xFF1F1F1F),
+                    color: isSelected ? NOC.accent : NOC.surfaceAlt,
                     borderRadius: BorderRadius.circular(20),
-                    border: isSelected ? null : Border.all(color: const Color(0xFF222222)),
+                    border: isSelected ? null : Border.all(color: NOC.border),
                   ),
                   child: Text(
                     type,
                     style: TextStyle(
-                      color: isSelected ? const Color(0xFF0A0A0A) : Colors.white,
+                      color: isSelected ? NOC.bg : NOC.text,
                       fontSize: 13,
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                     ),
@@ -158,11 +171,11 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
           // Description
           TextField(
             controller: _descriptionController,
-            style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
+            style:  TextStyle(color: NOC.text, fontSize: 16, height: 1.6),
             maxLines: 3,
-            decoration: const InputDecoration(
+            decoration:  InputDecoration(
               hintText: 'About this school...',
-              hintStyle: TextStyle(color: Color(0xFF444444)),
+              hintStyle: TextStyle(color: NOC.textFaint),
               border: InputBorder.none,
             ),
           ),
@@ -172,20 +185,20 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF1F1F1F),
+              color: NOC.surfaceAlt,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
-                const Icon(Icons.location_on, color: Color(0xFF888888), size: 20),
+                 Icon(Icons.location_on, color: NOC.textMuted, size: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _locationController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
+                    style:  TextStyle(color: NOC.text),
+                    decoration:  InputDecoration(
                       hintText: 'City, Country',
-                      hintStyle: TextStyle(color: Color(0xFF666666)),
+                      hintStyle: TextStyle(color: NOC.textFaint),
                       border: InputBorder.none,
                     ),
                   ),
@@ -199,20 +212,20 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF1F1F1F),
+              color: NOC.surfaceAlt,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
-                const Icon(Icons.language, color: Color(0xFF888888), size: 20),
+                 Icon(Icons.language, color: NOC.textMuted, size: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _websiteController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
+                    style:  TextStyle(color: NOC.text),
+                    decoration:  InputDecoration(
                       hintText: 'School website (optional)',
-                      hintStyle: TextStyle(color: Color(0xFF666666)),
+                      hintStyle: TextStyle(color: NOC.textFaint),
                       border: InputBorder.none,
                     ),
                   ),
@@ -226,15 +239,15 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF1F1F1F),
+              color: NOC.surfaceAlt,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Column(
+            child:  Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'School Features',
-                  style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: NOC.text, fontSize: 14, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 12),
                 _FeatureRow(icon: Icons.class_, text: 'Class/grade channels'),
@@ -276,12 +289,12 @@ class _FeatureRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: const Color(0xFF00D4FF)),
+        Icon(icon, size: 16, color: NOC.accent),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(color: Color(0xFF888888), fontSize: 12),
+            style:  TextStyle(color: NOC.textMuted, fontSize: 12),
           ),
         ),
       ],

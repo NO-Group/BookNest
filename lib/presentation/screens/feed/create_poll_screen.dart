@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../services/supabase_service.dart';
+import '../../../config/theme.dart';
 
 class CreatePollScreen extends StatefulWidget {
   const CreatePollScreen({super.key});
@@ -59,9 +60,9 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
       if (mounted) {
         context.pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+           SnackBar(
             content: Text('Poll posted!'),
-            backgroundColor: Color(0xFF00D4FF),
+            backgroundColor: NOC.accent,
           ),
         );
       }
@@ -79,19 +80,19 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: NOC.bg,
       appBar: AppBar(
         title: const Text('Create Poll'),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _publishPoll,
             child: _isLoading
-                ? const SizedBox(
+                ?  SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: NOC.text),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFF00D4FF))),
+                :  Text('Post', style: TextStyle(color: NOC.accent)),
           ),
         ],
       ),
@@ -102,17 +103,17 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
           children: [
             TextField(
               controller: _questionController,
-              style: const TextStyle(color: Colors.white, fontSize: 18),
-              decoration: const InputDecoration(
+              style:  TextStyle(color: NOC.text, fontSize: 18),
+              decoration:  InputDecoration(
                 hintText: 'Ask a question...',
-                hintStyle: TextStyle(color: Color(0xFF444444)),
+                hintStyle: TextStyle(color: NOC.textFaint),
                 border: InputBorder.none,
               ),
             ),
             const SizedBox(height: 32),
-            const Text(
+             Text(
               'Options',
-              style: TextStyle(color: Color(0xFF888888), fontSize: 14),
+              style: TextStyle(color: NOC.textMuted, fontSize: 14),
             ),
             const SizedBox(height: 12),
             ...List.generate(_optionControllers.length, (index) {
@@ -125,19 +126,19 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
                       height: 12,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFF888888)),
+                        border: Border.all(color: NOC.textMuted),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: TextField(
                         controller: _optionControllers[index],
-                        style: const TextStyle(color: Colors.white),
+                        style:  TextStyle(color: NOC.text),
                         decoration: InputDecoration(
                           hintText: 'Option ${index + 1}',
-                          hintStyle: const TextStyle(color: Color(0xFF666666)),
+                          hintStyle:  TextStyle(color: NOC.textFaint),
                           filled: true,
-                          fillColor: const Color(0xFF1F1F1F),
+                          fillColor: NOC.surfaceAlt,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: BorderSide.none,
@@ -147,7 +148,7 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
                     ),
                     if (_optionControllers.length > 2)
                       IconButton(
-                        icon: const Icon(Icons.close, color: Color(0xFF888888), size: 20),
+                        icon:  Icon(Icons.close, color: NOC.textMuted, size: 20),
                         onPressed: () => _removeOption(index),
                       ),
                   ],
@@ -157,8 +158,8 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
             if (_optionControllers.length < 6)
               TextButton.icon(
                 onPressed: _addOption,
-                icon: const Icon(Icons.add, color: Color(0xFF00D4FF)),
-                label: const Text('Add option', style: TextStyle(color: Color(0xFF00D4FF))),
+                icon:  Icon(Icons.add, color: NOC.accent),
+                label:  Text('Add option', style: TextStyle(color: NOC.accent)),
               ),
           ],
         ),
