@@ -373,12 +373,12 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                       onPressed: () => _applyInlineStyle('*'),
                     ),
                     _buildToolbarButton(
-                      icon: Icons.format_header,
+                      icon: Icons.title,
                       tooltip: 'Heading 1 (# text)',
                       onPressed: () => _applyLinePrefix('# '),
                     ),
                     _buildToolbarButton(
-                      icon: Icons.format_header,
+                      icon: Icons.format_size,
                       tooltip: 'Heading 2 (## text)',
                       onPressed: () => _applyLinePrefix('## '),
                     ),

@@ -10,7 +10,7 @@ class UserAvatar extends StatelessWidget {
   final String? imageUrl;
   final String name;
   final double radius;
-  final Color accentColor;
+  final Color? accentColor;
 
   const UserAvatar({
     super.key,

@@ -797,15 +797,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   themeController.setMode(selection.first),
               showSelectedIcon: false,
               style: ButtonStyle(
-                backgroundColor: WidgetStatePropertyAll(
-                  NOC.surfaceAlt,
-                ),
-                foregroundColor:  WidgetStatePropertyAll(NOC.text),
+                backgroundColor: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.selected)
+                        ? NOC.accent
+                        : NOC.surfaceAlt),
+                foregroundColor: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.selected)
+                        ? NOC.onAccent
+                        : NOC.text),
                 side: WidgetStatePropertyAll(
                   BorderSide(color: NOC.border),
-                ),
-                selectedBackgroundColor: const WidgetStatePropertyAll(
-                  Color(0xFF1E4FD6),
                 ),
               ),
             );

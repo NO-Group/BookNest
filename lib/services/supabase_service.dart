@@ -23,7 +23,6 @@ class SupabaseService {
 
   SupabaseClient get supabase => client;
   GoTrueClient get auth => client.auth;
-  StorageService get storage => client.storage;
 
   // Create profile after signup
   Future<void> createProfile({

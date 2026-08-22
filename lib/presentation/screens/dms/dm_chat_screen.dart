@@ -344,9 +344,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           break;
         case 'document':
         default:
-          final result = await FilePicker.platform.pickFiles(
+          // NOTE: file_picker 11.x uses static methods (no FilePicker.platform).
+          final result = await FilePicker.pickFiles(
             type: FileType.any,
             withData: true,
+            allowMultiple: false,
           );
           if (result == null || result.files.isEmpty || !mounted) return;
           final file = result.files.single;

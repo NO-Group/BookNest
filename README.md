@@ -1885,6 +1885,69 @@ lightweight and expect deeper implementation later:
 
 ---
 
+### Session 2026-08-22 — Compile-error fixes from the user's first real build (Part 5)
+
+The user ran `flutter run -d chrome` on Windows and hit a wall of compile
+errors — the first time this codebase was actually compiled on their machine
+(the sandbox has no toolchain). Every reported error was root-caused against
+the real package sources (cloned from GitHub) and fixed:
+
+1. **`router.dart: BuildContext not found`** — go_router 17.3.0 does **not**
+   re-export `BuildContext` (verified in its `go_router.dart` exports); the
+   router file never imported a Flutter widgets library. Fixed by adding
+   `import 'package:flutter/widgets.dart';`.
+
+2. **`supabase_service.dart: Type 'StorageService' not found`** — the type
+   `StorageService` does not exist (the storage client is `SupabaseStorage`).
+   Removed the unused `StorageService get storage => client.storage;` getter
+   (this was also the source of the web compiler's `InvalidType` crash).
+
+3. **`user_avatar.dart: accentColor can't be null`** — the constructor took
+   `this.accentColor` (implicitly nullable) while the field was non-nullable
+   `Color`. Changed the field to `Color? accentColor` (kept the `_accent`
+   fallback to `NOC.accent`).
+
+4. **`book_editor_screen.dart: Icons.format_header not found`** — verified
+   against Flutter 3.27.4's `icons.dart`: `format_header` does not exist (it
+   was a latent error in the original repo too). Replaced with `Icons.title`
+   (H1) and `Icons.format_size` (H2). A bulk check confirmed **all 86 other
+   icons** used across the app exist in 3.27.4.
+
+5. **`dm_list_screen.dart: onPostgresChanges requires 'callback'`** — the
+   locked `realtime_client 2.11.0` uses the **callback** API
+   (`RealtimeChannel onPostgresChanges({..., required callback})`, returns the
+   channel, no stream `.listen()`), not the stream API from newer dev builds.
+   Rewrote the ticker subscription to the callback form.
+
+6. **`dm_chat_screen.dart: FilePicker.platform not found`** — file_picker
+   **11.0.0 removed `FilePicker.platform`** and made the API static
+   (`FilePicker.pickFiles(...)` returning `FilePickerResult?`). The user's
+   resolution clearly picked up 11.x. Updated the document-picking code to
+   the static API and pinned **`file_picker: ^11.0.3`** in `pubspec.yaml` so
+   resolution is deterministic.
+
+7. **`profile_screen.dart: ButtonStyle has no 'selectedBackgroundColor'`** —
+   that's not a `ButtonStyle` parameter. The theme toggle now uses
+   `WidgetStateProperty.resolveWith` to switch background/foreground for the
+   selected segment (selected → `NOC.accent`/`NOC.onAccent`).
+
+8. **`create_event_screen.dart: const ColorScheme.dark(primary: NOC.accent)`**
+   — `NOC.accent` is not a constant expression, so `const` was illegal.
+   Removed `const` from the two date/time picker `ColorScheme.dark(...)`
+   invocations.
+
+**Verification after fixes:** balance/string checks, relative-import checks,
+a `const`-containing-`NOC` scan (0), a `const`-containing-`withOpacity` scan
+(0), and the full icon-existence check against Flutter 3.27.4 all pass.
+
+**Why these errors existed:** the sandbox cannot run Flutter, so previous
+sessions could only do static review — several version-sensitive APIs
+(realtime callback form, file_picker static methods, icon names, `ButtonStyle`
+params) were written against newer/different package sources than the locked
+versions resolve to.
+
+---
+
 ### Session 2026-08-22 — In-app video playback, document attachments, app v2.0.0, branch pushed (Part 4)
 
 **User asks:** "Add them" (the two remaining roadmap items — in-app video

@@ -58,13 +58,14 @@ class _DMListScreenState extends State<DMListScreen> {
   void _subscribeMessageTicker() {
     final channel = SupabaseService().client.channel('dm-ticker');
     _tickerChannel = channel;
-    channel
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'messages',
-        )
-        .listen((_) => _refreshConversations(debounce: true));
+    // NOTE: realtime_client 2.11.0 uses the callback form of
+    // onPostgresChanges (returns RealtimeChannel, no .listen()).
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'messages',
+      callback: (_) => _refreshConversations(debounce: true),
+    );
     channel.subscribe();
   }
 
