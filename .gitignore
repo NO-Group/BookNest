@@ -43,3 +43,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# ── BookNest secrets — real credentials NEVER enter Git ──────────────────
+.env
+.env.*
+backend/secrets.local.env
+
+# Supabase CLI local artifacts
+supabase/.branches/
+supabase/.temp/
+supabase/.deno/
