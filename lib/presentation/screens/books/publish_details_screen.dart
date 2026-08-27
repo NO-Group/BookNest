@@ -108,7 +108,7 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF00D4FF)),
+        child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
       );
     }
 
@@ -215,17 +215,17 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
           fontSize: 16,
           height: 1.7,
         ),
-        listBullet: const TextStyle(color: Color(0xFF00D4FF)),
+        listBullet: const TextStyle(color: Color(0xFF00E5FF)),
         blockquoteDecoration: BoxDecoration(
           color: const Color(0xFF141414),
           borderRadius: BorderRadius.circular(8),
-          border: const Border(left: BorderSide(color: Color(0xFF00D4FF), width: 3)),
+          border: const Border(left: BorderSide(color: Color(0xFF00E5FF), width: 3)),
         ),
         blockquote: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
         horizontalRuleDecoration: const BoxDecoration(
           border: Border(top: BorderSide(color: Color(0xFF222222))),
         ),
-        code: const TextStyle(color: Color(0xFF00D4FF), backgroundColor: Color(0xFF141414)),
+        code: const TextStyle(color: Color(0xFF00E5FF), backgroundColor: Color(0xFF141414)),
       ),
       ),
       ],
@@ -277,7 +277,7 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: const Color(0xFF00D4FF),
+        backgroundColor: const Color(0xFF00E5FF),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -307,7 +307,7 @@ class _ActionButton extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: const Color(0xFF00D4FF), size: 22),
+            Icon(icon, color: const Color(0xFF00E5FF), size: 22),
             const SizedBox(height: 4),
             Text(
               label,

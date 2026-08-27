@@ -43,7 +43,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFFFFD000), Color(0xFFFF6A00)],
+                  colors: [Color(0xFF00E5FF), Color(0xFF102A56)],
                 ),
                 borderRadius: BorderRadius.circular(24),
               ),
@@ -74,7 +74,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             const SizedBox(height: 48),
             const CircularProgressIndicator(
-              color: Color(0xFFFF6A00),
+              color: Color(0xFF102A56),
               strokeWidth: 3,
             ),
           ],

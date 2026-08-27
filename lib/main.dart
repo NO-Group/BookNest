@@ -18,9 +18,9 @@ class BookNestApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'BookNest',
       debugShowCheckedModeBanner: false,
-      theme: BookNestTheme.darkTheme,
+      theme: BookNestTheme.lightTheme,
       darkTheme: BookNestTheme.darkTheme,
-      themeMode: ThemeMode.dark,
+      themeMode: ThemeMode.system,
       routerConfig: appRouter,
     );
   }

@@ -9,6 +9,7 @@ import '../presentation/screens/discover/discover_screen.dart';
 import '../presentation/screens/books/books_library_screen.dart';
 import '../presentation/screens/books/book_editor_screen.dart';
 import '../presentation/screens/books/publish_details_screen.dart';
+import '../presentation/screens/books/book_details_screen.dart';
 import '../presentation/screens/dms/dm_list_screen.dart';
 import '../presentation/screens/profile/profile_screen.dart';
 import '../presentation/screens/feed/create_quote_screen.dart';
@@ -90,6 +91,12 @@ final GoRouter appRouter = GoRouter(
         final clubId = state.uri.queryParameters['clubId'];
         return BookEditorScreen(clubId: clubId);
       },
+    ),
+    GoRoute(
+      path: '/book/:id',
+      builder: (context, state) => BookDetailsScreen(
+        bookId: state.pathParameters['id'] ?? '',
+      ),
     ),
     GoRoute(
       path: '/publish-details',

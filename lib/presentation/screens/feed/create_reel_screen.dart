@@ -40,7 +40,7 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Reel placeholder created! Video upload coming soon.'),
-            backgroundColor: Color(0xFF00D4FF),
+            backgroundColor: Color(0xFF00E5FF),
           ),
         );
       }
@@ -70,7 +70,7 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFF00D4FF))),
+                : const Text('Post', style: TextStyle(color: Color(0xFF00E5FF))),
           ),
         ],
       ),

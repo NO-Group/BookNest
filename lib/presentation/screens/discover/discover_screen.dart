@@ -28,10 +28,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   final List<String> _filters = ['All', 'Clubs', 'Organizations', 'Schools', 'Communities'];
 
   final List<_CreateOption> _createOptions = const [
-    _CreateOption(label: 'New Club', icon: Icons.menu_book, color: Color(0xFF00D4FF), route: '/create/club'),
-    _CreateOption(label: 'New Organization', icon: Icons.business, color: Color(0xFFFF6A00), route: '/create/organization'),
-    _CreateOption(label: 'New School', icon: Icons.school, color: Color(0xFF00D4FF), route: '/create/school'),
-    _CreateOption(label: 'New Community', icon: Icons.account_tree, color: Color(0xFFFF6A00), route: '/create/community'),
+    _CreateOption(label: 'New Club', icon: Icons.menu_book, color: Color(0xFF00E5FF), route: '/create/club'),
+    _CreateOption(label: 'New Organization', icon: Icons.business, color: Color(0xFF102A56), route: '/create/organization'),
+    _CreateOption(label: 'New School', icon: Icons.school, color: Color(0xFF00E5FF), route: '/create/school'),
+    _CreateOption(label: 'New Community', icon: Icons.account_tree, color: Color(0xFF102A56), route: '/create/community'),
   ];
 
   @override
@@ -141,7 +141,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                                 ),
                                 child: const Icon(
                                   Icons.add,
-                                  color: Color(0xFF00D4FF),
+                                  color: Color(0xFF00E5FF),
                                   size: 20,
                                 ),
                               ),
@@ -191,7 +191,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             decoration: BoxDecoration(
                               color: isActive
-                                  ? const Color(0xFF00D4FF)
+                                  ? const Color(0xFF00E5FF)
                                   : const Color(0xFF1F1F1F),
                               borderRadius: BorderRadius.circular(20),
                               border: isActive
@@ -219,7 +219,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                 Expanded(
                   child: _isLoading
                       ? const Center(
-                          child: CircularProgressIndicator(color: Color(0xFF00D4FF)),
+                          child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
                         )
                       : _filteredItems.isEmpty
                           ? _buildEmptyState()
@@ -346,13 +346,13 @@ class _DiscoverCard extends StatelessWidget {
   Color get _typeColor {
     switch (item['type']) {
       case 'community':
-        return const Color(0xFF00D4FF);
+        return const Color(0xFF00E5FF);
       case 'club':
-        return const Color(0xFFFF6A00);
+        return const Color(0xFF102A56);
       case 'organization':
-        return const Color(0xFF00D4FF);
+        return const Color(0xFF00E5FF);
       case 'school':
-        return const Color(0xFFFF6A00);
+        return const Color(0xFF102A56);
       default:
         return const Color(0xFF888888);
     }
@@ -457,7 +457,7 @@ class _DiscoverCard extends StatelessWidget {
                       ),
                       if (item['is_verified'] == true) ...[
                         const SizedBox(width: 8),
-                        const Icon(Icons.verified, color: Color(0xFF00D4FF), size: 16),
+                        const Icon(Icons.verified, color: Color(0xFF00E5FF), size: 16),
                       ],
                     ],
                   ),

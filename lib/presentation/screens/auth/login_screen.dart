@@ -98,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     gradient: const LinearGradient(
-                      colors: [Color(0xFFE0FFFF), Color(0xFF00FFFF)],
+                      colors: [Color(0xFF8FF7FF), Color(0xFF00E5FF)],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                     ),
@@ -132,7 +132,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     onTap: () => context.go('/register'),
                     child: const Text(
                       'Sign up',
-                      style: TextStyle(color: Color(0xFF00FFFF), fontWeight: FontWeight.bold),
+                      style: TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],

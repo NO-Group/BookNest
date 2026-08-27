@@ -51,7 +51,7 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('School registered!'),
-            backgroundColor: Color(0xFF00D4FF),
+            backgroundColor: Color(0xFF00E5FF),
           ),
         );
       }
@@ -81,7 +81,7 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Register', style: TextStyle(color: Color(0xFF00D4FF))),
+                : const Text('Register', style: TextStyle(color: Color(0xFF00E5FF))),
           ),
         ],
       ),
@@ -137,7 +137,7 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF00D4FF) : const Color(0xFF1F1F1F),
+                    color: isSelected ? const Color(0xFF00E5FF) : const Color(0xFF1F1F1F),
                     borderRadius: BorderRadius.circular(20),
                     border: isSelected ? null : Border.all(color: const Color(0xFF222222)),
                   ),
@@ -276,7 +276,7 @@ class _FeatureRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: const Color(0xFF00D4FF)),
+        Icon(icon, size: 16, color: const Color(0xFF00E5FF)),
         const SizedBox(width: 10),
         Expanded(
           child: Text(

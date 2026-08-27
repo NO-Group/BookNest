@@ -31,7 +31,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF00D4FF),
+              primary: Color(0xFF00E5FF),
               surface: Color(0xFF1F1F1F),
             ),
           ),
@@ -50,7 +50,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF00D4FF),
+              primary: Color(0xFF00E5FF),
               surface: Color(0xFF1F1F1F),
             ),
           ),
@@ -95,7 +95,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Event posted!'),
-            backgroundColor: Color(0xFFFF6A00),
+            backgroundColor: Color(0xFF102A56),
           ),
         );
       }
@@ -125,7 +125,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFFFF6A00))),
+                : const Text('Post', style: TextStyle(color: Color(0xFF102A56))),
           ),
         ],
       ),
@@ -158,7 +158,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
           // Date picker
           ListTile(
-            leading: const Icon(Icons.calendar_today, color: Color(0xFF00D4FF)),
+            leading: const Icon(Icons.calendar_today, color: Color(0xFF00E5FF)),
             title: const Text('Date', style: TextStyle(color: Colors.white)),
             subtitle: Text(
               DateFormat('EEE, MMM d, yyyy').format(_selectedDate),
@@ -170,7 +170,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
           // Time picker
           ListTile(
-            leading: const Icon(Icons.access_time, color: Color(0xFF00D4FF)),
+            leading: const Icon(Icons.access_time, color: Color(0xFF00E5FF)),
             title: const Text('Time', style: TextStyle(color: Colors.white)),
             subtitle: Text(
               _selectedTime.format(context),
@@ -192,7 +192,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             ),
             value: _isOnline,
             onChanged: (v) => setState(() => _isOnline = v),
-            activeThumbColor: const Color(0xFF00D4FF),
+            activeThumbColor: const Color(0xFF00E5FF),
           ),
 
           // Location (only if not online)

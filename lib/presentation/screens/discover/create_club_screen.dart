@@ -53,7 +53,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Club created!'),
-            backgroundColor: Color(0xFFFF6A00),
+            backgroundColor: Color(0xFF102A56),
           ),
         );
       }
@@ -83,7 +83,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Create', style: TextStyle(color: Color(0xFFFF6A00))),
+                : const Text('Create', style: TextStyle(color: Color(0xFF102A56))),
           ),
         ],
       ),
@@ -152,7 +152,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFFFF6A00) : const Color(0xFF1F1F1F),
+                    color: isSelected ? const Color(0xFF102A56) : const Color(0xFF1F1F1F),
                     borderRadius: BorderRadius.circular(20),
                     border: isSelected ? null : Border.all(color: const Color(0xFF222222)),
                   ),
@@ -179,7 +179,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
             ),
             value: _isPrivate,
             onChanged: (v) => setState(() => _isPrivate = v),
-            activeThumbColor: const Color(0xFFFF6A00),
+            activeThumbColor: const Color(0xFF102A56),
           ),
         ],
       ),

@@ -50,7 +50,7 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Organization created!'),
-            backgroundColor: Color(0xFFFF6A00),
+            backgroundColor: Color(0xFF102A56),
           ),
         );
       }
@@ -80,7 +80,7 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Create', style: TextStyle(color: Color(0xFFFF6A00))),
+                : const Text('Create', style: TextStyle(color: Color(0xFF102A56))),
           ),
         ],
       ),
@@ -136,7 +136,7 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFFFF6A00) : const Color(0xFF1F1F1F),
+                    color: isSelected ? const Color(0xFF102A56) : const Color(0xFF1F1F1F),
                     borderRadius: BorderRadius.circular(20),
                     border: isSelected ? null : Border.all(color: const Color(0xFF222222)),
                   ),
@@ -238,7 +238,7 @@ class _FeatureRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: const Color(0xFF00D4FF)),
+        Icon(icon, size: 16, color: const Color(0xFF00E5FF)),
         const SizedBox(width: 10),
         Expanded(
           child: Text(

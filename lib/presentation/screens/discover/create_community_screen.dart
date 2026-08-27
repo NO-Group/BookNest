@@ -56,7 +56,7 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Community created!'),
-            backgroundColor: Color(0xFF00D4FF),
+            backgroundColor: Color(0xFF00E5FF),
           ),
         );
       }
@@ -86,7 +86,7 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Create', style: TextStyle(color: Color(0xFF00D4FF))),
+                : const Text('Create', style: TextStyle(color: Color(0xFF00E5FF))),
           ),
         ],
       ),

@@ -158,7 +158,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Book submitted for review.'),
-          backgroundColor: Color(0xFF00D4FF),
+          backgroundColor: Color(0xFF00E5FF),
         ),
       );
       context.pop();
@@ -217,14 +217,14 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Color(0xFF00D4FF),
+                        color: Color(0xFF00E5FF),
                       ),
                     )
                   : const Icon(Icons.rocket_launch, size: 18),
               label: const Text(
                 'Publish',
                 style: TextStyle(
-                  color: Color(0xFF00D4FF),
+                  color: Color(0xFF00E5FF),
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),

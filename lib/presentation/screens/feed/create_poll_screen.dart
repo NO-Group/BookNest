@@ -61,7 +61,7 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Poll posted!'),
-            backgroundColor: Color(0xFF00D4FF),
+            backgroundColor: Color(0xFF00E5FF),
           ),
         );
       }
@@ -91,7 +91,7 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFF00D4FF))),
+                : const Text('Post', style: TextStyle(color: Color(0xFF00E5FF))),
           ),
         ],
       ),
@@ -157,8 +157,8 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
             if (_optionControllers.length < 6)
               TextButton.icon(
                 onPressed: _addOption,
-                icon: const Icon(Icons.add, color: Color(0xFF00D4FF)),
-                label: const Text('Add option', style: TextStyle(color: Color(0xFF00D4FF))),
+                icon: const Icon(Icons.add, color: Color(0xFF00E5FF)),
+                label: const Text('Add option', style: TextStyle(color: Color(0xFF00E5FF))),
               ),
           ],
         ),

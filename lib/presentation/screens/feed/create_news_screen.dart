@@ -39,7 +39,7 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('News posted!'),
-            backgroundColor: Color(0xFFFF6A00),
+            backgroundColor: Color(0xFF102A56),
           ),
         );
       }
@@ -69,7 +69,7 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFFFF6A00))),
+                : const Text('Post', style: TextStyle(color: Color(0xFF102A56))),
           ),
         ],
       ),

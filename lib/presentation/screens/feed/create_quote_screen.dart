@@ -37,7 +37,7 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Quote posted!'),
-            backgroundColor: Color(0xFF00D4FF),
+            backgroundColor: Color(0xFF00E5FF),
           ),
         );
       }
@@ -67,7 +67,7 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFF00D4FF))),
+                : const Text('Post', style: TextStyle(color: Color(0xFF00E5FF))),
           ),
         ],
       ),
@@ -90,7 +90,7 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                 children: [
                   const Icon(
                     Icons.format_quote,
-                    color: Color(0xFF00D4FF),
+                    color: Color(0xFF00E5FF),
                     size: 32,
                   ),
                   const SizedBox(height: 16),
@@ -112,7 +112,7 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                         width: 3,
                         height: 20,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF00D4FF),
+                          color: const Color(0xFF00E5FF),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),

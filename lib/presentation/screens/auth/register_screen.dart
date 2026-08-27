@@ -113,7 +113,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     gradient: const LinearGradient(
-                      colors: [Color(0xFFE0FFFF), Color(0xFF00FFFF)], // Cyan gradient from your UI
+                      colors: [Color(0xFF8FF7FF), Color(0xFF00E5FF)], // Cyan gradient from your UI
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                     ),
@@ -147,7 +147,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     onTap: () => context.go('/login'),
                     child: const Text(
                       'Log in',
-                      style: TextStyle(color: Color(0xFF00FFFF), fontWeight: FontWeight.bold),
+                      style: TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
