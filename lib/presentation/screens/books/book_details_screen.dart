@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
+import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
 /// Store-style book landing page. Reading remains a separate, distraction-free route.
@@ -30,6 +32,9 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
+    // Optimistic analytics: counted once per user per day server-side; a
+    // silent no-op until the edge function is deployed.
+    unawaited(BackendApi.instance.recordView(widget.bookId));
     try {
       final client = SupabaseService().client;
       final results = await Future.wait([
@@ -49,6 +54,27 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
   void _notice(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   void _guard(String message, VoidCallback action) => AuthGuard.run(context, () { action(); _notice(message); });
 
+  /// Best-effort display name for reviews (metadata → email prefix → 'Reader').
+  String get _viewerName {
+    final user = SupabaseService().auth.currentUser;
+    final meta = user?.userMetadata;
+    final name = (meta?['username'] ?? meta?['display_name'] ?? user?.email?.split('@').first)?.toString();
+    return (name == null || name.trim().isEmpty) ? 'Reader' : name.trim();
+  }
+
+  /// Optimistic UI per the backend blueprint: flip the icon instantly, then
+  /// fire-and-forget persistence. Persistence is a silent no-op (session-only
+  /// behaviour) until the booknest-api edge function is deployed.
+  void _toggleSave() {
+    setState(() => _saved = !_saved);
+    unawaited(BackendApi.instance.setBookmark(widget.bookId, _saved));
+  }
+
+  void _toggleLike() {
+    setState(() => _liked = !_liked);
+    unawaited(BackendApi.instance.setLike(widget.bookId, _liked));
+  }
+
   void _share() {
     AuthGuard.run(context, () {
       showModalBottomSheet<void>(
@@ -56,8 +82,9 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (_) => _ShareBookSheet(
+          bookId: widget.bookId,
           bookTitle: _book?['title']?.toString() ?? 'this book',
-          onSelected: (name) => _notice('Book profile shared with $name.'),
+          onSelected: (name, delivered) => _notice(delivered ? 'Book profile sent to $name.' : 'Book profile shared with $name.'),
         ),
       );
     });
@@ -80,7 +107,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               Row(children: List.generate(5, (index) => IconButton(onPressed: () => setSheetState(() => rating = index + 1), icon: Icon(index < rating ? Icons.star_rounded : Icons.star_outline_rounded, color: BookNestColors.cyan)))),
               TextField(controller: controller, autofocus: true, minLines: 3, maxLines: 6, decoration: const InputDecoration(hintText: 'Tell readers what you think…')),
               const SizedBox(height: 14),
-              SizedBox(width: double.infinity, child: ElevatedButton(onPressed: () { final text = controller.text.trim(); if (text.isEmpty) return; setState(() => _reviews.insert(0, _Review(name: 'You', initials: 'YO', text: text, rating: rating))); Navigator.pop(sheetContext); _notice('Your review has been posted for this session.'); }, child: const Text('Post review'))),
+              SizedBox(width: double.infinity, child: ElevatedButton(onPressed: () { final text = controller.text.trim(); if (text.isEmpty) return; setState(() => _reviews.insert(0, _Review(name: 'You', initials: 'YO', text: text, rating: rating))); Navigator.pop(sheetContext); unawaited(BackendApi.instance.createReview(widget.bookId, rating, text, displayName: _viewerName)); _notice('Your review has been posted.'); }, child: const Text('Post review'))),
             ]),
           ),
         ),
@@ -125,8 +152,8 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               Row(children: [
                 Expanded(child: ElevatedButton.icon(onPressed: () => AuthGuard.run(context, () => context.push('/publish-details?bookId=${widget.bookId}')), icon: const Icon(Icons.menu_book_rounded), label: const Text('Read now'))),
                 const SizedBox(width: 10),
-                _RoundAction(icon: _saved ? Icons.bookmark : Icons.bookmark_border, selected: _saved, label: 'Save', onTap: () => _guard(_saved ? 'Removed from saved books.' : 'Saved to your library.', () => setState(() => _saved = !_saved))),
-                _RoundAction(icon: _liked ? Icons.favorite : Icons.favorite_border, selected: _liked, label: 'Like', onTap: () => _guard(_liked ? 'Like removed.' : 'You liked this book.', () => setState(() => _liked = !_liked))),
+                _RoundAction(icon: _saved ? Icons.bookmark : Icons.bookmark_border, selected: _saved, label: 'Save', onTap: () => _guard(_saved ? 'Removed from saved books.' : 'Saved to your library.', _toggleSave)),
+                _RoundAction(icon: _liked ? Icons.favorite : Icons.favorite_border, selected: _liked, label: 'Like', onTap: () => _guard(_liked ? 'Like removed.' : 'You liked this book.', _toggleLike)),
               ]),
               const SizedBox(height: 28), _Heading('About this book'), const SizedBox(height: 10), Text(description, style: theme.textTheme.bodyLarge?.copyWith(height: 1.55, color: muted)),
               const SizedBox(height: 28), _Heading('Ratings and reviews'), const SizedBox(height: 14),
@@ -151,9 +178,10 @@ class _Review { final String name; final String initials; final String text; fin
 /// not use the operating system share sheet: the selected recipient is from the
 /// app's own profiles directory.
 class _ShareBookSheet extends StatefulWidget {
+  final String bookId;
   final String bookTitle;
-  final ValueChanged<String> onSelected;
-  const _ShareBookSheet({required this.bookTitle, required this.onSelected});
+  final void Function(String name, bool delivered) onSelected;
+  const _ShareBookSheet({required this.bookId, required this.bookTitle, required this.onSelected});
 
   @override
   State<_ShareBookSheet> createState() => _ShareBookSheetState();
@@ -224,7 +252,7 @@ class _ShareBookSheetState extends State<_ShareBookSheet> {
                     final person = contacts[index];
                     final name = person['display_name']?.toString().trim().isNotEmpty == true ? person['display_name'].toString() : (person['username']?.toString() ?? 'BookNest reader');
                     final initial = name.characters.first.toUpperCase();
-                    return ListTile(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), leading: CircleAvatar(backgroundColor: BookNestColors.navy, child: Text(initial, style: const TextStyle(color: Colors.white))), title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: person['username'] == null ? null : Text('@${person['username']}'), trailing: const Icon(Icons.send_outlined, color: BookNestColors.cyan), onTap: () { Navigator.pop(context); widget.onSelected(name); });
+                    return ListTile(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), leading: CircleAvatar(backgroundColor: BookNestColors.navy, child: Text(initial, style: const TextStyle(color: Colors.white))), title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: person['username'] == null ? null : Text('@${person['username']}'), trailing: const Icon(Icons.send_outlined, color: BookNestColors.cyan), onTap: () async { final delivered = await BackendApi.instance.shareBook(bookId: widget.bookId, bookTitle: widget.bookTitle, peerId: person['id']?.toString() ?? '') != null; if (!context.mounted) return; Navigator.pop(context); widget.onSelected(name, delivered); });
                   });
                 },
               )),
