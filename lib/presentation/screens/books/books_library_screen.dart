@@ -5,17 +5,332 @@ import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
 import '../../../services/supabase_service.dart';
 
-class BooksLibraryScreen extends StatefulWidget { const BooksLibraryScreen({super.key}); @override State<BooksLibraryScreen> createState() => _BooksLibraryScreenState(); }
-class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
-  static const genres = ['Romance','Science Fiction','Thriller & Suspense','Fantasy','Mystery & Crime','Horror','Historical Fiction','Literary Fiction','Westerns','Biographies & Memoirs','True Crime','Self-Help & Wellness','History & Politics','Young Adult (YA)','STEM','Humanities & Social Sciences','Languages & Linguistics','Finance & Economics','Professional Certification','Lexicons','Research & Citation Tools','Compendiums'];
-  final _search = TextEditingController();
-  Stream<List<Map<String,dynamic>>>? _stream;
-  final Set<String> _selectedGenres = {};
-  @override void initState(){super.initState(); _subscribe(); _search.addListener(() => setState(() {}));}
-  @override void dispose(){_search.dispose(); super.dispose();}
-  void _subscribe() => _stream = SupabaseService().client.from('club_books').stream(primaryKey:['id']).eq('moderation_status','approved').order('created_at', ascending:false).map((r)=>r.map((e)=>Map<String,dynamic>.from(e)).toList());
-  List<Map<String,dynamic>> _filter(List<Map<String,dynamic>> books) { final q=_search.text.trim().toLowerCase(); return books.where((b) { final match=q.isEmpty || '${b['title']} ${b['author']} ${b['description']}'.toLowerCase().contains(q); final genre=b['genre']?.toString(); return match && (_selectedGenres.isEmpty || _selectedGenres.contains(genre)); }).toList(); }
-  Future<void> _filters() async { final next=Set<String>.from(_selectedGenres); await showModalBottomSheet<void>(context: context, isScrollControlled:true, showDragHandle:true, builder:(ctx)=>StatefulBuilder(builder:(ctx,setSheet)=>DraggableScrollableSheet(initialChildSize:.72, minChildSize:.45, maxChildSize:.92, expand:false, builder:(_,scroll)=>Column(children:[Padding(padding:const EdgeInsets.fromLTRB(24,8,24,12),child:Row(children:[Text('Filter books',style:Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight:FontWeight.bold)),const Spacer(),TextButton(onPressed:(){setSheet(next.clear);},child:const Text('Clear'))])),Expanded(child:ListView.builder(controller:scroll,itemCount:genres.length,itemBuilder:(_,i){final g=genres[i];return CheckboxListTile(value:next.contains(g),activeColor:BookNestColors.cyan,title:Text(g),onChanged:(v)=>setSheet(() => v==true?next.add(g):next.remove(g)));})),Padding(padding:const EdgeInsets.all(20),child:SizedBox(width:double.infinity,child:ElevatedButton(onPressed:(){setState(() {_selectedGenres..clear()..addAll(next);});Navigator.pop(ctx);},child:Text('Show books${next.isEmpty ? '' : ' (${next.length} genres)'}'))))])))); }
-  @override Widget build(BuildContext context){ final theme=Theme.of(context); final muted=theme.brightness==Brightness.dark?BookNestColors.darkTextSecondary:BookNestColors.lightTextSecondary; return Scaffold(floatingActionButton:FloatingActionButton.extended(backgroundColor:BookNestColors.navy,foregroundColor:Colors.white,onPressed:()=>AuthGuard.run(context,()=>context.push('/editor')),icon:const Icon(Icons.edit_outlined),label:const Text('Write')),body:SafeArea(child:Column(children:[Padding(padding:const EdgeInsets.fromLTRB(20,18,20,12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('Discover books',style:theme.textTheme.headlineSmall?.copyWith(fontWeight:FontWeight.w800)),const SizedBox(height:5),Text('Find your next unforgettable read',style:TextStyle(color:muted)),const SizedBox(height:18),Row(children:[Expanded(child:TextField(controller:_search,decoration:const InputDecoration(prefixIcon:Icon(Icons.search),hintText:'Search titles, authors, or topics'))),const SizedBox(width:10),Badge(isLabelVisible:_selectedGenres.isNotEmpty,label:Text('${_selectedGenres.length}'),child:IconButton.filledTonal(onPressed:_filters,icon:const Icon(Icons.tune_rounded),tooltip:'Filter books'))])])),Expanded(child:StreamBuilder<List<Map<String,dynamic>>>(stream:_stream,builder:(_,snap){if(!snap.hasData)return const Center(child:CircularProgressIndicator(color:BookNestColors.cyan));final books=_filter(snap.data!);if(books.isEmpty)return Center(child:Text('No books match your search.',style:TextStyle(color:muted)));return AnimatedSwitcher(duration:const Duration(milliseconds:250),child:ListView.builder(key:ValueKey('${books.length}-${_search.text}-${_selectedGenres.length}'),padding:const EdgeInsets.fromLTRB(20,4,20,110),itemCount:books.length,itemBuilder:(_,i)=>_BookTile(book:books[i]));}))]))); }
+class BooksLibraryScreen extends StatefulWidget {
+  const BooksLibraryScreen({super.key});
+
+  @override
+  State<BooksLibraryScreen> createState() => _BooksLibraryScreenState();
 }
-class _BookTile extends StatelessWidget { final Map<String,dynamic> book; const _BookTile({required this.book}); @override Widget build(BuildContext context){final id=book['id']?.toString()??'';final title=book['title']?.toString()??'Untitled';final author=book['author']?.toString()??'Unknown author'; final description=book['description']?.toString()??'';return Padding(padding:const EdgeInsets.only(bottom:14),child:Material(color:Theme.of(context).colorScheme.surface,borderRadius:BorderRadius.circular(20),child:InkWell(borderRadius:BorderRadius.circular(20),onTap:()=>context.push('/book/$id'),child:Padding(padding:const EdgeInsets.all(14),child:Row(children:[Hero(tag:'book-$id',child:Container(width:64,height:86,decoration:BoxDecoration(borderRadius:BorderRadius.circular(12),gradient:const LinearGradient(colors:[BookNestColors.navy,BookNestColors.navyDeep])),child:const Icon(Icons.auto_stories_rounded,color:BookNestColors.cyan))),const SizedBox(width:14),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(title,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:16)),const SizedBox(height:4),Text(author,style:const TextStyle(color:BookNestColors.cyan)),if(description.isNotEmpty)...[const SizedBox(height:6),Text(description,maxLines:2,overflow:TextOverflow.ellipsis,style:TextStyle(color:Theme.of(context).hintColor,fontSize:12))]]),const Icon(Icons.chevron_right_rounded)]))));}}
+
+class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
+  /// The 22 BookNest genres, in the exact requested order.
+  static const List<String> genres = [
+    'Romance',
+    'Science Fiction',
+    'Thriller & Suspense',
+    'Fantasy',
+    'Mystery & Crime',
+    'Horror',
+    'Historical Fiction',
+    'Literary Fiction',
+    'Westerns',
+    'Biographies & Memoirs',
+    'True Crime',
+    'Self-Help & Wellness',
+    'History & Politics',
+    'Young Adult (YA)',
+    'STEM',
+    'Humanities & Social Sciences',
+    'Languages & Linguistics',
+    'Finance & Economics',
+    'Professional Certification',
+    'Lexicons',
+    'Research & Citation Tools',
+    'Compendiums',
+  ];
+
+  final TextEditingController _search = TextEditingController();
+  Stream<List<Map<String, dynamic>>>? _stream;
+  final Set<String> _selectedGenres = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribe();
+    _search.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  void _subscribe() {
+    _stream = SupabaseService()
+        .client
+        .from('club_books')
+        .stream(primaryKey: ['id'])
+        .eq('moderation_status', 'approved')
+        .order('created_at', ascending: false)
+        .map((rows) => rows
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList());
+  }
+
+  List<Map<String, dynamic>> _filter(List<Map<String, dynamic>> books) {
+    final query = _search.text.trim().toLowerCase();
+    return books.where((book) {
+      final haystack =
+          '${book['title']} ${book['author']} ${book['description']}'
+              .toLowerCase();
+      final matches = query.isEmpty || haystack.contains(query);
+      final genre = book['genre']?.toString();
+      return matches &&
+          (_selectedGenres.isEmpty || _selectedGenres.contains(genre));
+    }).toList();
+  }
+
+  Future<void> _showFilters() async {
+    final next = Set<String>.from(_selectedGenres);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => DraggableScrollableSheet(
+          initialChildSize: .72,
+          minChildSize: .45,
+          maxChildSize: .92,
+          expand: false,
+          builder: (_, scrollController) => Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                child: Row(
+                  children: [
+                    Text(
+                      'Filter books',
+                      style: Theme.of(sheetContext)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => setSheetState(next.clear),
+                      child: const Text('Clear'),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: genres.length,
+                  itemBuilder: (_, index) {
+                    final genre = genres[index];
+                    return CheckboxListTile(
+                      value: next.contains(genre),
+                      activeColor: BookNestColors.cyan,
+                      title: Text(genre),
+                      onChanged: (checked) => setSheetState(() {
+                        checked == true ? next.add(genre) : next.remove(genre);
+                      }),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _selectedGenres
+                          ..clear()
+                          ..addAll(next);
+                      });
+                      Navigator.pop(sheetContext);
+                    },
+                    child: Text(next.isEmpty
+                        ? 'Show books'
+                        : 'Show books (${next.length} genres)'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.brightness == Brightness.dark
+        ? BookNestColors.darkTextSecondary
+        : BookNestColors.lightTextSecondary;
+
+    return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: BookNestColors.navy,
+        foregroundColor: Colors.white,
+        onPressed: () =>
+            AuthGuard.run(context, () => context.push('/editor')),
+        icon: const Icon(Icons.edit_outlined),
+        label: const Text('Write'),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Discover books',
+                      style: theme.textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 5),
+                  Text('Find your next unforgettable read',
+                      style: TextStyle(color: muted)),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _search,
+                          decoration: const InputDecoration(
+                            prefixIcon: Icon(Icons.search),
+                            hintText: 'Search titles, authors, or topics',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Badge(
+                        isLabelVisible: _selectedGenres.isNotEmpty,
+                        label: Text('${_selectedGenres.length}'),
+                        child: IconButton.filledTonal(
+                          onPressed: _showFilters,
+                          icon: const Icon(Icons.tune_rounded),
+                          tooltip: 'Filter books',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: _stream,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                          color: BookNestColors.cyan),
+                    );
+                  }
+                  final books = _filter(snapshot.data!);
+                  if (books.isEmpty) {
+                    return Center(
+                      child: Text('No books match your search.',
+                          style: TextStyle(color: muted)),
+                    );
+                  }
+                  return AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    child: ListView.builder(
+                      key: ValueKey(
+                          '${books.length}-${_search.text}-${_selectedGenres.length}'),
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 110),
+                      itemCount: books.length,
+                      itemBuilder: (_, index) =>
+                          _BookTile(book: books[index]),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BookTile extends StatelessWidget {
+  final Map<String, dynamic> book;
+
+  const _BookTile({required this.book});
+
+  @override
+  Widget build(BuildContext context) {
+    final id = book['id']?.toString() ?? '';
+    final title = book['title']?.toString() ?? 'Untitled';
+    final author = book['author']?.toString() ?? 'Unknown author';
+    final description = book['description']?.toString() ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => context.push('/book/$id'),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Hero(
+                  tag: 'book-$id',
+                  child: Container(
+                    width: 64,
+                    height: 86,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      gradient: const LinearGradient(
+                        colors: [BookNestColors.navy, BookNestColors.navyDeep],
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.auto_stories_rounded,
+                      color: BookNestColors.cyan,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(author,
+                          style: const TextStyle(color: BookNestColors.cyan)),
+                      if (description.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Theme.of(context).hintColor,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
