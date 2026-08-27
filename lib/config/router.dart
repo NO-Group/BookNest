@@ -11,6 +11,7 @@ import '../presentation/screens/books/book_editor_screen.dart';
 import '../presentation/screens/books/publish_details_screen.dart';
 import '../presentation/screens/books/book_details_screen.dart';
 import '../presentation/screens/dms/dm_list_screen.dart';
+import '../presentation/screens/dms/dm_chat_screen.dart';
 import '../presentation/screens/profile/profile_screen.dart';
 import '../presentation/screens/feed/create_quote_screen.dart';
 import '../presentation/screens/feed/create_news_screen.dart';
@@ -35,6 +36,7 @@ import '../services/supabase_service.dart';
 const Set<String> _protectedRoutes = {
   '/editor',
   '/publish-details',
+  '/chat',
   '/create/club',
   '/create/community',
   '/create/organization',
@@ -96,6 +98,22 @@ final GoRouter appRouter = GoRouter(
       path: '/book/:id',
       builder: (context, state) => BookDetailsScreen(
         bookId: state.pathParameters['id'] ?? '',
+      ),
+    ),
+    // Telegram-style chat, opened full-screen (nav bar hidden).
+    // `/chat/<conversationId>` continues a chat; `/chat/peer/<peerId>`
+    // starts one (the edge function reuses the 1:1 conversation).
+    GoRoute(
+      path: '/chat/peer/:peerId',
+      builder: (context, state) => DMChatScreen(
+        peerId: state.pathParameters['peerId'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/chat/:conversationId',
+      builder: (context, state) => DMChatScreen(
+        conversationId: state.pathParameters['conversationId'] ?? '',
+        peerId: state.uri.queryParameters['peer'],
       ),
     ),
     GoRoute(

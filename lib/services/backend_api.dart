@@ -126,6 +126,10 @@ class BackendApi {
 
   Future<Map<String, dynamic>?> listConversations() => call('dm.list');
 
+  /// Creates (or reuses) the 1:1 conversation with [peerId].
+  Future<Map<String, dynamic>?> ensureConversation(String peerId) =>
+      call('dm.ensure', <String, dynamic>{'peerId': peerId});
+
   Future<Map<String, dynamic>?> listMessages(String conversationId) =>
       call('dm.messages', <String, dynamic>{'conversationId': conversationId});
 

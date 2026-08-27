@@ -3,15 +3,18 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
+import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
+import 'book_details_screen.dart' show BookShareSheet;
 
 /// Chapter reader view for a single book.
 ///
 /// Pulls the book metadata from `club_books` and its chapters from
 /// `book_chapters` by [bookId], then renders the first chapter's raw Markdown.
-/// The bottom action bar (Like, Comment, Share, Bookmark) is strictly guarded
-/// by [AuthGuard].
+/// Like / Save persist through the booknest-api edge function with optimistic
+/// UI; Share opens the in-app contact picker (never the clipboard).
 class PublishDetailsScreen extends StatefulWidget {
   final String bookId;
 
@@ -25,6 +28,8 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
   Map<String, dynamic>? _book;
   Map<String, dynamic>? _chapter;
   bool _isLoading = true;
+  bool _liked = false;
+  bool _saved = false;
   String? _error;
 
   @override
@@ -74,6 +79,29 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
     AuthGuard.run(context, action);
   }
 
+  /// Optimistic toggles — flip instantly, persist in the background.
+  void _toggleLike() {
+    setState(() => _liked = !_liked);
+    BackendApi.instance.setLike(widget.bookId, _liked);
+  }
+
+  void _toggleBookmark() {
+    setState(() => _saved = !_saved);
+    BackendApi.instance.setBookmark(widget.bookId, _saved);
+  }
+
+  void _openShareSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => BookShareSheet(
+        bookId: widget.bookId,
+        bookTitle: _book?['title']?.toString() ?? 'this book',
+      ),
+    );
+  }
+
   String _formatDate(dynamic raw) {
     if (raw == null) return '';
     try {
@@ -86,18 +114,22 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
-        elevation: 1,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
-        title: const Text(
+        title: Text(
           'Reading',
-          style: TextStyle(color: Colors.white, fontSize: 18),
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
       ),
       body: _buildBody(),
@@ -106,9 +138,10 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
   }
 
   Widget _buildBody() {
+    final theme = Theme.of(context);
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+        child: CircularProgressIndicator(color: BookNestColors.cyan),
       );
     }
 
@@ -119,12 +152,12 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 56, color: Color(0xFF444444)),
+              const Icon(Icons.error_outline, size: 56, color: Colors.grey),
               const SizedBox(height: 16),
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70, fontSize: 15),
+                style: TextStyle(color: theme.hintColor, fontSize: 15),
               ),
               const SizedBox(height: 24),
               OutlinedButton.icon(
@@ -144,6 +177,8 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
     final description = (book['description'] as String?) ?? '';
     final chapterTitle = (_chapter?['title'] as String?) ?? 'Chapter';
     final content = (_chapter?['content'] as String?) ?? '';
+    final onSurface = theme.colorScheme.onSurface;
+    final muted = theme.hintColor;
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -151,16 +186,16 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: Color(0xFF222222))),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: theme.dividerColor)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: onSurface,
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
                   height: 1.3,
@@ -169,7 +204,10 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
               const SizedBox(height: 8),
               Text(
                 'by $author',
-                style: const TextStyle(color: Color(0xFF888888), fontSize: 14),
+                style: const TextStyle(
+                    color: BookNestColors.cyan,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
               Text(
@@ -178,14 +216,14 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
                   if (_formatDate(book['created_at']).isNotEmpty)
                     'Published ${_formatDate(book['created_at'])}',
                 ].join(' · '),
-                style: const TextStyle(color: Color(0xFF666666), fontSize: 12),
+                style: TextStyle(color: muted, fontSize: 12),
               ),
               if (description.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
                   description,
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  style: TextStyle(
+                    color: muted,
                     fontSize: 14,
                     height: 1.6,
                     fontStyle: FontStyle.italic,
@@ -196,47 +234,53 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
           ),
         ),
         Markdown(
-      data: content.isEmpty ? '*(No content published yet.)*' : content,
-      selectable: true,
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-      styleSheet: MarkdownStyleSheet(
-        h1: const TextStyle(
-          color: Colors.white,
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
+          data: content.isEmpty ? '*(No content published yet.)*' : content,
+          selectable: true,
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+          styleSheet: MarkdownStyleSheet(
+            h1: TextStyle(
+              color: onSurface,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+            h2: TextStyle(
+              color: onSurface,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+            p: TextStyle(
+              color: onSurface.withOpacity(.85),
+              fontSize: 16,
+              height: 1.7,
+            ),
+            listBullet: const TextStyle(color: BookNestColors.cyan),
+            blockquoteDecoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: const Border(
+                  left: BorderSide(color: BookNestColors.cyan, width: 3)),
+            ),
+            blockquote: TextStyle(
+                color: onSurface.withOpacity(.85), fontSize: 15, height: 1.6),
+            horizontalRuleDecoration: BoxDecoration(
+              border: Border(top: BorderSide(color: theme.dividerColor)),
+            ),
+            code: TextStyle(
+              color: BookNestColors.cyan,
+              backgroundColor: theme.colorScheme.surface,
+            ),
+          ),
         ),
-        h2: const TextStyle(
-          color: Colors.white,
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-        ),
-        p: const TextStyle(
-          color: Colors.white70,
-          fontSize: 16,
-          height: 1.7,
-        ),
-        listBullet: const TextStyle(color: Color(0xFF00E5FF)),
-        blockquoteDecoration: BoxDecoration(
-          color: const Color(0xFF141414),
-          borderRadius: BorderRadius.circular(8),
-          border: const Border(left: BorderSide(color: Color(0xFF00E5FF), width: 3)),
-        ),
-        blockquote: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
-        horizontalRuleDecoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: Color(0xFF222222))),
-        ),
-        code: const TextStyle(color: Color(0xFF00E5FF), backgroundColor: Color(0xFF141414)),
-      ),
-      ),
       ],
     );
   }
 
   Widget _buildActionBar() {
+    final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF121212),
-        border: const Border(top: BorderSide(color: Color(0xFF222222))),
+        color: theme.colorScheme.surface,
+        border: Border(top: BorderSide(color: theme.dividerColor)),
       ),
       padding: EdgeInsets.only(
         left: 8,
@@ -248,25 +292,27 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _ActionButton(
-            icon: Icons.favorite_border,
+            icon: _liked ? Icons.favorite : Icons.favorite_border,
             label: 'Like',
-            onPressed: () =>
-                _guard(() => _toast('Thanks for the like!')),
+            active: _liked,
+            onPressed: () => _guard(_toggleLike),
           ),
           _ActionButton(
             icon: Icons.comment_outlined,
             label: 'Comment',
-            onPressed: () => _guard(() => _toast('Comments coming soon.')),
+            onPressed: () => _guard(() =>
+                _toast('Comments arrive with the community update.')),
           ),
           _ActionButton(
-            icon: Icons.bookmark_border,
-            label: 'Bookmark',
-            onPressed: () => _guard(() => _toast('Bookmarked this book.')),
+            icon: _saved ? Icons.bookmark : Icons.bookmark_border,
+            label: 'Save',
+            active: _saved,
+            onPressed: () => _guard(_toggleBookmark),
           ),
           _ActionButton(
-            icon: Icons.share_outlined,
+            icon: Icons.ios_share_outlined,
             label: 'Share',
-            onPressed: () => _guard(() => _toast('Share link copied.')),
+            onPressed: () => _guard(_openShareSheet),
           ),
         ],
       ),
@@ -277,7 +323,7 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: const Color(0xFF00E5FF),
+        backgroundColor: BookNestColors.navy,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -289,29 +335,34 @@ typedef ActionHandler = void Function();
 class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
+  final bool active;
   final VoidCallback onPressed;
 
   const _ActionButton({
     required this.icon,
     required this.label,
     required this.onPressed,
+    this.active = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final color =
+        active ? BookNestColors.cyan : Theme.of(context).colorScheme.onSurface;
     return InkWell(
+      borderRadius: BorderRadius.circular(14),
       onTap: onPressed,
-      borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: const Color(0xFF00E5FF), size: 22),
+            Icon(icon, color: color),
             const SizedBox(height: 4),
             Text(
               label,
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
+              style: TextStyle(
+                  color: color, fontSize: 11, fontWeight: FontWeight.w600),
             ),
           ],
         ),

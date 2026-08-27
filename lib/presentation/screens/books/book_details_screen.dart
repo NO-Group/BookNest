@@ -81,7 +81,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        builder: (_) => _ShareBookSheet(
+        builder: (_) => BookShareSheet(
           bookId: widget.bookId,
           bookTitle: _book?['title']?.toString() ?? 'this book',
           onSelected: (name, delivered) => _notice(delivered ? 'Book profile sent to $name.' : 'Book profile shared with $name.'),
@@ -176,18 +176,26 @@ class _Review { final String name; final String initials; final String text; fin
 
 /// Contact picker for sending a book card inside BookNest. It intentionally does
 /// not use the operating system share sheet: the selected recipient is from the
-/// app's own profiles directory.
-class _ShareBookSheet extends StatefulWidget {
+/// app's own profiles directory. Reused by the reader screen too.
+class BookShareSheet extends StatefulWidget {
   final String bookId;
   final String bookTitle;
-  final void Function(String name, bool delivered) onSelected;
-  const _ShareBookSheet({required this.bookId, required this.bookTitle, required this.onSelected});
+
+  /// Optional custom handler; when omitted the sheet confirms with a snackbar.
+  final void Function(String name, bool delivered)? onSelected;
+
+  const BookShareSheet({
+    super.key,
+    required this.bookId,
+    required this.bookTitle,
+    this.onSelected,
+  });
 
   @override
-  State<_ShareBookSheet> createState() => _ShareBookSheetState();
+  State<BookShareSheet> createState() => _BookShareSheetState();
 }
 
-class _ShareBookSheetState extends State<_ShareBookSheet> {
+class _BookShareSheetState extends State<BookShareSheet> {
   final _search = TextEditingController();
   late final Future<List<Map<String, dynamic>>> _contacts;
 
@@ -252,7 +260,7 @@ class _ShareBookSheetState extends State<_ShareBookSheet> {
                     final person = contacts[index];
                     final name = person['display_name']?.toString().trim().isNotEmpty == true ? person['display_name'].toString() : (person['username']?.toString() ?? 'BookNest reader');
                     final initial = name.characters.first.toUpperCase();
-                    return ListTile(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), leading: CircleAvatar(backgroundColor: BookNestColors.navy, child: Text(initial, style: const TextStyle(color: Colors.white))), title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: person['username'] == null ? null : Text('@${person['username']}'), trailing: const Icon(Icons.send_outlined, color: BookNestColors.cyan), onTap: () async { final delivered = await BackendApi.instance.shareBook(bookId: widget.bookId, bookTitle: widget.bookTitle, peerId: person['id']?.toString() ?? '') != null; if (!context.mounted) return; Navigator.pop(context); widget.onSelected(name, delivered); });
+                    return ListTile(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), leading: CircleAvatar(backgroundColor: BookNestColors.navy, child: Text(initial, style: const TextStyle(color: Colors.white))), title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: person['username'] == null ? null : Text('@${person['username']}'), trailing: const Icon(Icons.send_outlined, color: BookNestColors.cyan), onTap: () async { final messenger = ScaffoldMessenger.maybeOf(context); final delivered = await BackendApi.instance.shareBook(bookId: widget.bookId, bookTitle: widget.bookTitle, peerId: person['id']?.toString() ?? '') != null; if (!context.mounted) return; Navigator.pop(context); if (widget.onSelected != null) { widget.onSelected!(name, delivered); } else { messenger?.showSnackBar(SnackBar(content: Text(delivered ? 'Book profile sent to $name.' : 'Book profile shared with $name.'))); } });
                   });
                 },
               )),
