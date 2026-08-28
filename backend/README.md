@@ -1,5 +1,10 @@
 # BookNest Backend — Deploy Runbook
 
+> 🖱 **Prefer clicking over typing?** Use
+> **[`backend/DEPLOY_FROM_DASHBOARD.md`](./DEPLOY_FROM_DASHBOARD.md)** — the
+> same deployment done entirely in the Supabase dashboard (no CLI, no
+> terminal). Everything below is the CLI alternative.
+
 The Flutter app is **already wired** to everything below (see
 `lib/config/app_config.dart`, `lib/services/backend_api.dart`,
 `lib/services/cloudinary_service.dart`). You only run the server-side steps.

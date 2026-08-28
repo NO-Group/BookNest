@@ -64,7 +64,7 @@ class CloudinaryService {
   }
 
   /// Helper for on-the-fly resized thumbnails (Cloudinary transformation):
-  /// transformUrl('https://res.cloudinary.com/deqdmwlt7/.../booknest/covers/x.jpg', width: 320)
+  /// transformUrl(url, width: 320) where url is a secure_url from uploadImage.
   static String transformUrl(String url, {int? width, int? height}) {
     final marker = '/upload/';
     final index = url.indexOf(marker);

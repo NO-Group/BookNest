@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../config/theme.dart';
+import '../../../services/backend_api.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/supabase_service.dart';
 
@@ -25,11 +26,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String? get _viewerId => SupabaseService().auth.currentUser?.id;
   String get _email => SupabaseService().auth.currentUser?.email ?? '';
+  String? _cloudStatus; // null = checking, 'online' | 'offline'
 
   @override
   void initState() {
     super.initState();
     _load();
+    _probeCloud();
+  }
+
+  /// Terminal-free deployment check: pings the booknest-api edge function.
+  Future<void> _probeCloud() async {
+    final online = await BackendApi.instance.probe();
+    if (!mounted) return;
+    setState(() => _cloudStatus = online ? 'online' : 'offline');
   }
 
   Future<void> _load() async {
@@ -347,6 +357,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onTap: _signOut,
             ),
             const SizedBox(height: 18),
+            _CloudStatusChip(
+              status: _cloudStatus,
+              onRetry: _probeCloud,
+            ),
+            const SizedBox(height: 14),
             Text(
               'BookNest v1.1 · by N.O Group',
               style: TextStyle(color: theme.hintColor, fontSize: 12),
@@ -405,6 +420,75 @@ class _ProfileAction extends StatelessWidget {
                 style: TextStyle(color: theme.hintColor, fontSize: 12)),
             trailing: const Icon(Icons.chevron_right_rounded),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small pill that shows whether the booknest-api cloud backend is live.
+/// Tap it to re-check. 'offline' is normal until the edge function is
+/// deployed from the Supabase dashboard (backend/DEPLOY_FROM_DASHBOARD.md).
+class _CloudStatusChip extends StatelessWidget {
+  final String? status;
+  final VoidCallback onRetry;
+
+  const _CloudStatusChip({required this.status, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final online = status == 'online';
+    final checking = status == null;
+    final color = checking
+        ? theme.hintColor
+        : online
+            ? BookNestColors.cyan
+            : theme.hintColor;
+    final label = checking
+        ? 'Checking BookNest cloud…'
+        : online
+            ? 'BookNest cloud connected ✓'
+            : 'Cloud not connected yet · tap to retry';
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onRetry,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: online
+              ? BookNestColors.cyan.withOpacity(.12)
+              : theme.colorScheme.surface,
+          border: Border.all(
+            color: online ? BookNestColors.cyan.withOpacity(.45) : theme.dividerColor,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: online
+                    ? (theme.brightness == Brightness.dark
+                        ? BookNestColors.darkTextPrimary
+                        : BookNestColors.navyDeep)
+                    : theme.hintColor,
+              ),
+            ),
+          ],
         ),
       ),
     );

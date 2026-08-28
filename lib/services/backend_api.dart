@@ -29,6 +29,16 @@ class BackendApi {
   /// during this app session.
   bool get available => _available;
 
+  /// Actively re-checks whether the edge backend is live right now
+  /// (ignores the cached fail-fast state). Used by the profile screen's
+  /// "cloud status" chip so deployment success is visible in the app.
+  Future<bool> probe() async {
+    _checked = false;
+    _available = false;
+    final res = await call('ping');
+    return res != null;
+  }
+
   SupabaseClient get _client => SupabaseService().client;
 
   /// Calls an action on the edge function. Returns the `data` map on success,
