@@ -1,6 +1,7 @@
 // lib/presentation/screens/feed/create_quote_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
@@ -17,6 +18,25 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
   final _authorController = TextEditingController();
   bool _isLoading = false;
 
+
+  DateTime? _selectedPostDate;
+
+  Future<void> _pickPostDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedPostDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: ColorScheme.dark(primary: BookNestColors.cyan),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) setState(() => _selectedPostDate = picked);
+  }
+
   Future<void> _publishQuote() async {
     if (_contentController.text.isEmpty) return;
 
@@ -24,11 +44,13 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
 
     try {
       final userId = SupabaseService().auth.currentUser!.id;
-      await SupabaseService().client.from('posts').insert({
+      await SupabaseService().writeRow('posts', {
         'type': 'quote',
         'content': _contentController.text.trim(),
         'metadata': {
           'quote_author': _authorController.text.trim(),
+          if (_selectedPostDate != null)
+            'date': DateFormat('EEE, MMM d, yyyy').format(_selectedPostDate!),
         },
         'created_by': userId,
       });
@@ -51,6 +73,36 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+
+  /// Optional publish date chip shown above the submit button.
+  Widget _buildDateChip(ThemeData theme) {
+    return Center(
+      child: ActionChip(
+        avatar: Icon(Icons.event_outlined,
+            size: 18,
+            color: _selectedPostDate != null
+                ? BookNestColors.cyan
+                : theme.hintColor),
+        label: Text(
+          _selectedPostDate == null
+              ? 'Add date (optional)'
+              : DateFormat('EEE, MMM d, yyyy').format(_selectedPostDate!),
+          style:
+              TextStyle(color: theme.colorScheme.onSurface, fontSize: 13),
+        ),
+        side: BorderSide(
+            color: _selectedPostDate != null
+                ? BookNestColors.cyan.withOpacity(.6)
+                : theme.dividerColor),
+        backgroundColor: theme.colorScheme.surface,
+        onPressed: () async {
+          await _pickPostDate();
+          if (mounted) setState(() {});
+        },
+      ),
+    );
   }
 
   @override
@@ -76,6 +128,8 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildDateChip(Theme.of(context)),
+            const SizedBox(height: 18),
             // Preview
             Container(
               width: double.infinity,

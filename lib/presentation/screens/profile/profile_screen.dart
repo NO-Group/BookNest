@@ -93,17 +93,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
     try {
-      await SupabaseService()
+      await SupabaseService().updateRow('profiles', {'avatar_url': url},
+          column: 'id', equals: _viewerId ?? '');
+      // Verify the write actually persisted before celebrating — the
+      // cloud chip only means the API is reachable, so we double-check.
+      final saved = await SupabaseService()
           .client
           .from('profiles')
-          .update({'avatar_url': url}).eq('id', _viewerId ?? '');
+          .select('avatar_url')
+          .eq('id', _viewerId ?? '')
+          .maybeSingle();
+      final persisted = saved is Map && saved['avatar_url'].toString() == url;
       if (!mounted) return;
       setState(() {
-        _profile = {...?_profile, 'avatar_url': url};
+        if (persisted) _profile = {...?_profile, 'avatar_url': url};
         _uploading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('New profile photo uploaded ✨')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(persisted
+              ? 'New profile photo saved ✨'
+              : 'Uploaded — but the save could not be verified. Reopen your profile and retry.')));
+    } on WriteException catch (e) {
+      if (!mounted) return;
+      setState(() => _uploading = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
       setState(() => _uploading = false);

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_state.dart';
+
 /// The one colour vocabulary used throughout BookNest.
 /// Navy is the brand anchor; cyan is reserved for focus, progress and actions.
 class BookNestColors {
@@ -78,8 +80,39 @@ class BookNestTheme {
         ),
       ),
       pageTransitionsTheme: const PageTransitionsTheme(builders: {
-        TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.android: BookNestFadeSlideBuilder(),
+        TargetPlatform.iOS: BookNestFadeSlideBuilder(),
+        TargetPlatform.macOS: BookNestFadeSlideBuilder(),
+        TargetPlatform.linux: BookNestFadeSlideBuilder(),
+        TargetPlatform.windows: BookNestFadeSlideBuilder(),
       }),
+    );
+  }
+}
+
+
+/// BookNest's signature page transition: fade with a gentle rise.
+/// Honors the "Reduce motion" accessibility setting at navigation time.
+class BookNestFadeSlideBuilder extends PageTransitionsBuilder {
+  const BookNestFadeSlideBuilder();
+
+  @override
+  Widget buildTransitions<T>(PageRoute<T> route, BuildContext context,
+      Animation<double> animation, Animation<double> secondaryAnimation,
+      Widget child) {
+    final curved =
+        CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+    if (AppSettings.reduceMotion.value) {
+      return FadeTransition(opacity: curved, child: child);
+    }
+    return FadeTransition(
+      opacity: curved,
+      child: SlideTransition(
+        position: Tween<Offset>(
+                begin: const Offset(0, .035), end: Offset.zero)
+            .animate(curved),
+        child: child,
+      ),
     );
   }
 }

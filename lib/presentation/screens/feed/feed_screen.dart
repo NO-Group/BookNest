@@ -1,5 +1,7 @@
 // lib/presentation/screens/feed/feed_screen.dart
 
+import 'dart:math';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -220,7 +222,10 @@ class _FeedScreenState extends State<FeedScreen>
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               itemCount: _filteredPosts.length,
                               itemBuilder: (context, index) {
-                                return _PostCard(post: _filteredPosts[index]);
+                                return Entrance(
+                                  index: index,
+                                  child: _PostCard(post: _filteredPosts[index]),
+                                );
                               },
                             ),
                 ),
@@ -243,12 +248,20 @@ class _FeedScreenState extends State<FeedScreen>
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.easeOutBack,
-                    height: _isStylusOpen ? (_postTypes.length * 64.0) : 0,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: _postTypes.map((type) {
-                        return _buildPostTypeButton(type);
-                      }).toList(),
+                    height: _isStylusOpen
+                        ? min(_postTypes.length * 64.0,
+                            MediaQuery.sizeOf(context).height * .38)
+                        : 0,
+                    child: SingleChildScrollView(
+                      physics: _isStylusOpen
+                          ? const ClampingScrollPhysics()
+                          : const NeverScrollableScrollPhysics(),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: _postTypes.map((type) {
+                          return _buildPostTypeButton(type);
+                        }).toList(),
+                      ),
                     ),
                   ),
                 ),
@@ -264,8 +277,8 @@ class _FeedScreenState extends State<FeedScreen>
                       return Transform.rotate(
                         angle: _stylusRotation.value * 3.14159,
                         child: Container(
-                          width: 56,
-                          height: 56,
+                          width: 58,
+                          height: 58,
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
                               begin: Alignment.topLeft,
@@ -285,7 +298,7 @@ class _FeedScreenState extends State<FeedScreen>
                             ],
                           ),
                           child: Padding(
-                            padding: const EdgeInsets.all(9),
+                            padding: const EdgeInsets.all(4),
                             child: SvgPicture.asset(
                               'assets/logo/stylus_polished.svg',
                               fit: BoxFit.contain,
@@ -473,6 +486,23 @@ class _QuotePostCard extends StatelessWidget {
               ),
             ],
           ),
+          if (post['metadata']?['date'] != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.event_outlined,
+                    size: 14, color: BookNestColors.cyan),
+                const SizedBox(width: 6),
+                Text(
+                  post['metadata']['date'].toString(),
+                  style: const TextStyle(
+                    color: BookNestColors.lightTextSecondary,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
 
           // Footer

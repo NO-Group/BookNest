@@ -377,9 +377,43 @@ class _ContactPickerSheet extends StatefulWidget {
 
 class _ContactPickerSheetState extends State<_ContactPickerSheet> {
   final TextEditingController _search = TextEditingController();
+  Timer? _debounce;
+  List<Map<String, dynamic>> _results = const [];
+  bool _searching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _search.addListener(_onSearchChanged);
+  }
+
+  /// Realtime search: every keystroke (debounced 280 ms) queries the
+  /// profiles table server-side by username AND display name, so readers
+  /// are found no matter how many accounts exist.
+  void _onSearchChanged() {
+    _debounce?.cancel();
+    final term = _search.text.trim();
+    if (term.isEmpty) {
+      setState(() {
+        _results = const [];
+        _searching = false;
+      });
+      return;
+    }
+    setState(() => _searching = true);
+    _debounce = Timer(const Duration(milliseconds: 280), () async {
+      final found = await SupabaseService().searchProfiles(term);
+      if (!mounted) return;
+      setState(() {
+        _results = found;
+        _searching = false;
+      });
+    });
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _search.dispose();
     super.dispose();
   }
@@ -431,14 +465,8 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                 const SizedBox(height: 10),
                 Expanded(
                   child: Builder(builder: (context) {
-                    final term = _search.text.trim().toLowerCase();
-                    final contacts = widget.contacts
-                        .where((person) =>
-                            '${person['display_name'] ?? ''} '
-                                    '${person['username'] ?? ''}'
-                                .toLowerCase()
-                                .contains(term))
-                        .toList();
+                    final term = _search.text.trim();
+                    final contacts = term.isEmpty ? widget.contacts : _results;
                     if (contacts.isEmpty) {
                       return Center(
                         child: Text('No readers found.',

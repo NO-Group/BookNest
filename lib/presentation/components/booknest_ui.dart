@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../../config/app_state.dart';
 
 import '../../config/theme.dart';
 
@@ -322,7 +324,9 @@ class GradientButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return PressableScale(
+      onTap: onPressed,
+      child: SizedBox(
       width: double.infinity,
       height: 52,
       child: DecoratedBox(
@@ -365,6 +369,7 @@ class GradientButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -415,6 +420,197 @@ class TagChip extends StatelessWidget {
 }
 
 /// The canonical 22 BookNest genres, in the exact product order.
+
+/// ─────────────────────────────────────────────────────────────────────────
+/// BookNest motion kit — reusable, theme-aware animation primitives.
+/// Every widget respects the "Reduce motion" accessibility setting.
+/// ─────────────────────────────────────────────────────────────────────────
+
+/// Wraps a child in a springy press animation (tap-down scale).
+class PressableScale extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final double pressedScale;
+
+  const PressableScale({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.pressedScale = .96,
+  });
+
+  @override
+  State<PressableScale> createState() => _PressableScaleState();
+}
+
+class _PressableScaleState extends State<PressableScale> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = AppSettings.reduceMotion.value;
+    return GestureDetector(
+      onTapDown: reduced || widget.onTap == null ? null : (_) => setState(() => _down = true),
+      onTapUp: reduced || widget.onTap == null ? null : (_) => setState(() => _down = false),
+      onTapCancel: reduced || widget.onTap == null ? null : () => setState(() => _down = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down ? widget.pressedScale : 1,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Entrance animation: fades + slides its child in, staggered by [index].
+/// Wrap list tiles with `Entrance(index: i, child: …)`.
+class Entrance extends StatefulWidget {
+  final Widget child;
+  final int index;
+  final Duration duration;
+
+  const Entrance({
+    super.key,
+    required this.child,
+    this.index = 0,
+    this.duration = const Duration(milliseconds: 420),
+  });
+
+  @override
+  State<Entrance> createState() => _EntranceState();
+}
+
+class _EntranceState extends State<Entrance> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: widget.duration,
+  );
+  late final Animation<double> _fade = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+  late final Animation<Offset> _slide = Tween<Offset>(
+    begin: const Offset(0, .08),
+    end: Offset.zero,
+  ).animate(_fade);
+
+  @override
+  void initState() {
+    super.initState();
+    if (AppSettings.reduceMotion.value) {
+      _controller.value = 1;
+    } else {
+      final stagger = Duration(milliseconds: 55 * widget.index.clamp(0, 12));
+      Future.delayed(stagger, () {
+        if (mounted) _controller.forward();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Shimmering placeholder for async-loading content.
+class ShimmerBox extends StatefulWidget {
+  final double width;
+  final double height;
+  final BorderRadius borderRadius;
+
+  const ShimmerBox({
+    super.key,
+    this.width = double.infinity,
+    this.height = 16,
+    this.borderRadius = const BorderRadius.all(Radius.circular(8)),
+  });
+
+  @override
+  State<ShimmerBox> createState() => _ShimmerBoxState();
+}
+
+class _ShimmerBoxState extends State<ShimmerBox> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1300),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (AppSettings.reduceMotion.value) {
+      return Container(
+        width: widget.width,
+        height: widget.height,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: widget.borderRadius,
+        ),
+      );
+    }
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final theme = Theme.of(context);
+        final base = theme.colorScheme.surface;
+        final glow = theme.dividerColor;
+        return Container(
+          width: widget.width,
+          height: widget.height,
+          decoration: BoxDecoration(
+            borderRadius: widget.borderRadius,
+            gradient: LinearGradient(
+              begin: Alignment(-1 + 2 * _controller.value, 0),
+              end: Alignment(0 + 2 * _controller.value, 0),
+              colors: [base, glow.withOpacity(.45), base],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Number that animates when its value changes (likes, stats, counters).
+class AnimatedCount extends StatelessWidget {
+  final int value;
+  final TextStyle? style;
+
+  const AnimatedCount({super.key, required this.value, this.style});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<int>(
+      tween: IntTween(begin: value, end: value),
+      duration: AppSettings.reduceMotion.value
+          ? Duration.zero
+          : const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      builder: (context, v, _) => Text('$v', style: style),
+    );
+  }
+}
+
 const List<String> kBookNestGenres = [
   'Romance',
   'Science Fiction',

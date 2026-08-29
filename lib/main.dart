@@ -7,7 +7,13 @@ import 'services/supabase_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppSettings.load();
   await SupabaseService().initialize();
+  // Self-heal: guarantee a profiles row exists for returning users whose
+  // signup predated the auto-create trigger (fixes empty chat/search results).
+  if (SupabaseService().auth.currentUser != null) {
+    await SupabaseService().ensureProfile();
+  }
   runApp(const BookNestApp());
 }
 

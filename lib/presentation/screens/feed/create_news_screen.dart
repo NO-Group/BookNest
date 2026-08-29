@@ -18,6 +18,25 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
   final _sourceController = TextEditingController();
   bool _isLoading = false;
 
+
+  DateTime? _selectedPostDate;
+
+  Future<void> _pickPostDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedPostDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: ColorScheme.dark(primary: BookNestColors.cyan),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) setState(() => _selectedPostDate = picked);
+  }
+
   Future<void> _publishNews() async {
     if (_titleController.text.isEmpty || _contentController.text.isEmpty) return;
 
@@ -25,12 +44,14 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
 
     try {
       final userId = SupabaseService().auth.currentUser!.id;
-      await SupabaseService().client.from('posts').insert({
+      await SupabaseService().writeRow('posts', {
         'type': 'news',
         'title': _titleController.text.trim(),
         'content': _contentController.text.trim(),
         'metadata': {
           'source': _sourceController.text.trim(),
+          if (_selectedPostDate != null)
+            'date': DateFormat('EEE, MMM d, yyyy').format(_selectedPostDate!),
         },
         'created_by': userId,
       });
@@ -78,6 +99,8 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildDateChip(Theme.of(context)),
+            const SizedBox(height: 18),
             TextField(
               controller: _titleController,
               style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 20, fontWeight: FontWeight.bold),

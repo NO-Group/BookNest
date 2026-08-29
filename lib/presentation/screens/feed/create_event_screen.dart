@@ -77,7 +77,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         _selectedTime.minute,
       );
 
-      await SupabaseService().client.from('posts').insert({
+      await SupabaseService().writeRow('posts', {
         'type': 'event',
         'title': _titleController.text.trim(),
         'content': _descriptionController.text.trim(),
@@ -98,6 +98,12 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             content: Text('Event posted!'),
             backgroundColor: BookNestColors.navy,
           ),
+        );
+      }
+    } on WriteException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
         );
       }
     } catch (e) {

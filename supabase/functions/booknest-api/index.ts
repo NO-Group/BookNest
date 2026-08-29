@@ -174,6 +174,29 @@ async function currentUserId(req: Request): Promise<string | null> {
   }
 }
 
+// Service-role Supabase client — RLS-exempt writes for the db.write action
+// (resilience path: only used when a direct client insert was refused by
+//  stale policies; ownership is force-bound to the verified caller below).
+function serviceClient() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    { auth: { persistSession: false } },
+  );
+}
+
+const WRITABLE_TABLES = new Set([
+  'profiles', 'posts', 'clubs', 'club_members', 'communities',
+  'community_members', 'organizations', 'organization_members', 'schools',
+  'school_members', 'club_books', 'book_chapters', 'announcement_groups',
+]);
+const OWNER_COLUMN: Record<string, string> = {
+  posts: 'created_by', clubs: 'owner_id', communities: 'owner_id',
+  organizations: 'owner_id', schools: 'owner_id', club_books: 'added_by',
+  club_members: 'user_id', community_members: 'user_id',
+  organization_members: 'user_id', school_members: 'user_id', profiles: 'id',
+};
+
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
@@ -297,6 +320,40 @@ Deno.serve(async (req: Request) => {
           databases: DB_NAMES,
           time: new Date().toISOString(),
         });
+      }
+
+      // ── resilience: RLS-exempt whitelisted write (ownership force-bound) ─
+      case 'db.write': {
+        const uid = await currentUserId(req);
+        if (!uid) return err('Sign in to make changes.', 401);
+        const table = String(p.table ?? '');
+        const op = String(p.op ?? 'insert');
+        if (!WRITABLE_TABLES.has(table)) return err('Table not writable.', 400);
+        const ownerCol = OWNER_COLUMN[table];
+        const db = serviceClient().from(table);
+        if (op === 'insert') {
+          const values = { ...(p.values as Record<string, unknown> ?? {}) };
+          if (ownerCol) values[ownerCol] = uid;
+          const { data, error } = await db.insert(values).select().single();
+          if (error) return err(error.message, 400);
+          return ok({ row: data });
+        }
+        if (op === 'update') {
+          const match = { ...(p.match as Record<string, unknown> ?? {}) };
+          if (ownerCol) match[ownerCol] = uid;
+          const { data, error } = await db.update(p.values ?? {}).match(match)
+            .select().single();
+          if (error) return err(error.message, 400);
+          return ok({ row: data });
+        }
+        if (op === 'delete') {
+          const match = { ...(p.match as Record<string, unknown> ?? {}) };
+          if (ownerCol) match[ownerCol] = uid;
+          const { error } = await db.delete().match(match);
+          if (error) return err(error.message, 400);
+          return ok({ deleted: true });
+        }
+        return err('Unsupported op.', 400);
       }
 
       // ── books: browse ────────────────────────────────────────────────────

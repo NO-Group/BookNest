@@ -24,7 +24,7 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
 
     try {
       final userId = SupabaseService().auth.currentUser!.id;
-      await SupabaseService().client.from('posts').insert({
+      await SupabaseService().writeRow('posts', {
         'type': 'reel',
         'title': _titleController.text.trim(),
         'content': _descriptionController.text.trim(),
@@ -43,6 +43,12 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
             content: Text('Reel placeholder created! Video upload coming soon.'),
             backgroundColor: BookNestColors.cyan,
           ),
+        );
+      }
+    } on WriteException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
         );
       }
     } catch (e) {

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../config/app_state.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -108,14 +110,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   : RefreshIndicator(
                       color: BookNestColors.cyan,
                       onRefresh: _load,
-                      child: ListView.separated(
-                        padding:
-                            const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                        itemCount: _items.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 8),
+                      child: Builder(builder: (context) {
+                          final visible = _items
+                              .where((n) => AppSettings.allowsNotification(
+                                  n['type']?.toString() ?? 'update'))
+                              .toList();
+                          if (visible.isEmpty) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(32),
+                                child: Text(
+                                    'All caught up — or every channel is muted in Settings.'),
+                              ),
+                            );
+                          }
+                          return ListView.separated(
+                            padding:
+                                const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                            itemCount: visible.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
                         itemBuilder: (context, index) {
-                          final item = _items[index];
+                          final item = visible[index];
                           final type =
                               item['type']?.toString() ?? 'update';
                           final text = item['text']?.toString() ?? '';
@@ -183,7 +199,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             ),
                           );
                         },
-                      ),
+                          );
+                        }),
                     ),
     );
   }

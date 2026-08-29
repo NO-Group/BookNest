@@ -35,6 +35,25 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
     }
   }
 
+
+  DateTime? _selectedPostDate;
+
+  Future<void> _pickPostDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedPostDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: ColorScheme.dark(primary: BookNestColors.cyan),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) setState(() => _selectedPostDate = picked);
+  }
+
   Future<void> _publishPoll() async {
     if (_questionController.text.isEmpty) return;
     final options = _optionControllers
@@ -47,12 +66,14 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
 
     try {
       final userId = SupabaseService().auth.currentUser!.id;
-      await SupabaseService().client.from('posts').insert({
+      await SupabaseService().writeRow('posts', {
         'type': 'poll',
         'content': _questionController.text.trim(),
         'metadata': {
           'options': options,
           'votes': 0,
+          if (_selectedPostDate != null)
+            'date': DateFormat('EEE, MMM d, yyyy').format(_selectedPostDate!),
         },
         'created_by': userId,
       });
@@ -100,6 +121,8 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildDateChip(Theme.of(context)),
+            const SizedBox(height: 18),
             TextField(
               controller: _questionController,
               style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 18),

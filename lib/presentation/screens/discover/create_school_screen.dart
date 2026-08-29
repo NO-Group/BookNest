@@ -1,8 +1,13 @@
 // lib/presentation/screens/discover/create_school_screen.dart
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../../../config/theme.dart';
+import '../../../services/cloudinary_service.dart';
 import '../../../services/supabase_service.dart';
 
 class CreateSchoolScreen extends StatefulWidget {
@@ -28,6 +33,27 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
     'Online',
   ];
 
+
+  Uint8List? _coverBytes;
+
+  Future<void> _pickCover() async {
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        maxHeight: 900,
+        imageQuality: 82,
+      );
+      if (file == null || !mounted) return;
+      setState(() => _coverBytes = await file.readAsBytes());
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Could not open the photo picker.')));
+      }
+    }
+  }
+
   Future<void> _createSchool() async {
     if (_nameController.text.isEmpty) return;
 
@@ -36,7 +62,16 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
     try {
       final userId = SupabaseService().auth.currentUser!.id;
 
-      await SupabaseService().client.from('schools').insert({
+      String? coverUrl;
+      if (_coverBytes != null) {
+        coverUrl = await CloudinaryService.uploadImage(
+          bytes: _coverBytes!,
+          folder: 'covers',
+          publicId: 'school-$userId-${DateTime.now().millisecondsSinceEpoch}',
+        );
+      }
+
+      await SupabaseService().writeRow('schools', {
         'name': _nameController.text.trim(),
         'description': _descriptionController.text.trim(),
         'location': _locationController.text.trim(),
@@ -45,6 +80,7 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
         'owner_id': userId,
         'vice_moderator_id': null,
         'is_verified': false,
+        if (coverUrl != null) 'cover_url': coverUrl,
       });
 
       if (mounted) {
@@ -89,24 +125,36 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
         padding: const EdgeInsets.all(24),
         children: [
           // Cover
-          Container(
-            width: double.infinity,
-            height: 160,
-            decoration: BoxDecoration(
-              color: BookNestColors.navy,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: BookNestColors.lightTextSecondary,
-                style: BorderStyle.solid,
+          GestureDetector(
+            onTap: _isLoading ? null : _pickCover,
+            child: Container(
+              width: double.infinity,
+              height: 160,
+              decoration: BoxDecoration(
+                color: BookNestColors.navy,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: BookNestColors.lightTextSecondary,
+                  style: BorderStyle.solid,
+                ),
+                image: _coverBytes != null
+                    ? DecorationImage(
+                        image: MemoryImage(_coverBytes!), fit: BoxFit.cover)
+                    : null,
               ),
-            ),
-            child: const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.add_photo_alternate, size: 40, color: BookNestColors.lightTextSecondary),
-                SizedBox(height: 8),
-                Text('Add school photo', style: TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 14)),
-              ],
+              child: _coverBytes == null
+                  ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.add_photo_alternate,
+                      size: 40, color: BookNestColors.lightTextSecondary),
+                  const SizedBox(height: 8),
+                  Text('Add school photo',
+                      style: const TextStyle(
+                          color: BookNestColors.lightTextSecondary, fontSize: 14)),
+                ],
+                  )
+                  : null,
             ),
           ),
           const SizedBox(height: 24),

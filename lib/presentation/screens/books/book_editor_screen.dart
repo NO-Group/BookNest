@@ -132,7 +132,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
           ? '${content.substring(0, 200)}…'
           : content;
 
-      final bookResponse = await supabase.from('club_books').insert({
+      final book = await SupabaseService().writeRow('club_books', {
         'club_id': widget.clubId,
         'title': title,
         'author': user.email ?? user.userMetadata?['username'] ?? 'Anonymous',
@@ -140,15 +140,13 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
         'content_format': 'markdown',
         'moderation_status': 'pending',
         'added_by': user.id,
-      }).select();
-
-      if (bookResponse.isEmpty) {
+      });
+      if (book == null) {
         throw Exception('Failed to create the book record.');
       }
+      final bookId = book['id'].toString();
 
-      final bookId = bookResponse.first['id'];
-
-      await supabase.from('book_chapters').insert({
+      await SupabaseService().writeRow('book_chapters', {
         'club_book_id': bookId,
         'chapter_number': 1,
         'title': 'Chapter 1',
