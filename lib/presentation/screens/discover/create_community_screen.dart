@@ -56,7 +56,7 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Community created!'),
-            backgroundColor: Color(0xFF00E5FF),
+            backgroundColor: BookNestColors.cyan,
           ),
         );
       }
@@ -74,7 +74,6 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('New Community'),
         actions: [
@@ -84,9 +83,9 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
                   )
-                : const Text('Create', style: TextStyle(color: Color(0xFF00E5FF))),
+                : const Text('Create', style: TextStyle(color: BookNestColors.cyan)),
           ),
         ],
       ),
@@ -100,21 +99,21 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
               width: double.infinity,
               height: 160,
               decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
+                color: const BookNestColors.navy,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: const Color(0xFF444444),
+                  color: const BookNestColors.lightTextSecondary,
                   style: BorderStyle.solid,
                 ),
               ),
               child: const Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.add_photo_alternate, size: 40, color: Color(0xFF444444)),
+                  Icon(Icons.add_photo_alternate, size: 40, color: BookNestColors.lightTextSecondary),
                   SizedBox(height: 8),
                   Text(
                     'Add cover photo',
-                    style: TextStyle(color: Color(0xFF666666), fontSize: 14),
+                    style: TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 14),
                   ),
                 ],
               ),
@@ -122,21 +121,21 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
             const SizedBox(height: 24),
             TextField(
               controller: _nameController,
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 20, fontWeight: FontWeight.bold),
               decoration: const InputDecoration(
                 hintText: 'Community name',
-                hintStyle: TextStyle(color: Color(0xFF444444)),
+                hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
                 border: InputBorder.none,
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _descriptionController,
-              style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 16, height: 1.6),
               maxLines: 4,
               decoration: const InputDecoration(
                 hintText: 'What is this community about?',
-                hintStyle: TextStyle(color: Color(0xFF444444)),
+                hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
                 border: InputBorder.none,
               ),
             ),
@@ -144,17 +143,17 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF1F1F1F),
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.info_outline, color: Color(0xFF888888), size: 20),
+                  Icon(Icons.info_outline, color: BookNestColors.lightTextSecondary, size: 20),
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       'An Announcements group will be created automatically. You can add Clubs, Organizations, and Schools later.',
-                      style: TextStyle(color: Color(0xFF888888), fontSize: 12, height: 1.5),
+                      style: TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 12, height: 1.5),
                     ),
                   ),
                 ],

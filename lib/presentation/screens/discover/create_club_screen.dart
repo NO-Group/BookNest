@@ -53,7 +53,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Club created!'),
-            backgroundColor: Color(0xFF102A56),
+            backgroundColor: BookNestColors.navy,
           ),
         );
       }
@@ -71,7 +71,6 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('New Club'),
         actions: [
@@ -81,9 +80,9 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
                   )
-                : const Text('Create', style: TextStyle(color: Color(0xFF102A56))),
+                : const Text('Create', style: TextStyle(color: BookNestColors.navy)),
           ),
         ],
       ),
@@ -95,19 +94,19 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
             width: double.infinity,
             height: 160,
             decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
+              color: const BookNestColors.navy,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: const Color(0xFF444444),
+                color: const BookNestColors.lightTextSecondary,
                 style: BorderStyle.solid,
               ),
             ),
             child: const Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.add_photo_alternate, size: 40, color: Color(0xFF444444)),
+                Icon(Icons.add_photo_alternate, size: 40, color: BookNestColors.lightTextSecondary),
                 SizedBox(height: 8),
-                Text('Add club cover', style: TextStyle(color: Color(0xFF666666), fontSize: 14)),
+                Text('Add club cover', style: TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 14)),
               ],
             ),
           ),
@@ -116,10 +115,10 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
           // Name
           TextField(
             controller: _nameController,
-            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 20, fontWeight: FontWeight.bold),
             decoration: const InputDecoration(
               hintText: 'Club name',
-              hintStyle: TextStyle(color: Color(0xFF444444)),
+              hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
               border: InputBorder.none,
             ),
           ),
@@ -128,18 +127,18 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
           // Description
           TextField(
             controller: _descriptionController,
-            style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 16, height: 1.6),
             maxLines: 3,
             decoration: const InputDecoration(
               hintText: 'What will you read together?',
-              hintStyle: TextStyle(color: Color(0xFF444444)),
+              hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
               border: InputBorder.none,
             ),
           ),
           const SizedBox(height: 24),
 
           // Genre
-          const Text('Genre', style: TextStyle(color: Color(0xFF888888), fontSize: 14)),
+          const Text('Genre', style: TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 14)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -152,14 +151,14 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF102A56) : const Color(0xFF1F1F1F),
+                    color: isSelected ? const BookNestColors.navy : Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(20),
-                    border: isSelected ? null : Border.all(color: const Color(0xFF222222)),
+                    border: isSelected ? null : Border.all(color: Theme.of(context).dividerColor),
                   ),
                   child: Text(
                     genre,
                     style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.white,
+                      color: isSelected ? BookNestColors.navyDeep : Theme.of(context).colorScheme.onSurface,
                       fontSize: 13,
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                     ),
@@ -172,14 +171,14 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
 
           // Privacy
           SwitchListTile(
-            title: const Text('Private Club', style: TextStyle(color: Colors.white)),
+            title: const Text('Private Club', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
             subtitle: Text(
               _isPrivate ? 'Invite-only' : 'Anyone can join',
-              style: const TextStyle(color: Color(0xFF888888), fontSize: 12),
+              style: const TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 12),
             ),
             value: _isPrivate,
             onChanged: (v) => setState(() => _isPrivate = v),
-            activeThumbColor: const Color(0xFF102A56),
+            activeThumbColor: const BookNestColors.navy,
           ),
         ],
       ),

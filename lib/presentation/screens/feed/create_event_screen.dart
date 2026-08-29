@@ -31,8 +31,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF00E5FF),
-              surface: Color(0xFF1F1F1F),
+              primary: BookNestColors.cyan,
+              surface: Theme.of(context).colorScheme.surface,
             ),
           ),
           child: child!,
@@ -50,8 +50,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF00E5FF),
-              surface: Color(0xFF1F1F1F),
+              primary: BookNestColors.cyan,
+              surface: Theme.of(context).colorScheme.surface,
             ),
           ),
           child: child!,
@@ -95,7 +95,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Event posted!'),
-            backgroundColor: Color(0xFF102A56),
+            backgroundColor: BookNestColors.navy,
           ),
         );
       }
@@ -113,7 +113,6 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('Create Event'),
         actions: [
@@ -123,9 +122,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFF102A56))),
+                : const Text('Post', style: TextStyle(color: BookNestColors.navy)),
           ),
         ],
       ),
@@ -134,65 +133,65 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         children: [
           TextField(
             controller: _titleController,
-            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 20, fontWeight: FontWeight.bold),
             decoration: const InputDecoration(
               hintText: 'Event title',
-              hintStyle: TextStyle(color: Color(0xFF444444)),
+              hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
               border: InputBorder.none,
             ),
           ),
           const SizedBox(height: 24),
           TextField(
             controller: _descriptionController,
-            style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 16, height: 1.6),
             maxLines: 4,
             decoration: const InputDecoration(
               hintText: 'What\'s happening?',
-              hintStyle: TextStyle(color: Color(0xFF444444)),
+              hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
               border: InputBorder.none,
             ),
           ),
           const SizedBox(height: 32),
-          const Divider(color: Color(0xFF222222)),
+          Divider(color: Theme.of(context).dividerColor),
           const SizedBox(height: 16),
 
           // Date picker
           ListTile(
-            leading: const Icon(Icons.calendar_today, color: Color(0xFF00E5FF)),
-            title: const Text('Date', style: TextStyle(color: Colors.white)),
+            leading: const Icon(Icons.calendar_today, color: BookNestColors.cyan),
+            title: const Text('Date', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
             subtitle: Text(
               DateFormat('EEE, MMM d, yyyy').format(_selectedDate),
-              style: const TextStyle(color: Color(0xFF888888)),
+              style: const TextStyle(color: BookNestColors.lightTextSecondary),
             ),
-            trailing: const Icon(Icons.chevron_right, color: Color(0xFF888888)),
+            trailing: const Icon(Icons.chevron_right, color: BookNestColors.lightTextSecondary),
             onTap: _pickDate,
           ),
 
           // Time picker
           ListTile(
-            leading: const Icon(Icons.access_time, color: Color(0xFF00E5FF)),
-            title: const Text('Time', style: TextStyle(color: Colors.white)),
+            leading: const Icon(Icons.access_time, color: BookNestColors.cyan),
+            title: const Text('Time', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
             subtitle: Text(
               _selectedTime.format(context),
-              style: const TextStyle(color: Color(0xFF888888)),
+              style: const TextStyle(color: BookNestColors.lightTextSecondary),
             ),
-            trailing: const Icon(Icons.chevron_right, color: Color(0xFF888888)),
+            trailing: const Icon(Icons.chevron_right, color: BookNestColors.lightTextSecondary),
             onTap: _pickTime,
           ),
 
-          const Divider(color: Color(0xFF222222)),
+          Divider(color: Theme.of(context).dividerColor),
           const SizedBox(height: 16),
 
           // Online toggle
           SwitchListTile(
-            title: const Text('Online Event', style: TextStyle(color: Colors.white)),
+            title: const Text('Online Event', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
             subtitle: Text(
               _isOnline ? 'Virtual meeting link will be shared' : 'In-person event',
-              style: const TextStyle(color: Color(0xFF888888)),
+              style: const TextStyle(color: BookNestColors.lightTextSecondary),
             ),
             value: _isOnline,
             onChanged: (v) => setState(() => _isOnline = v),
-            activeThumbColor: const Color(0xFF00E5FF),
+            activeThumbColor: const BookNestColors.cyan,
           ),
 
           // Location (only if not online)
@@ -201,13 +200,13 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               padding: const EdgeInsets.only(top: 16),
               child: TextField(
                 controller: _locationController,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                 decoration: InputDecoration(
                   hintText: 'Venue address',
-                  hintStyle: const TextStyle(color: Color(0xFF666666)),
-                  prefixIcon: const Icon(Icons.location_on, color: Color(0xFF888888)),
+                  hintStyle: const TextStyle(color: BookNestColors.lightTextSecondary),
+                  prefixIcon: const Icon(Icons.location_on, color: BookNestColors.lightTextSecondary),
                   filled: true,
-                  fillColor: const Color(0xFF1F1F1F),
+                  fillColor: Theme.of(context).colorScheme.surface,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,

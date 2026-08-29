@@ -37,7 +37,7 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Quote posted!'),
-            backgroundColor: Color(0xFF00E5FF),
+            backgroundColor: BookNestColors.cyan,
           ),
         );
       }
@@ -55,7 +55,6 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('Share a Quote'),
         actions: [
@@ -65,9 +64,9 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFF00E5FF))),
+                : const Text('Post', style: TextStyle(color: BookNestColors.cyan)),
           ),
         ],
       ),
@@ -81,16 +80,16 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF1F1F1F),
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF222222)),
+                border: Border.all(color: Theme.of(context).dividerColor),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(
                     Icons.format_quote,
-                    color: Color(0xFF00E5FF),
+                    color: BookNestColors.cyan,
                     size: 32,
                   ),
                   const SizedBox(height: 16),
@@ -98,8 +97,8 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                     '"${_contentController.text.isEmpty ? 'Your quote will appear here' : _contentController.text}"',
                     style: TextStyle(
                       color: _contentController.text.isEmpty
-                          ? const Color(0xFF444444)
-                          : Colors.white,
+                          ? const BookNestColors.lightTextSecondary
+                          : Theme.of(context).colorScheme.onSurface,
                       fontSize: 18,
                       fontStyle: FontStyle.italic,
                       height: 1.5,
@@ -112,7 +111,7 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                         width: 3,
                         height: 20,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF00E5FF),
+                          color: const BookNestColors.cyan,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -121,8 +120,8 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                         '— ${_authorController.text.isEmpty ? 'Author name' : _authorController.text}',
                         style: TextStyle(
                           color: _authorController.text.isEmpty
-                              ? const Color(0xFF444444)
-                              : const Color(0xFF888888),
+                              ? const BookNestColors.lightTextSecondary
+                              : const BookNestColors.lightTextSecondary,
                           fontSize: 14,
                         ),
                       ),
@@ -134,10 +133,10 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
             const SizedBox(height: 32),
 
             // Inputs
-            const Text(
+            Text(
               'Quote',
               style: TextStyle(
-                color: Color(0xFF888888),
+                color: BookNestColors.lightTextSecondary,
                 fontSize: 14,
               ),
             ),
@@ -145,13 +144,13 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
             TextField(
               controller: _contentController,
               onChanged: (_) => setState(() {}),
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
               maxLines: 4,
               decoration: InputDecoration(
                 hintText: 'Enter the quote...',
-                hintStyle: const TextStyle(color: Color(0xFF444444)),
+                hintStyle: const TextStyle(color: BookNestColors.lightTextSecondary),
                 filled: true,
-                fillColor: const Color(0xFF1F1F1F),
+                fillColor: Theme.of(context).colorScheme.surface,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -159,10 +158,10 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Author',
               style: TextStyle(
-                color: Color(0xFF888888),
+                color: BookNestColors.lightTextSecondary,
                 fontSize: 14,
               ),
             ),
@@ -170,12 +169,12 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
             TextField(
               controller: _authorController,
               onChanged: (_) => setState(() {}),
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
               decoration: InputDecoration(
                 hintText: 'Who said this?',
-                hintStyle: const TextStyle(color: Color(0xFF444444)),
+                hintStyle: const TextStyle(color: BookNestColors.lightTextSecondary),
                 filled: true,
-                fillColor: const Color(0xFF1F1F1F),
+                fillColor: Theme.of(context).colorScheme.surface,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,

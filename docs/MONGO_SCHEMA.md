@@ -1,8 +1,24 @@
-# MongoDB Atlas Schema — `booknest` database
+# MongoDB Atlas Schema — 7 dedicated databases in the `Books` cluster
 
-BookNest stores **everything except authentication** here (Supabase leads,
-MongoDB does the heavy lifting). Manuscripts are the only large text payloads;
-media lives on Cloudinary/R2 and is referenced by URL strings.
+BookNest stores **everything except authentication** in MongoDB (Supabase
+leads, MongoDB does the heavy lifting). **Every data domain gets its own
+database** inside the cluster, so likes can never mix with chats and book
+metadata can never mix with reviews:
+
+| Database | Collections | What lives there |
+|---|---|---|
+| `booknest_books` | `books`, `chapters` | Book metadata + chapter manuscripts |
+| `booknest_social` | `book_likes`, `book_bookmarks`, `book_views`, `follows`, `user_stats` | Every reader action + counters |
+| `booknest_reviews` | `reviews`, `comments` | Ratings, written reviews, discussion |
+| `booknest_chats` | `conversations`, `messages` | Direct messages + book shares |
+| `booknest_notifications` | `notifications` | Per-user notification feed |
+| `booknest_users` | `user_prefs` | Favorite genres / personalization |
+| `booknest_moderation` | `reports` | User reports for moderators |
+
+The edge function routes every collection through `dbFor('<domain>')` —
+there is no code path that can write a chat into the books database.
+Manuscripts are the only large text payloads; media lives on Cloudinary/R2
+and is referenced by URL strings.
 
 Index bootstrap runs automatically at edge-function cold start (idempotent).
 

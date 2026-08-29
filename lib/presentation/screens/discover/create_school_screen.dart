@@ -51,7 +51,7 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('School registered!'),
-            backgroundColor: Color(0xFF00E5FF),
+            backgroundColor: BookNestColors.cyan,
           ),
         );
       }
@@ -69,7 +69,6 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('Register School'),
         actions: [
@@ -79,9 +78,9 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
                   )
-                : const Text('Register', style: TextStyle(color: Color(0xFF00E5FF))),
+                : const Text('Register', style: TextStyle(color: BookNestColors.cyan)),
           ),
         ],
       ),
@@ -93,19 +92,19 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
             width: double.infinity,
             height: 160,
             decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
+              color: const BookNestColors.navy,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: const Color(0xFF444444),
+                color: const BookNestColors.lightTextSecondary,
                 style: BorderStyle.solid,
               ),
             ),
             child: const Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.add_photo_alternate, size: 40, color: Color(0xFF444444)),
+                Icon(Icons.add_photo_alternate, size: 40, color: BookNestColors.lightTextSecondary),
                 SizedBox(height: 8),
-                Text('Add school photo', style: TextStyle(color: Color(0xFF666666), fontSize: 14)),
+                Text('Add school photo', style: TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 14)),
               ],
             ),
           ),
@@ -114,17 +113,17 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
           // Name
           TextField(
             controller: _nameController,
-            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 20, fontWeight: FontWeight.bold),
             decoration: const InputDecoration(
               hintText: 'School name',
-              hintStyle: TextStyle(color: Color(0xFF444444)),
+              hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
               border: InputBorder.none,
             ),
           ),
           const SizedBox(height: 16),
 
           // Type
-          const Text('School Type', style: TextStyle(color: Color(0xFF888888), fontSize: 14)),
+          const Text('School Type', style: TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 14)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -137,14 +136,14 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF00E5FF) : const Color(0xFF1F1F1F),
+                    color: isSelected ? const BookNestColors.cyan : Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(20),
-                    border: isSelected ? null : Border.all(color: const Color(0xFF222222)),
+                    border: isSelected ? null : Border.all(color: Theme.of(context).dividerColor),
                   ),
                   child: Text(
                     type,
                     style: TextStyle(
-                      color: isSelected ? const Color(0xFF0A0A0A) : Colors.white,
+                      color: isSelected ? BookNestColors.navyDeep : Theme.of(context).colorScheme.onSurface,
                       fontSize: 13,
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                     ),
@@ -158,11 +157,11 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
           // Description
           TextField(
             controller: _descriptionController,
-            style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 16, height: 1.6),
             maxLines: 3,
             decoration: const InputDecoration(
               hintText: 'About this school...',
-              hintStyle: TextStyle(color: Color(0xFF444444)),
+              hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
               border: InputBorder.none,
             ),
           ),
@@ -172,20 +171,20 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF1F1F1F),
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
-                const Icon(Icons.location_on, color: Color(0xFF888888), size: 20),
+                const Icon(Icons.location_on, color: BookNestColors.lightTextSecondary, size: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _locationController,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                     decoration: const InputDecoration(
                       hintText: 'City, Country',
-                      hintStyle: TextStyle(color: Color(0xFF666666)),
+                      hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
                       border: InputBorder.none,
                     ),
                   ),
@@ -199,20 +198,20 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF1F1F1F),
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
-                const Icon(Icons.language, color: Color(0xFF888888), size: 20),
+                const Icon(Icons.language, color: BookNestColors.lightTextSecondary, size: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _websiteController,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                     decoration: const InputDecoration(
                       hintText: 'School website (optional)',
-                      hintStyle: TextStyle(color: Color(0xFF666666)),
+                      hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
                       border: InputBorder.none,
                     ),
                   ),
@@ -226,7 +225,7 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF1F1F1F),
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Column(
@@ -234,7 +233,7 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
               children: [
                 Text(
                   'School Features',
-                  style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 14, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 12),
                 _FeatureRow(icon: Icons.class_, text: 'Class/grade channels'),
@@ -276,12 +275,12 @@ class _FeatureRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: const Color(0xFF00E5FF)),
+        Icon(icon, size: 16, color: const BookNestColors.cyan),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(color: Color(0xFF888888), fontSize: 12),
+            style: const TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 12),
           ),
         ),
       ],

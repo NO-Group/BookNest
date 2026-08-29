@@ -1,8 +1,14 @@
 // lib/presentation/screens/feed/feed_screen.dart
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
+
+import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
+import '../../components/booknest_ui.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
@@ -33,12 +39,12 @@ class _FeedScreenState extends State<FeedScreen>
   ];
 
   final List<_PostType> _postTypes = const [
-    _PostType(label: 'Quote', icon: Icons.format_quote, color: Color(0xFF00E5FF)),
-    _PostType(label: 'News', icon: Icons.newspaper, color: Color(0xFF102A56)),
-    _PostType(label: 'Poll', icon: Icons.poll, color: Color(0xFF00E5FF)),
-    _PostType(label: 'Event', icon: Icons.event, color: Color(0xFF102A56)),
-    _PostType(label: 'Reel', icon: Icons.videocam, color: Color(0xFF00E5FF)),
-    _PostType(label: 'Article', icon: Icons.article, color: Color(0xFF102A56)),
+    _PostType(label: 'Quote', icon: Icons.format_quote, color: BookNestColors.cyan),
+    _PostType(label: 'News', icon: Icons.newspaper, color: BookNestColors.navy),
+    _PostType(label: 'Poll', icon: Icons.poll, color: BookNestColors.cyan),
+    _PostType(label: 'Event', icon: Icons.event, color: BookNestColors.navy),
+    _PostType(label: 'Reel', icon: Icons.videocam, color: BookNestColors.cyan),
+    _PostType(label: 'Article', icon: Icons.article, color: BookNestColors.navy),
   ];
 
   @override
@@ -119,7 +125,6 @@ class _FeedScreenState extends State<FeedScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       body: Stack(
         children: [
           // Main content
@@ -132,23 +137,25 @@ class _FeedScreenState extends State<FeedScreen>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Feed',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.onSurface,
                           fontSize: 28,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                       Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.search, color: Colors.white),
-                            onPressed: () {},
+                            tooltip: 'Search',
+                            icon: const Icon(Icons.search),
+                            onPressed: () => context.push('/search'),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.notifications_none, color: Colors.white),
-                            onPressed: () {},
+                            tooltip: 'Notifications',
+                            icon: const Icon(Icons.notifications_none),
+                            onPressed: () => context.push('/notifications'),
                           ),
                         ],
                       ),
@@ -175,17 +182,19 @@ class _FeedScreenState extends State<FeedScreen>
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             decoration: BoxDecoration(
                               color: isActive
-                                  ? const Color(0xFF00E5FF)
-                                  : const Color(0xFF1F1F1F),
+                                  ? BookNestColors.cyan
+                                  : Theme.of(context).colorScheme.surface,
                               borderRadius: BorderRadius.circular(20),
                               border: isActive
                                   ? null
-                                  : Border.all(color: const Color(0xFF222222)),
+                                  : Border.all(color: Theme.of(context).dividerColor),
                             ),
                             child: Text(
                               filter,
                               style: TextStyle(
-                                color: isActive ? const Color(0xFF0A0A0A) : Colors.white,
+                                color: isActive
+                                    ? BookNestColors.navyDeep
+                                    : Theme.of(context).colorScheme.onSurface,
                                 fontSize: 13,
                                 fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                               ),
@@ -203,7 +212,7 @@ class _FeedScreenState extends State<FeedScreen>
                 Expanded(
                   child: _isLoading
                       ? const Center(
-                          child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+                          child: CircularProgressIndicator(color: BookNestColors.cyan),
                         )
                       : _filteredPosts.isEmpty
                           ? _buildEmptyState()
@@ -258,21 +267,28 @@ class _FeedScreenState extends State<FeedScreen>
                           width: 56,
                           height: 56,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF00E5FF),
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [BookNestColors.cyanSoft, BookNestColors.cyan],
+                            ),
                             borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: BookNestColors.navyDeep.withOpacity(.25),
+                            ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF00E5FF).withOpacity(0.3),
-                                blurRadius: 16,
-                                offset: const Offset(0, 4),
+                                color: BookNestColors.cyan.withOpacity(0.35),
+                                blurRadius: 18,
+                                offset: const Offset(0, 5),
                               ),
                             ],
                           ),
-                          child: Transform.rotate(
-                            angle: -0.785, // -45 degrees to tilt the stylus
-                            child: CustomPaint(
-                              size: const Size(28, 28),
-                              painter: _StylusPainter(),
+                          child: Padding(
+                            padding: const EdgeInsets.all(9),
+                            child: SvgPicture.asset(
+                              'assets/logo/stylus_polished.svg',
+                              fit: BoxFit.contain,
                             ),
                           ),
                         ),
@@ -295,9 +311,9 @@ class _FeedScreenState extends State<FeedScreen>
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1F1F1F),
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF222222)),
+          border: Border.all(color: Theme.of(context).dividerColor),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.3),
@@ -313,8 +329,8 @@ class _FeedScreenState extends State<FeedScreen>
             const SizedBox(width: 8),
             Text(
               type.label,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
@@ -326,33 +342,11 @@ class _FeedScreenState extends State<FeedScreen>
   }
 
   Widget _buildEmptyState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.feed_outlined,
-            size: 64,
-            color: Color(0xFF444444),
-          ),
-          SizedBox(height: 16),
-          Text(
-            'No posts yet',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Tap the stylus to create your first post',
-            style: TextStyle(
-              color: Color(0xFF888888),
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
+    return EmptyState(
+      icon: Icons.feed_outlined,
+      title: 'No posts yet',
+      subtitle: 'Tap the stylus to share a quote, news, a poll or an event — '
+          'or open the editor to start a book.',
     );
   }
 
@@ -377,61 +371,6 @@ class _PostType {
 }
 
 // Stylus custom painter (matches your image, tilted)
-class _StylusPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-
-    final width = size.width;
-    final height = size.height;
-
-    // Stylus body (tapered rectangle)
-    final bodyPath = Path()
-      ..moveTo(width * 0.45, height * 0.05)
-      ..lineTo(width * 0.55, height * 0.05)
-      ..lineTo(width * 0.6, height * 0.65)
-      ..lineTo(width * 0.4, height * 0.65)
-      ..close();
-
-    // Stylus grip bands
-    final band1 = Path()
-      ..addRect(Rect.fromLTWH(width * 0.38, height * 0.62, width * 0.24, height * 0.04));
-
-    final band2 = Path()
-      ..addRect(Rect.fromLTWH(width * 0.38, height * 0.67, width * 0.24, height * 0.04));
-
-    // Nib (pointed tip)
-    final nibPath = Path()
-      ..moveTo(width * 0.4, height * 0.72)
-      ..lineTo(width * 0.6, height * 0.72)
-      ..lineTo(width * 0.55, height * 0.88)
-      ..lineTo(width * 0.5, height * 0.95)
-      ..lineTo(width * 0.45, height * 0.88)
-      ..close();
-
-    // Nib hole
-    final holePaint = Paint()
-      ..color = const Color(0xFF00E5FF)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(bodyPath, paint);
-    canvas.drawPath(band1, paint);
-    canvas.drawPath(band2, paint);
-    canvas.drawPath(nibPath, paint);
-    canvas.drawCircle(
-      Offset(width * 0.5, height * 0.82),
-      width * 0.06,
-      holePaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// Post card widget (renders different types)
 class _PostCard extends StatelessWidget {
   final dynamic post;
 
@@ -474,9 +413,9 @@ class _QuotePostCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -485,13 +424,13 @@ class _QuotePostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF00E5FF).withOpacity(0.1),
+              color: const BookNestColors.cyan.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
               'QUOTE',
               style: TextStyle(
-                color: Color(0xFF00E5FF),
+                color: BookNestColors.cyan,
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1,
@@ -503,8 +442,8 @@ class _QuotePostCard extends StatelessWidget {
           // Quote content with quotation marks
           Text(
             '"${post['content'] ?? ''}"',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
               fontSize: 18,
               fontStyle: FontStyle.italic,
               height: 1.5,
@@ -519,7 +458,7 @@ class _QuotePostCard extends StatelessWidget {
                 width: 3,
                 height: 20,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00E5FF),
+                  color: const BookNestColors.cyan,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -527,7 +466,7 @@ class _QuotePostCard extends StatelessWidget {
               Text(
                 '— ${post['metadata']?['quote_author'] ?? author}',
                 style: const TextStyle(
-                  color: Color(0xFF888888),
+                  color: BookNestColors.lightTextSecondary,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
@@ -541,11 +480,11 @@ class _QuotePostCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 14,
-                backgroundColor: const Color(0xFF2A2A2A),
+                backgroundColor: const BookNestColors.navy,
                 child: Text(
                   author[0].toUpperCase(),
                   style: const TextStyle(
-                    color: Color(0xFF00E5FF),
+                    color: BookNestColors.cyan,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -555,19 +494,12 @@ class _QuotePostCard extends StatelessWidget {
               Text(
                 author,
                 style: const TextStyle(
-                  color: Color(0xFF888888),
+                  color: BookNestColors.lightTextSecondary,
                   fontSize: 12,
                 ),
               ),
               const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.favorite_border, color: Color(0xFF888888), size: 20),
-                onPressed: () {},
-              ),
-              IconButton(
-                icon: const Icon(Icons.share_outlined, color: Color(0xFF888888), size: 20),
-                onPressed: () {},
-              ),
+              _PostActionButtons(post: post),
             ],
           ),
         ],
@@ -588,9 +520,9 @@ class _NewsPostCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -598,7 +530,7 @@ class _NewsPostCard extends StatelessWidget {
           if (post['metadata']?['image_url'] != null)
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Image.network(
+              child: CachedNetworkImage(
                 post['metadata']['image_url'],
                 width: double.infinity,
                 height: 180,
@@ -613,13 +545,13 @@ class _NewsPostCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF102A56).withOpacity(0.1),
+                    color: const BookNestColors.navy.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
                     'NEWS',
                     style: TextStyle(
-                      color: Color(0xFF102A56),
+                      color: BookNestColors.navy,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1,
@@ -629,8 +561,8 @@ class _NewsPostCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   post['title'] ?? 'Untitled',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
@@ -639,7 +571,7 @@ class _NewsPostCard extends StatelessWidget {
                 Text(
                   post['content'] ?? '',
                   style: const TextStyle(
-                    color: Color(0xFF888888),
+                    color: BookNestColors.lightTextSecondary,
                     fontSize: 14,
                     height: 1.5,
                   ),
@@ -652,12 +584,12 @@ class _NewsPostCard extends StatelessWidget {
                     Text(
                       'By $author',
                       style: const TextStyle(
-                        color: Color(0xFF888888),
+                        color: BookNestColors.lightTextSecondary,
                         fontSize: 12,
                       ),
                     ),
                     const Spacer(),
-                    const Icon(Icons.arrow_forward, color: Color(0xFF00E5FF), size: 16),
+                    const Icon(Icons.arrow_forward, color: BookNestColors.cyan, size: 16),
                   ],
                 ),
               ],
@@ -684,9 +616,9 @@ class _PollPostCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -694,13 +626,13 @@ class _PollPostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF00E5FF).withOpacity(0.1),
+              color: const BookNestColors.cyan.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
               'POLL',
               style: TextStyle(
-                color: Color(0xFF00E5FF),
+                color: BookNestColors.cyan,
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1,
@@ -710,8 +642,8 @@ class _PollPostCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             post['content'] ?? 'Poll question?',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -722,9 +654,9 @@ class _PollPostCard extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
+                color: const BookNestColors.navy,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF222222)),
+                border: Border.all(color: Theme.of(context).dividerColor),
               ),
               child: Row(
                 children: [
@@ -733,13 +665,13 @@ class _PollPostCard extends StatelessWidget {
                     height: 20,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFF888888)),
+                      border: Border.all(color: const BookNestColors.lightTextSecondary),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Text(
                     option,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 14),
                   ),
                 ],
               ),
@@ -749,7 +681,7 @@ class _PollPostCard extends StatelessWidget {
           Text(
             '$author • ${post['metadata']?['votes'] ?? 0} votes',
             style: const TextStyle(
-              color: Color(0xFF888888),
+              color: BookNestColors.lightTextSecondary,
               fontSize: 12,
             ),
           ),
@@ -772,9 +704,9 @@ class _EventPostCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -782,13 +714,13 @@ class _EventPostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF102A56).withOpacity(0.1),
+              color: const BookNestColors.navy.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
               'EVENT',
               style: TextStyle(
-                color: Color(0xFF102A56),
+                color: BookNestColors.navy,
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1,
@@ -798,8 +730,8 @@ class _EventPostCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             post['title'] ?? 'Event',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -807,22 +739,22 @@ class _EventPostCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.calendar_today, color: Color(0xFF00E5FF), size: 16),
+              const Icon(Icons.calendar_today, color: BookNestColors.cyan, size: 16),
               const SizedBox(width: 8),
               Text(
                 post['metadata']?['date'] ?? 'TBD',
-                style: const TextStyle(color: Color(0xFF888888), fontSize: 14),
+                style: const TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 14),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Row(
             children: [
-              const Icon(Icons.location_on, color: Color(0xFF00E5FF), size: 16),
+              const Icon(Icons.location_on, color: BookNestColors.cyan, size: 16),
               const SizedBox(width: 8),
               Text(
                 post['metadata']?['location'] ?? 'Online',
-                style: const TextStyle(color: Color(0xFF888888), fontSize: 14),
+                style: const TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 14),
               ),
             ],
           ),
@@ -830,10 +762,10 @@ class _EventPostCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {},
+              onPressed: () => _showEventDetails(context, post),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00E5FF),
-                foregroundColor: const Color(0xFF0A0A0A),
+                backgroundColor: const BookNestColors.cyan,
+                foregroundColor: BookNestColors.navyDeep,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -859,9 +791,9 @@ class _ReelPostCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -872,7 +804,7 @@ class _ReelPostCard extends StatelessWidget {
               Container(
                 height: 240,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2A2A2A),
+                  color: const BookNestColors.navy,
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(16),
                   ),
@@ -888,7 +820,7 @@ class _ReelPostCard extends StatelessWidget {
                         child: Icon(
                           Icons.videocam,
                           size: 48,
-                          color: Color(0xFF444444),
+                          color: BookNestColors.lightTextSecondary,
                         ),
                       )
                     : null,
@@ -897,7 +829,7 @@ class _ReelPostCard extends StatelessWidget {
                 width: 60,
                 height: 60,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00E5FF).withOpacity(0.9),
+                  color: const BookNestColors.cyan.withOpacity(0.9),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -944,7 +876,7 @@ class _ReelPostCard extends StatelessWidget {
                 Text(
                   '$author • ${post['metadata']?['views'] ?? 0} views',
                   style: const TextStyle(
-                    color: Color(0xFF888888),
+                    color: BookNestColors.lightTextSecondary,
                     fontSize: 12,
                   ),
                 ),
@@ -970,9 +902,9 @@ class _ArticlePostCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -980,13 +912,13 @@ class _ArticlePostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF102A56).withOpacity(0.1),
+              color: const BookNestColors.navy.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
               'ARTICLE',
               style: TextStyle(
-                color: Color(0xFF102A56),
+                color: BookNestColors.navy,
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1,
@@ -996,8 +928,8 @@ class _ArticlePostCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             post['title'] ?? 'Untitled Article',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -1006,7 +938,7 @@ class _ArticlePostCard extends StatelessWidget {
           Text(
             post['content'] ?? '',
             style: const TextStyle(
-              color: Color(0xFF888888),
+              color: BookNestColors.lightTextSecondary,
               fontSize: 14,
               height: 1.5,
             ),
@@ -1019,7 +951,7 @@ class _ArticlePostCard extends StatelessWidget {
               Text(
                 'By $author',
                 style: const TextStyle(
-                  color: Color(0xFF888888),
+                  color: BookNestColors.lightTextSecondary,
                   fontSize: 12,
                 ),
               ),
@@ -1028,7 +960,7 @@ class _ArticlePostCard extends StatelessWidget {
                 onPressed: () => context.push('/publish-details?bookId=${post['id']}'),
                 child: const Text(
                   'Read',
-                  style: TextStyle(color: Color(0xFF00E5FF)),
+                  style: TextStyle(color: BookNestColors.cyan),
                 ),
               ),
             ],
@@ -1052,14 +984,103 @@ class _DefaultPostCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF222222)),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Text(
         post['content'] ?? '',
-        style: const TextStyle(color: Colors.white),
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
       ),
     );
   }
+}
+
+/// Like (optimistic, local until posts sync to the cloud) + real share sheet.
+class _PostActionButtons extends StatefulWidget {
+  final dynamic post;
+  const _PostActionButtons({required this.post});
+
+  @override
+  State<_PostActionButtons> createState() => _PostActionButtonsState();
+}
+
+class _PostActionButtonsState extends State<_PostActionButtons> {
+  bool _liked = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).hintColor;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: Icon(
+            _liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+            color: _liked ? BookNestColors.cyan : muted,
+            size: 20,
+          ),
+          tooltip: _liked ? 'Unlike' : 'Like',
+          onPressed: () => setState(() => _liked = !_liked),
+        ),
+        IconButton(
+          icon: Icon(Icons.share_outlined, color: muted, size: 20),
+          tooltip: 'Share post',
+          onPressed: () {
+            final content = widget.post?['content']?.toString() ?? '';
+            final title = widget.post?['title']?.toString() ?? '';
+            Share.share(
+              '${title.isNotEmpty ? title + "\n\n" : ''}$content'
+              '\n\n— shared from BookNest',
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// Real event details dialog fed from the post's metadata.
+void _showEventDetails(BuildContext context, dynamic post) {
+  final metadata = post?['metadata'];
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(post?['title']?.toString() ?? 'Event'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(post?['content']?.toString() ?? '',
+              style: TextStyle(height: 1.4)),
+          const SizedBox(height: 12),
+          Row(children: [
+            const Icon(Icons.calendar_today, size: 15, color: BookNestColors.cyan),
+            const SizedBox(width: 7),
+            Text(metadata?['date']?.toString() ?? 'Date to be announced'),
+          ]),
+          const SizedBox(height: 6),
+          Row(children: [
+            const Icon(Icons.schedule, size: 15, color: BookNestColors.cyan),
+            const SizedBox(width: 7),
+            Text(metadata?['time']?.toString() ?? 'Time to be announced'),
+          ]),
+          const SizedBox(height: 6),
+          Row(children: [
+            const Icon(Icons.location_on_outlined,
+                size: 15, color: BookNestColors.cyan),
+            const SizedBox(width: 7),
+            Expanded(child: Text(metadata?['location']?.toString() ?? 'Location to be announced')),
+          ]),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Close',
+              style: TextStyle(color: BookNestColors.cyan)),
+        ),
+      ],
+    ),
+  );
 }

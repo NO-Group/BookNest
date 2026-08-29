@@ -40,7 +40,7 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Reel placeholder created! Video upload coming soon.'),
-            backgroundColor: Color(0xFF00E5FF),
+            backgroundColor: BookNestColors.cyan,
           ),
         );
       }
@@ -58,7 +58,6 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('Create Reel'),
         actions: [
@@ -68,9 +67,9 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFF00E5FF))),
+                : const Text('Post', style: TextStyle(color: BookNestColors.cyan)),
           ),
         ],
       ),
@@ -84,10 +83,10 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
               width: double.infinity,
               height: 240,
               decoration: BoxDecoration(
-                color: const Color(0xFF1F1F1F),
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: const Color(0xFF444444),
+                  color: const BookNestColors.lightTextSecondary,
                   style: BorderStyle.solid,
                 ),
               ),
@@ -97,13 +96,13 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
                   Icon(
                     Icons.videocam,
                     size: 48,
-                    color: Color(0xFF444444),
+                    color: BookNestColors.lightTextSecondary,
                   ),
                   SizedBox(height: 16),
                   Text(
                     'Video upload coming soon',
                     style: TextStyle(
-                      color: Color(0xFF888888),
+                      color: BookNestColors.lightTextSecondary,
                       fontSize: 14,
                     ),
                   ),
@@ -111,7 +110,7 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
                   Text(
                     'For now, create a placeholder reel',
                     style: TextStyle(
-                      color: Color(0xFF444444),
+                      color: BookNestColors.lightTextSecondary,
                       fontSize: 12,
                     ),
                   ),
@@ -121,21 +120,21 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
             const SizedBox(height: 32),
             TextField(
               controller: _titleController,
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 18, fontWeight: FontWeight.bold),
               decoration: const InputDecoration(
                 hintText: 'Reel title',
-                hintStyle: TextStyle(color: Color(0xFF444444)),
+                hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
                 border: InputBorder.none,
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _descriptionController,
-              style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.6),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 14, height: 1.6),
               maxLines: 3,
               decoration: const InputDecoration(
                 hintText: 'Description...',
-                hintStyle: TextStyle(color: Color(0xFF444444)),
+                hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
                 border: InputBorder.none,
               ),
             ),

@@ -46,72 +46,108 @@ const fail = (error: string, status = 400) => json({ ok: false, error }, status)
 // ---------------------------------------------------------------------------
 // MongoDB connection (cached across invocations — one client per cold start)
 // ---------------------------------------------------------------------------
-let mongoPromise: Promise<import('npm:mongodb@6.7.0').Db> | null = null;
+// One database per data domain inside the Atlas cluster — likes never mix
+// with chats, books never mix with reviews. A single shared client, a cached
+// handle per database.
+export const DB_NAMES = {
+  books: 'booknest_books', // books metadata + chapters (manuscripts)
+  social: 'booknest_social', // likes, saves, views, follows, follower counts
+  reviews: 'booknest_reviews', // reviews + comments
+  chats: 'booknest_chats', // conversations + messages
+  notifications: 'booknest_notifications',
+  users: 'booknest_users', // reader preferences
+  moderation: 'booknest_moderation', // reports
+} as const;
 
-function db(): Promise<import('npm:mongodb@6.7.0').Db> {
-  if (!mongoPromise) {
+type Domain = keyof typeof DB_NAMES;
+
+let mongoClientPromise: Promise<import('npm:mongodb@6.7.0').MongoClient> | null = null;
+const dbCache = new Map<Domain, Promise<import('npm:mongodb@6.7.0').Db>>();
+
+function mongoClient(): Promise<import('npm:mongodb@6.7.0').MongoClient> {
+  if (!mongoClientPromise) {
     if (!MONGO_URI) {
       return Promise.reject(
-        new Error('MONGO_URI secret is not set — run backend/setup_secrets.sh'),
+        new Error('MONGO_URI secret is not set — see backend/DEPLOY_FROM_DASHBOARD.md'),
       );
     }
     const client = new MongoClient(MONGO_URI, {
       appName: 'booknest-edge',
       serverSelectionTimeoutMS: 8000,
     });
-    mongoPromise = client.connect().then((connected) => {
-      const database = connected.db(MONGO_DB_NAME);
-      void ensureIndexes(database);
-      return database;
-    });
+    mongoClientPromise = client.connect();
   }
-  return mongoPromise;
+  return mongoClientPromise;
 }
 
-// Idempotent index bootstrap (runs once per cold start; safe to repeat).
-async function ensureIndexes(database: import('npm:mongodb@6.7.0').Db): Promise<void> {
+function dbFor(domain: Domain): Promise<import('npm:mongodb@6.7.0').Db> {
+  let cached = dbCache.get(domain);
+  if (!cached) {
+    cached = mongoClient().then((client) => {
+      const database = client.db(DB_NAMES[domain]);
+      void ensureIndexes(database, domain);
+      return database;
+    });
+    dbCache.set(domain, cached);
+  }
+  return cached;
+}
+
+// Idempotent per-database index bootstrap (safe to repeat on cold starts).
+async function ensureIndexes(
+  database: import('npm:mongodb@6.7.0').Db,
+  domain: Domain,
+): Promise<void> {
   try {
-    await Promise.all([
-      database.collection('books').createIndex({ createdAt: -1 }),
-      database.collection('books').createIndex({ authorId: 1 }),
-      database.collection('books').createIndex({ genre: 1, createdAt: -1 }),
-      database.collection('chapters').createIndex(
-        { bookId: 1, chapterNumber: 1 },
-        { unique: true },
-      ),
-      database.collection('book_likes').createIndex(
-        { bookId: 1, userId: 1 },
-        { unique: true },
-      ),
-      database.collection('book_bookmarks').createIndex(
-        { bookId: 1, userId: 1 },
-        { unique: true },
-      ),
-      database.collection('book_bookmarks').createIndex({ userId: 1, createdAt: -1 }),
-      database.collection('book_views').createIndex(
-        { bookId: 1, userId: 1, day: 1 },
-        { unique: true },
-      ),
-      database.collection('reviews').createIndex(
-        { bookId: 1, userId: 1 },
-        { unique: true },
-      ),
-      database.collection('reviews').createIndex({ bookId: 1, createdAt: -1 }),
-      database.collection('comments').createIndex({ bookId: 1, createdAt: -1 }),
-      database.collection('follows').createIndex(
-        { followerId: 1, followeeId: 1 },
-        { unique: true },
-      ),
-      database.collection('user_stats').createIndex({ userId: 1 }, { unique: true }),
-      database.collection('conversations').createIndex(
-        { memberKey: 1 },
-        { unique: true },
-      ),
-      database.collection('messages').createIndex({ conversationId: 1, _id: -1 }),
-      database.collection('notifications').createIndex({ userId: 1, createdAt: -1 }),
-    ]);
+    switch (domain) {
+      case 'books':
+        await Promise.all([
+          database.collection('books').createIndex({ createdAt: -1 }),
+          database.collection('books').createIndex({ authorId: 1 }),
+          database.collection('books').createIndex({ genre: 1, createdAt: -1 }),
+          database.collection('chapters').createIndex(
+            { bookId: 1, chapterNumber: 1 },
+            { unique: true },
+          ),
+        ]);
+        break;
+      case 'social':
+        await Promise.all([
+          database.collection('book_likes').createIndex({ bookId: 1, userId: 1 }, { unique: true }),
+          database.collection('book_bookmarks').createIndex({ bookId: 1, userId: 1 }, { unique: true }),
+          database.collection('book_bookmarks').createIndex({ userId: 1, createdAt: -1 }),
+          database.collection('book_views').createIndex({ bookId: 1, userId: 1, day: 1 }, { unique: true }),
+          database.collection('follows').createIndex({ followerId: 1, followeeId: 1 }, { unique: true }),
+          database.collection('user_stats').createIndex({ userId: 1 }, { unique: true }),
+        ]);
+        break;
+      case 'reviews':
+        await Promise.all([
+          database.collection('reviews').createIndex({ bookId: 1, userId: 1 }, { unique: true }),
+          database.collection('reviews').createIndex({ bookId: 1, createdAt: -1 }),
+          database.collection('comments').createIndex({ bookId: 1, createdAt: -1 }),
+        ]);
+        break;
+      case 'chats':
+        await Promise.all([
+          database.collection('conversations').createIndex({ memberKey: 1 }, { unique: true }),
+          database.collection('conversations').createIndex({ memberIds: 1, updatedAt: -1 }),
+          database.collection('messages').createIndex({ conversationId: 1, _id: -1 }),
+        ]);
+        break;
+      case 'notifications':
+        await database.collection('notifications')
+          .createIndex({ userId: 1, createdAt: -1 });
+        break;
+      case 'users':
+        await database.collection('user_prefs').createIndex({ userId: 1 }, { unique: true });
+        break;
+      case 'moderation':
+        await database.collection('reports').createIndex({ status: 1, createdAt: -1 });
+        break;
+    }
   } catch (error) {
-    console.error('index bootstrap failed:', error);
+    console.error(`index bootstrap failed for ${domain}:`, error);
   }
 }
 
@@ -183,7 +219,8 @@ function conversationView(c: Record<string, unknown>, me: string) {
   };
 }
 
-async function userStats(d: import('npm:mongodb@6.7.0').Db, userId: string) {
+async function userStats(userId: string) {
+  const d = await dbFor('social');
   const doc = await d.collection('user_stats').findOne({ userId });
   return {
     followers: Math.max(0, Number(doc?.followers ?? 0)),
@@ -193,11 +230,8 @@ async function userStats(d: import('npm:mongodb@6.7.0').Db, userId: string) {
 }
 
 /** Finds or creates the 1:1 conversation between two users (reused forever). */
-async function ensureDirect(
-  d: import('npm:mongodb@6.7.0').Db,
-  a: string,
-  b: string,
-): Promise<Record<string, unknown>> {
+async function ensureDirect(a: string, b: string): Promise<Record<string, unknown>> {
+  const d = await dbFor('chats');
   const memberKey = [a, b].sort().join('|');
   const found = await d.collection('conversations').findOne({ memberKey });
   if (found) return conversationView(found, a);
@@ -257,13 +291,17 @@ Deno.serve(async (req: Request) => {
     switch (action) {
       // ── health ───────────────────────────────────────────────────────────
       case 'ping': {
-        const d = await db();
-        return ok({ db: d.databaseName, time: new Date().toISOString() });
+        const d = await dbFor('books');
+        return ok({
+          db: d.databaseName,
+          databases: DB_NAMES,
+          time: new Date().toISOString(),
+        });
       }
 
       // ── books: browse ────────────────────────────────────────────────────
       case 'books.list': {
-        const d = await db();
+        const d = await dbFor('books');
         const limit = Math.min(Number(p.limit ?? 20) || 20, 50);
         const query: Record<string, unknown> = {};
         if (p.mine === true) {
@@ -295,7 +333,7 @@ Deno.serve(async (req: Request) => {
 
       case 'books.get': {
         if (!isHexId(p.bookId)) return fail('A valid bookId is required');
-        const d = await db();
+        const d = await dbFor('books');
         const book = await d.collection('books')
           .findOne({ _id: new ObjectId(p.bookId as string) });
         if (!book) return fail('Book not found', 404);
@@ -310,7 +348,7 @@ Deno.serve(async (req: Request) => {
       case 'books.chapter': {
         if (!isHexId(p.bookId)) return fail('A valid bookId is required');
         const chapterNumber = Number(p.chapterNumber ?? 1) || 1;
-        const d = await db();
+        const d = await dbFor('books');
         const chapter = await d.collection('chapters')
           .findOne({ bookId: p.bookId as string, chapterNumber });
         if (!chapter) return fail('Chapter not found', 404);
@@ -340,7 +378,7 @@ Deno.serve(async (req: Request) => {
             content: String(c.content ?? '').slice(0, 500_000), // guard 16MB docs
           };
         });
-        const d = await db();
+        const d = await dbFor('books');
         const now = new Date();
         const book = {
           title,
@@ -382,16 +420,16 @@ Deno.serve(async (req: Request) => {
         const collection = action === 'books.like' ? 'book_likes' : 'book_bookmarks';
         const counter = action === 'books.like' ? 'likeCount' : 'bookmarkCount';
         const bookId = p.bookId as string;
-        const d = await db();
+        const d = await dbFor('books');
         const filter = { bookId, userId: uid };
         if (active) {
           try {
-            await d.collection(collection).insertOne({ ...filter, createdAt: new Date() });
+            await (await dbFor('social')).collection(collection).insertOne({ ...filter, createdAt: new Date() });
           } catch (error) {
             if (!isDupKey(error)) throw error; // already liked/saved → no-op
           }
         } else {
-          const removed = await d.collection(collection).deleteOne(filter);
+          const removed = await (await dbFor('social')).collection(collection).deleteOne(filter);
           if (removed.deletedCount === 0) {
             const book = await d.collection('books')
               .findOne({ _id: new ObjectId(bookId) }, { projection: { [counter]: 1 } });
@@ -422,11 +460,11 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in required', 401);
         if (!isHexId(p.bookId)) return fail('A valid bookId is required');
         const bookId = p.bookId as string;
-        const d = await db();
+        const d = await dbFor('books');
         // Unique (bookId, userId, day) index → one view per user per day.
         let counted = true;
         try {
-          await d.collection('book_views').insertOne({
+          await (await dbFor('social')).collection('book_views').insertOne({
             bookId,
             userId: uid,
             day: todayUtc(),
@@ -461,7 +499,7 @@ Deno.serve(async (req: Request) => {
         const rating = Math.round(Number(p.rating ?? 0));
         if (rating < 1 || rating > 5) return fail('Rating must be between 1 and 5');
         const bodyText = String(p.body ?? '').trim().slice(0, 4000);
-        const d = await db();
+        const d = await dbFor('reviews');
         const now = new Date();
         const userName = String(p.displayName ?? 'Reader').slice(0, 80);
         const existing = await d.collection('reviews')
@@ -484,11 +522,11 @@ Deno.serve(async (req: Request) => {
             createdAt: now,
             updatedAt: now,
           });
-          await d.collection('books')
+          await (await dbFor('books')).collection('books')
             .updateOne({ _id: new ObjectId(bookId) }, { $inc: { reviewCount: 1 } });
         }
         if (ratingDelta !== 0) {
-          await d.collection('books')
+          await (await dbFor('books')).collection('books')
             .updateOne({ _id: new ObjectId(bookId) }, { $inc: { ratingSum: ratingDelta } });
         }
         return ok({ saved: true, edited: existing != null });
@@ -502,7 +540,7 @@ Deno.serve(async (req: Request) => {
           const before = new Date(p.before);
           if (!isNaN(before.getTime())) query.createdAt = { $lt: before };
         }
-        const rows = await (await db()).collection('reviews')
+        const rows = await (await dbFor('reviews')).collection('reviews')
           .find(query).sort({ createdAt: -1 }).limit(limit + 1).toArray();
         const hasMore = rows.length > limit;
         return ok({
@@ -526,7 +564,7 @@ Deno.serve(async (req: Request) => {
         const target = typeof p.userId === 'string' ? p.userId : '';
         if (!target || target === uid) return fail('A valid userId is required');
         const following = p.following === true;
-        const d = await db();
+        const d = await dbFor('social');
         let changed = false;
         if (following) {
           try {
@@ -558,7 +596,7 @@ Deno.serve(async (req: Request) => {
             ),
           ]);
         }
-        return ok({ following, ...(await userStats(d, target)) });
+        return ok({ following, ...(await userStats(target)) });
       }
 
       // ── direct messages (share flow + chat) ──────────────────────────────
@@ -567,13 +605,13 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in required', 401);
         const peer = typeof p.peerId === 'string' ? p.peerId : '';
         if (!peer || peer === uid) return fail('A valid peerId is required');
-        return ok({ conversation: await ensureDirect(await db(), uid, peer) });
+        return ok({ conversation: await ensureDirect(uid, peer) });
       }
 
       case 'dm.send': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const d = await db();
+        const d = await dbFor('chats');
         const type = ['text', 'book_share', 'image', 'file', 'voice']
           .includes(String(p.type)) ? String(p.type) : 'text';
         const text = String(p.text ?? '').trim().slice(0, 4000);
@@ -588,7 +626,7 @@ Deno.serve(async (req: Request) => {
         if (!isHexId(conversationId)) {
           const peer = typeof p.peerId === 'string' ? p.peerId : '';
           if (!peer || peer === uid) return fail('conversationId or peerId is required');
-          conversationId = String((await ensureDirect(d, uid, peer)).id);
+          conversationId = String((await ensureDirect(uid, peer)).id);
         }
         const conversation = await d.collection('conversations')
           .findOne({ _id: new ObjectId(conversationId) });
@@ -619,7 +657,7 @@ Deno.serve(async (req: Request) => {
         );
         const peer = (conversation.memberIds as string[]).find((m) => m !== uid);
         if (peer) {
-          await d.collection('notifications').insertOne({
+          await (await dbFor('notifications')).collection('notifications').insertOne({
             userId: peer,
             type: 'dm',
             actorId: uid,
@@ -640,7 +678,7 @@ Deno.serve(async (req: Request) => {
       case 'dm.list': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const rows = await (await db()).collection('conversations')
+        const rows = await (await dbFor('chats')).collection('conversations')
           .find({ memberIds: uid })
           .sort({ updatedAt: -1 })
           .limit(50)
@@ -653,7 +691,7 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in required', 401);
         const conversationId = typeof p.conversationId === 'string' ? p.conversationId : '';
         if (!isHexId(conversationId)) return fail('A valid conversationId is required');
-        const d = await db();
+        const d = await dbFor('chats');
         const conversation = await d.collection('conversations')
           .findOne({ _id: new ObjectId(conversationId) });
         if (!conversation || !(conversation.memberIds as string[]).includes(uid)) {
@@ -687,7 +725,7 @@ Deno.serve(async (req: Request) => {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         const limit = Math.min(Number(p.limit ?? 30) || 30, 50);
-        const rows = await (await db()).collection('notifications')
+        const rows = await (await dbFor('notifications')).collection('notifications')
           .find({ userId: uid }).sort({ createdAt: -1 }).limit(limit).toArray();
         return ok({
           notifications: rows.map((n) => ({
@@ -706,7 +744,7 @@ Deno.serve(async (req: Request) => {
       case 'notifications.read': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const d = await db();
+        const d = await dbFor('notifications');
         if (p.all === true) {
           await d.collection('notifications')
             .updateMany({ userId: uid, read: { $ne: true } }, { $set: { read: true } });
@@ -724,14 +762,14 @@ Deno.serve(async (req: Request) => {
       case 'users.get': {
         const target = typeof p.userId === 'string' ? p.userId : '';
         if (!target) return fail('A valid userId is required');
-        return ok({ userId: target, ...(await userStats(await db(), target)) });
+        return ok({ userId: target, ...(await userStats(target)) });
       }
 
       case 'social.list': {
         const target = typeof p.userId === 'string' ? p.userId : '';
         if (!target) return fail('A valid userId is required');
         const type = p.type === 'following' ? 'following' : 'followers';
-        const d = await db();
+        const d = await dbFor('social');
         const query = type === 'followers'
           ? { followeeId: target }
           : { followerId: target };
@@ -748,7 +786,7 @@ Deno.serve(async (req: Request) => {
         const genres = Array.isArray(p.genres)
           ? p.genres.filter((g) => typeof g === 'string').slice(0, 22)
           : [];
-        await (await db()).collection('user_prefs').updateOne(
+        await (await dbFor('users')).collection('user_prefs').updateOne(
           { userId: uid },
           { $set: { genres, updatedAt: new Date() }, $setOnInsert: { userId: uid } },
           { upsert: true },
@@ -761,7 +799,7 @@ Deno.serve(async (req: Request) => {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         if (!isHexId(p.bookId)) return fail('A valid bookId is required');
-        const d = await db();
+        const d = await dbFor('books');
         const book = await d.collection('books')
           .findOne({ _id: new ObjectId(p.bookId as string) }, { projection: { authorId: 1 } });
         if (!book) return fail('Book not found', 404);
@@ -784,7 +822,7 @@ Deno.serve(async (req: Request) => {
 
       case 'books.stats': {
         if (!isHexId(p.bookId)) return fail('A valid bookId is required');
-        const d = await db();
+        const d = await dbFor('books');
         const book = await d.collection('books')
           .findOne({ _id: new ObjectId(p.bookId as string) });
         if (!book) return fail('Book not found', 404);
@@ -804,12 +842,12 @@ Deno.serve(async (req: Request) => {
       case 'books.bookmarked': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const d = await db();
+        const d = await dbFor('social');
         const marks = await d.collection('book_bookmarks')
           .find({ userId: uid }).sort({ createdAt: -1 }).limit(100).toArray();
         const ids = marks.map((m) => m.bookId).filter(isHexId);
         if (ids.length === 0) return ok({ books: [] });
-        const books = await d.collection('books')
+        const books = await (await dbFor('books')).collection('books')
           .find({ _id: { $in: ids.map((id) => new ObjectId(id)) } })
           .toArray();
         const byId = new Map(books.map((b) => [String(b._id), b]));
@@ -828,7 +866,7 @@ Deno.serve(async (req: Request) => {
         const chapterNumber = Math.round(Number(p.chapterNumber ?? 1)) || 1;
         const title = String(p.title ?? `Chapter ${chapterNumber}`).slice(0, 200);
         const content = String(p.content ?? '').slice(0, 500_000);
-        const d = await db();
+        const d = await dbFor('books');
         const book = await d.collection('books')
           .findOne({ _id: new ObjectId(bookId) }, { projection: { authorId: 1 } });
         if (!book) return fail('Book not found', 404);
@@ -850,7 +888,7 @@ Deno.serve(async (req: Request) => {
         if (!isHexId(p.bookId)) return fail('A valid bookId is required');
         const bookId = p.bookId as string;
         const chapterNumber = Math.round(Number(p.chapterNumber ?? 0));
-        const d = await db();
+        const d = await dbFor('books');
         const book = await d.collection('books')
           .findOne({ _id: new ObjectId(bookId) }, { projection: { authorId: 1 } });
         if (!book) return fail('Book not found', 404);
@@ -866,11 +904,11 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in required', 401);
         if (!isHexId(p.bookId)) return fail('A valid bookId is required');
         const bookId = p.bookId as string;
-        const d = await db();
+        const d = await dbFor('reviews');
         const existing = await d.collection('reviews').findOne({ bookId, userId: uid });
         if (!existing) return ok({ deleted: false });
         await d.collection('reviews').deleteOne({ _id: existing._id });
-        await d.collection('books').updateOne(
+        await (await dbFor('books')).collection('books').updateOne(
           { _id: new ObjectId(bookId) },
           { $inc: { reviewCount: -1, ratingSum: -Number(existing.rating ?? 0) } },
         );
@@ -884,7 +922,7 @@ Deno.serve(async (req: Request) => {
         if (!isHexId(p.bookId)) return fail('A valid bookId is required');
         const body = String(p.body ?? '').trim().slice(0, 2000);
         if (!body) return fail('Comment text is empty');
-        const d = await db();
+        const d = await dbFor('reviews');
         const now = new Date();
         const doc = {
           bookId: p.bookId as string,
@@ -900,7 +938,7 @@ Deno.serve(async (req: Request) => {
       case 'comments.list': {
         if (!isHexId(p.bookId)) return fail('A valid bookId is required');
         const limit = Math.min(Number(p.limit ?? 30) || 30, 50);
-        const rows = await (await db()).collection('comments')
+        const rows = await (await dbFor('reviews')).collection('comments')
           .find({ bookId: p.bookId as string })
           .sort({ createdAt: -1 }).limit(limit).toArray();
         return ok({
@@ -922,7 +960,7 @@ Deno.serve(async (req: Request) => {
           .includes(String(p.targetType)) ? String(p.targetType) : null;
         const reason = String(p.reason ?? '').trim().slice(0, 80);
         if (!targetType || !reason) return fail('targetType and reason are required');
-        await (await db()).collection('reports').insertOne({
+        await (await dbFor('moderation')).collection('reports').insertOne({
           targetType,
           targetId: String(p.targetId ?? '').slice(0, 128),
           reporterId: uid,

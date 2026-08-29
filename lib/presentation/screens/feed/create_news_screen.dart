@@ -39,7 +39,7 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('News posted!'),
-            backgroundColor: Color(0xFF102A56),
+            backgroundColor: BookNestColors.navy,
           ),
         );
       }
@@ -57,7 +57,6 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('Share News'),
         actions: [
@@ -67,9 +66,9 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFF102A56))),
+                : const Text('Post', style: TextStyle(color: BookNestColors.navy)),
           ),
         ],
       ),
@@ -80,21 +79,21 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
           children: [
             TextField(
               controller: _titleController,
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 20, fontWeight: FontWeight.bold),
               decoration: const InputDecoration(
                 hintText: 'Headline',
-                hintStyle: TextStyle(color: Color(0xFF444444), fontSize: 20),
+                hintStyle: TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 20),
                 border: InputBorder.none,
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _contentController,
-              style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 16, height: 1.6),
               maxLines: 10,
               decoration: const InputDecoration(
                 hintText: 'Write the news story...',
-                hintStyle: TextStyle(color: Color(0xFF444444)),
+                hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
                 border: InputBorder.none,
               ),
             ),
@@ -102,20 +101,20 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFF1F1F1F),
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.link, color: Color(0xFF888888), size: 20),
+                  const Icon(Icons.link, color: BookNestColors.lightTextSecondary, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
                       controller: _sourceController,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                       decoration: const InputDecoration(
                         hintText: 'Source URL (optional)',
-                        hintStyle: TextStyle(color: Color(0xFF666666)),
+                        hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
                         border: InputBorder.none,
                       ),
                     ),
