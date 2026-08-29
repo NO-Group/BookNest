@@ -225,7 +225,7 @@ class _DMListScreenState extends State<DMListScreen> {
         final conversation = _conversations[index];
         final peerId = conversation['peerId']?.toString() ?? '';
         final last = conversation['lastMessage'];
-        final unreadish = last is Map && last['senderId']?.toString() != viewerId;
+        final unreadish = last != null && last['senderId']?.toString() != viewerId;
         return ListTile(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),

@@ -147,18 +147,16 @@ class SupabaseService {
       {int limit = 20}) async {
     final query = term.trim();
     try {
-      final builder = client
+      // Filters first, terminal transforms last: .or() must precede .limit().
+      PostgrestFilterBuilder<List<Map<String, dynamic>>> request = client
           .from('profiles')
-          .select('id, username, display_name, avatar_url')
-          .limit(limit);
-      final PostgrestFilterBuilder<List<Map<String, dynamic>>> filtered;
-      if (query.isEmpty) {
-        filtered = builder;
-      } else {
-        final safe = query.replaceAll(RegExp(r'[%_,()]'), '');
-        filtered = builder.or('username.ilike.%$safe%,display_name.ilike.%$safe%');
+          .select('id, username, display_name, avatar_url');
+      final safe = query.replaceAll(RegExp(r'[%_,()]'), '');
+      if (safe.isNotEmpty) {
+        request =
+            request.or('username.ilike.%$safe%,display_name.ilike.%$safe%');
       }
-      final rows = await filtered;
+      final rows = await request.limit(limit);
       final viewer = auth.currentUser?.id;
       return (rows as List)
           .map((row) => Map<String, dynamic>.from(row as Map))

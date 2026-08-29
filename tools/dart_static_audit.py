@@ -227,6 +227,46 @@ def check_file(path, packages, violations):
         if m.group(1) not in packages:
             violations.append(f'{rel}: package {m.group(1)} not in pubspec.yaml')
 
+    # await inside a sync arrow closure — setState(() => x = await y)
+    for m in re.finditer(r'\(\(\) *=>[^;\n]*\bawait\b', code):
+        line = src.count('\n', 0, m.start()) + 1
+        violations.append(
+            f'{rel}:{line}: await inside a sync arrow closure — hoist the '
+            f'future above the closure')
+
+    # switch case on a bare lowercase identifier — not a constant pattern
+    for m in re.finditer(r'^[ \t]*case ([a-z_]\w*):', code, re.M):
+        if m.group(1) not in ('true', 'false', 'null'):
+            line = src.count('\n', 0, m.start()) + 1
+            violations.append(
+                f'{rel}:{line}: case {m.group(1)}: is not a constant — use '
+                f'if/else with identical()')
+
+    # .or(/.inFilter( AFTER .limit( in the same statement — PostgREST
+    # transform builders are terminal; filters must come first
+    for m in re.finditer(r'\.limit\(', code):
+        end = min(m.start() + 140, len(code))
+        semi = code.find(';', m.start(), end)
+        if semi != -1:
+            end = semi
+        segment = code[m.start():end]
+        if '.or(' in segment or '.inFilter(' in segment:
+            line = src.count('\n', 0, m.start()) + 1
+            violations.append(
+                f'{rel}:{line}: filter after .limit( — .or()/.inFilter() '
+                f'must precede terminal .limit()')
+
+    # `x is Map && x[...]` on a typed nullable (maybeSingle result) —
+    # promotion is unreliable there; use x != null &&
+    for m in re.finditer(r'= await[^;]*\.maybeSingle\(\);', code):
+        window = code[m.end():m.end() + 300]
+        wm = re.search(r'\bis Map && \w+\[', window)
+        if wm:
+            line = src.count('\n', 0, m.start()) + 1
+            violations.append(
+                f'{rel}:{line}: use x != null && instead of is Map && for a '
+                f'nullable maybeSingle result')
+
     # CachedNetworkImage positional guard
     for m in re.finditer(r'CachedNetworkImage\(', code):
         rest = code[m.end():m.end() + 40].lstrip()

@@ -47,32 +47,30 @@ class AppSettings {
   static void _persist(ValueNotifier<Object?> n) {
     final p = _prefs;
     if (p == null) return;
-    switch (n) {
-      case themeMode:
-        p.setInt('theme.mode', themeMode.value.index);
-      case reduceMotion:
-        p.setBool('motion.reduced', reduceMotion.value);
-      case dataSaver:
-        p.setBool('data.saver', dataSaver.value);
-      case readerSerif:
-        p.setBool('reader.serif', readerSerif.value);
-      case readerFontScale:
-        p.setDouble('reader.fontScale', readerFontScale.value);
-      case readerLineHeight:
-        p.setDouble('reader.lineHeight', readerLineHeight.value);
-      case notifyLikes:
-        p.setBool('notify.likes', notifyLikes.value);
-      case notifyComments:
-        p.setBool('notify.comments', notifyComments.value);
-      case notifyFollows:
-        p.setBool('notify.follows', notifyFollows.value);
-      case notifyMessages:
-        p.setBool('notify.messages', notifyMessages.value);
-      case notifyEvents:
-        p.setBool('notify.events', notifyEvents.value);
+    if (identical(n, themeMode)) {
+      p.setInt('theme.mode', themeMode.value.index);
+    } else if (identical(n, reduceMotion)) {
+      p.setBool('motion.reduced', reduceMotion.value);
+    } else if (identical(n, dataSaver)) {
+      p.setBool('data.saver', dataSaver.value);
+    } else if (identical(n, readerSerif)) {
+      p.setBool('reader.serif', readerSerif.value);
+    } else if (identical(n, readerFontScale)) {
+      p.setDouble('reader.fontScale', readerFontScale.value);
+    } else if (identical(n, readerLineHeight)) {
+      p.setDouble('reader.lineHeight', readerLineHeight.value);
+    } else if (identical(n, notifyLikes)) {
+      p.setBool('notify.likes', notifyLikes.value);
+    } else if (identical(n, notifyComments)) {
+      p.setBool('notify.comments', notifyComments.value);
+    } else if (identical(n, notifyFollows)) {
+      p.setBool('notify.follows', notifyFollows.value);
+    } else if (identical(n, notifyMessages)) {
+      p.setBool('notify.messages', notifyMessages.value);
+    } else if (identical(n, notifyEvents)) {
+      p.setBool('notify.events', notifyEvents.value);
     }
   }
-
   /// ThemeMode.system | light | dark — controlled from the Settings screen.
   static final ValueNotifier<ThemeMode> themeMode =
       ValueNotifier<ThemeMode>(ThemeMode.system);

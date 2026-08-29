@@ -1,6 +1,7 @@
 // lib/presentation/screens/feed/create_poll_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
@@ -96,6 +97,36 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+
+  /// Optional publish date chip shown above the submit button.
+  Widget _buildDateChip(ThemeData theme) {
+    return Center(
+      child: ActionChip(
+        avatar: Icon(Icons.event_outlined,
+            size: 18,
+            color: _selectedPostDate != null
+                ? BookNestColors.cyan
+                : theme.hintColor),
+        label: Text(
+          _selectedPostDate == null
+              ? 'Add date (optional)'
+              : DateFormat('EEE, MMM d, yyyy').format(_selectedPostDate!),
+          style:
+              TextStyle(color: theme.colorScheme.onSurface, fontSize: 13),
+        ),
+        side: BorderSide(
+            color: _selectedPostDate != null
+                ? BookNestColors.cyan.withOpacity(.6)
+                : theme.dividerColor),
+        backgroundColor: theme.colorScheme.surface,
+        onPressed: () async {
+          await _pickPostDate();
+          if (mounted) setState(() {});
+        },
+      ),
+    );
   }
 
   @override

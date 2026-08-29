@@ -48,7 +48,9 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
         imageQuality: 82,
       );
       if (file == null || !mounted) return;
-      setState(() => _coverBytes = await file.readAsBytes());
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      setState(() => _coverBytes = bytes);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

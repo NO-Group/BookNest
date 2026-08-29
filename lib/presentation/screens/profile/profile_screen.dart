@@ -103,7 +103,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .select('avatar_url')
           .eq('id', _viewerId ?? '')
           .maybeSingle();
-      final persisted = saved is Map && saved['avatar_url'].toString() == url;
+      final persisted =
+          saved != null && saved['avatar_url']?.toString() == url;
       if (!mounted) return;
       setState(() {
         if (persisted) _profile = {...?_profile, 'avatar_url': url};
