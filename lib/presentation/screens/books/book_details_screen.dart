@@ -90,6 +90,57 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     });
   }
 
+  void _showMoreMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.flag_rounded, color: BookNestColors.cyan),
+            title: const Text('Report this book'),
+            subtitle: Text('Tell the moderators something is wrong', style: TextStyle(color: Theme.of(sheetContext).hintColor)),
+            onTap: () { Navigator.pop(sheetContext); _reportBook(); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.copy_rounded, color: BookNestColors.cyan),
+            title: const Text('Copy book link'),
+            subtitle: Text('BookNest · book/${widget.bookId}', style: TextStyle(color: Theme.of(sheetContext).hintColor)),
+            onTap: () => Navigator.pop(sheetContext),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  void _reportBook() {
+    AuthGuard.run(context, () {
+      const reasons = ['Spam or scam', 'Hate or harassment', 'Copyright issue', 'Wrong category', 'Something else'];
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheetContext) => SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+              child: Text('Why are you reporting this book?', style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            ),
+            ...reasons.map((reason) => ListTile(
+              leading: const Icon(Icons.flag_outlined, color: BookNestColors.cyan),
+              title: Text(reason),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                BackendApi.instance.reportContent(targetType: 'book', targetId: widget.bookId, reason: reason);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report sent to the moderators. Thank you.')));
+              },
+            )),
+            const SizedBox(height: 8),
+          ]),
+        ),
+      );
+    });
+  }
+
   void _writeReview() {
     AuthGuard.run(context, () {
       final controller = TextEditingController();
@@ -133,7 +184,10 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
         slivers: [
           SliverAppBar(
             pinned: true, expandedHeight: 100, leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: context.pop),
-            actions: [IconButton(icon: const Icon(Icons.ios_share_outlined), onPressed: _share)],
+            actions: [
+              IconButton(icon: const Icon(Icons.ios_share_outlined), onPressed: _share),
+              IconButton(icon: const Icon(Icons.more_vert_rounded), onPressed: _showMoreMenu),
+            ],
             flexibleSpace: FlexibleSpaceBar(background: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [BookNestColors.navyDeep, BookNestColors.navy.withOpacity(.65), surface], begin: Alignment.topLeft, end: Alignment.bottomRight)))),
           ),
           SliverToBoxAdapter(child: Padding(
@@ -143,7 +197,18 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                 Hero(tag: 'book-${widget.bookId}', child: _Cover(title: title)), const SizedBox(width: 18),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)), const SizedBox(height: 6),
-                  Text(author, style: TextStyle(color: BookNestColors.cyan, fontWeight: FontWeight.w600)), const SizedBox(height: 14),
+                  GestureDetector(
+                    onTap: (book['added_by']?.toString().isNotEmpty == true)
+                        ? () => context.push('/user/${book['added_by']}')
+                        : null,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text(author, style: TextStyle(color: BookNestColors.cyan, fontWeight: FontWeight.w600)),
+                      if (book['added_by']?.toString().isNotEmpty == true) ...[
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right_rounded, size: 15, color: BookNestColors.cyan),
+                      ],
+                    ]),
+                  ), const SizedBox(height: 14),
                   Row(children: [const Icon(Icons.star_rounded, color: BookNestColors.cyan, size: 20), const SizedBox(width: 4), Text('4.8', style: theme.textTheme.titleMedium), Text('  •  128 ratings', style: TextStyle(color: muted))]),
                   const SizedBox(height: 12), Text('Ebook • Markdown', style: TextStyle(color: muted)),
                 ])),
@@ -158,6 +223,12 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               const SizedBox(height: 28), _Heading('About this book'), const SizedBox(height: 10), Text(description, style: theme.textTheme.bodyLarge?.copyWith(height: 1.55, color: muted)),
               const SizedBox(height: 28), _Heading('Ratings and reviews'), const SizedBox(height: 14),
               _Reviews(reviews: _reviews, onReview: _writeReview),
+              const SizedBox(height: 6),
+              Row(children: [
+                Expanded(child: OutlinedButton.icon(onPressed: () => context.push('/book/${widget.bookId}/reviews'), icon: const Icon(Icons.star_rounded, size: 17), label: const Text('All reviews'))),
+                const SizedBox(width: 10),
+                Expanded(child: OutlinedButton.icon(onPressed: () => context.push('/book/${widget.bookId}/discussion'), icon: const Icon(Icons.forum_rounded, size: 17), label: const Text('Discussion'))),
+              ]),
               const SizedBox(height: 28), _Heading('Recommended for you'), const SizedBox(height: 12),
               SizedBox(height: 184, child: ListView.separated(scrollDirection: Axis.horizontal, itemCount: _recommended.length, separatorBuilder: (_, __) => const SizedBox(width: 12), itemBuilder: (_, i) { final item = _recommended[i]; return InkWell(borderRadius: BorderRadius.circular(16), onTap: () => context.push('/book/${item['id']}'), child: SizedBox(width: 112, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_Cover(title: item['title']?.toString() ?? 'Book', small: true), const SizedBox(height: 7), Text(item['title']?.toString() ?? 'Untitled', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12))]))); })),
             ]),

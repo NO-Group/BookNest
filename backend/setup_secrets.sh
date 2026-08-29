@@ -38,9 +38,10 @@ echo "🔗 Linking Supabase project ${SUPABASE_PROJECT_REF}…"
 supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
 echo "🔐 Setting Edge Function secrets (values hidden)…"
+# NOTE: SUPABASE_* keys are reserved — Supabase auto-injects them into every
+# edge function, so they are deliberately NOT set here.
 for key in \
   MONGO_URI MONGO_DB_NAME \
-  SUPABASE_SERVICE_ROLE_KEY \
   R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET_NAME R2_PUBLIC_DOMAIN_URL \
   CLOUDINARY_API_KEY CLOUDINARY_API_SECRET; do
   value="${!key:-}"

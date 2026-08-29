@@ -3,10 +3,12 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../config/app_state.dart';
 import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
+import '../../components/booknest_ui.dart';
 import 'book_details_screen.dart' show BookShareSheet;
 
 /// Chapter reader view for a single book.
@@ -26,7 +28,8 @@ class PublishDetailsScreen extends StatefulWidget {
 
 class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
   Map<String, dynamic>? _book;
-  Map<String, dynamic>? _chapter;
+  List<Map<String, dynamic>> _chapters = [];
+  int _chapterIndex = 0;
   bool _isLoading = true;
   bool _liked = false;
   bool _saved = false;
@@ -60,9 +63,12 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
         _book = bookResponse == null
             ? null
             : Map<String, dynamic>.from(bookResponse);
-        _chapter = chaptersResponse.isEmpty
-            ? null
-            : Map<String, dynamic>.from(chaptersResponse.first as Map);
+        _chapters = chaptersResponse.isEmpty
+            ? []
+            : chaptersResponse
+                .map((row) => Map<String, dynamic>.from(row as Map))
+                .toList();
+        _chapterIndex = 0;
         _isLoading = false;
         if (_book == null) _error = 'This book could not be found.';
       });
@@ -131,6 +137,18 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
             color: theme.colorScheme.onSurface,
           ),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Table of contents',
+            icon: const Icon(Icons.format_list_bulleted_rounded),
+            onPressed: _chapters.isEmpty ? null : _openTableOfContents,
+          ),
+          IconButton(
+            tooltip: 'Reader settings',
+            icon: const Icon(Icons.text_format_rounded),
+            onPressed: _openReaderSettings,
+          ),
+        ],
       ),
       body: _buildBody(),
       bottomNavigationBar: _book == null ? null : _buildActionBar(),
@@ -175,8 +193,10 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
     final title = (book['title'] as String?) ?? 'Untitled';
     final author = (book['author'] as String?) ?? 'Unknown author';
     final description = (book['description'] as String?) ?? '';
-    final chapterTitle = (_chapter?['title'] as String?) ?? 'Chapter';
-    final content = (_chapter?['content'] as String?) ?? '';
+    final current = _chapters.isEmpty ? null : _chapters[_chapterIndex];
+    final chapterTitle = (current?['title'] as String?) ?? 'Chapter';
+    final content = (current?['content'] as String?) ?? '';
+    final hasNext = _chapterIndex < _chapters.length - 1;
     final onSurface = theme.colorScheme.onSurface;
     final muted = theme.hintColor;
 
@@ -233,45 +253,212 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
             ],
           ),
         ),
-        Markdown(
-          data: content.isEmpty ? '*(No content published yet.)*' : content,
-          selectable: true,
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-          styleSheet: MarkdownStyleSheet(
-            h1: TextStyle(
-              color: onSurface,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-            h2: TextStyle(
-              color: onSurface,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-            p: TextStyle(
-              color: onSurface.withOpacity(.85),
-              fontSize: 16,
-              height: 1.7,
-            ),
-            listBullet: const TextStyle(color: BookNestColors.cyan),
-            blockquoteDecoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(8),
-              border: const Border(
-                  left: BorderSide(color: BookNestColors.cyan, width: 3)),
-            ),
-            blockquote: TextStyle(
-                color: onSurface.withOpacity(.85), fontSize: 15, height: 1.6),
-            horizontalRuleDecoration: BoxDecoration(
-              border: Border(top: BorderSide(color: theme.dividerColor)),
-            ),
-            code: TextStyle(
-              color: BookNestColors.cyan,
-              backgroundColor: theme.colorScheme.surface,
+        ListenableBuilder(
+          listenable: Listenable.merge([
+            AppSettings.readerFontScale,
+            AppSettings.readerLineHeight,
+            AppSettings.readerSerif,
+          ]),
+          builder: (context, _) {
+            final scale = AppSettings.readerFontScale.value;
+            final lineHeight = AppSettings.readerLineHeight.value;
+            final fontFamily =
+                AppSettings.readerSerif.value ? 'Georgia' : null;
+            return Markdown(
+              data:
+                  content.isEmpty ? '*(No content published yet.)*' : content,
+              selectable: true,
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+              styleSheet: MarkdownStyleSheet(
+                h1: TextStyle(
+                  color: onSurface,
+                  fontSize: 24 * scale,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: fontFamily,
+                ),
+                h2: TextStyle(
+                  color: onSurface,
+                  fontSize: 20 * scale,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: fontFamily,
+                ),
+                p: TextStyle(
+                  color: onSurface.withOpacity(.85),
+                  fontSize: 16 * scale,
+                  height: lineHeight,
+                  fontFamily: fontFamily,
+                ),
+                listBullet: TextStyle(
+                    color: BookNestColors.cyan,
+                    fontSize: 16 * scale,
+                    height: lineHeight),
+                blockquoteDecoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: const Border(
+                      left: BorderSide(color: BookNestColors.cyan, width: 3)),
+                ),
+                blockquote: TextStyle(
+                    color: onSurface.withOpacity(.85),
+                    fontSize: 15 * scale,
+                    height: lineHeight),
+                horizontalRuleDecoration: BoxDecoration(
+                  border:
+                      Border(top: BorderSide(color: theme.dividerColor)),
+                ),
+                code: TextStyle(
+                  color: BookNestColors.cyan,
+                  backgroundColor: theme.colorScheme.surface,
+                ),
+              ),
+            );
+          },
+        ),
+        if (hasNext)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
+            child: OutlinedButton.icon(
+              onPressed: () => setState(() => _chapterIndex += 1),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: BookNestColors.cyan,
+                side: const BorderSide(color: BookNestColors.cyan),
+                minimumSize: const Size.fromHeight(50),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              icon: const Icon(Icons.auto_stories_rounded, size: 18),
+              label: Text(
+                  'Next: ${_chapters[_chapterIndex + 1]['title'] ?? 'Chapter'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
             ),
           ),
-        ),
       ],
+    );
+  }
+
+  void _openTableOfContents() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => GlassSheet(
+        heightFactor: .7,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Table of contents',
+                style: Theme.of(sheetContext)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView.separated(
+                itemCount: _chapters.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 6),
+                itemBuilder: (context, index) {
+                  final chapter = _chapters[index];
+                  final number =
+                      (chapter['chapter_number'] as num?)?.toInt() ?? index + 1;
+                  final selected = index == _chapterIndex;
+                  return ListTile(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    selected: selected,
+                    selectedTileColor: BookNestColors.cyan.withOpacity(.1),
+                    leading: CircleAvatar(
+                      radius: 16,
+                      backgroundColor: selected
+                          ? BookNestColors.cyan
+                          : BookNestColors.cyan.withOpacity(.15),
+                      child: Text('$number',
+                          style: TextStyle(
+                              color: selected
+                                  ? BookNestColors.navyDeep
+                                  : BookNestColors.cyan,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12.5)),
+                    ),
+                    title: Text(
+                        chapter['title']?.toString() ?? 'Chapter $number',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    onTap: () {
+                      setState(() => _chapterIndex = index);
+                      Navigator.pop(sheetContext);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openReaderSettings() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            20, 0, 20, MediaQuery.viewInsetsOf(sheetContext).bottom + 22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Reader settings',
+                style: Theme.of(sheetContext)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 18),
+            ValueListenableBuilder<double>(
+              valueListenable: AppSettings.readerFontScale,
+              builder: (context, scale, _) => _SliderRow(
+                label: 'Text size',
+                value: scale,
+                min: .85,
+                max: 1.4,
+                display: '${(scale * 100).round()}%',
+                onChanged: (v) => AppSettings.readerFontScale.value = v,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ValueListenableBuilder<double>(
+              valueListenable: AppSettings.readerLineHeight,
+              builder: (context, height, _) => _SliderRow(
+                label: 'Line spacing',
+                value: height,
+                min: 1.4,
+                max: 2.0,
+                display: height.toStringAsFixed(1),
+                onChanged: (v) => AppSettings.readerLineHeight.value = v,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ValueListenableBuilder<bool>(
+              valueListenable: AppSettings.readerSerif,
+              builder: (sheetContext, serif, _) => SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                activeColor: BookNestColors.cyan,
+                title: const Text('Serif font',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                subtitle: Text('Classic book feel',
+                    style: TextStyle(
+                        color: Theme.of(sheetContext).hintColor,
+                        fontSize: 12)),
+                value: serif,
+                onChanged: (v) => AppSettings.readerSerif.value = v,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -367,6 +554,56 @@ class _ActionButton extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SliderRow extends StatelessWidget {
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final String display;
+  final ValueChanged<double> onChanged;
+
+  const _SliderRow({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.display,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 96,
+          child: Text(label,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w700, fontSize: 13.5)),
+        ),
+        Expanded(
+          child: Slider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            activeColor: BookNestColors.cyan,
+            divisions: 10,
+            label: display,
+            onChanged: onChanged,
+          ),
+        ),
+        SizedBox(
+          width: 44,
+          child: Text(display,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                  color: Theme.of(context).hintColor, fontSize: 12.5)),
+        ),
+      ],
     );
   }
 }

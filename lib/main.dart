@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'config/app_state.dart';
 import 'config/router.dart';
 import 'config/theme.dart';
 import 'services/supabase_service.dart';
@@ -15,13 +16,16 @@ class BookNestApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'BookNest',
-      debugShowCheckedModeBanner: false,
-      theme: BookNestTheme.lightTheme,
-      darkTheme: BookNestTheme.darkTheme,
-      themeMode: ThemeMode.system,
-      routerConfig: appRouter,
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: AppSettings.themeMode,
+      builder: (context, mode, _) => MaterialApp.router(
+        title: 'BookNest',
+        debugShowCheckedModeBanner: false,
+        theme: BookNestTheme.lightTheme,
+        darkTheme: BookNestTheme.darkTheme,
+        themeMode: mode,
+        routerConfig: appRouter,
+      ),
     );
   }
 }

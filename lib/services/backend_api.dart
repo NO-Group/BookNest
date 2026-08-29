@@ -114,6 +114,88 @@ class BackendApi {
   Future<void> setFollowing(String userId, bool following) =>
       call('social.follow', <String, dynamic>{'userId': userId, 'following': following});
 
+  Future<Map<String, dynamic>?> fetchUserStats(String userId) =>
+      call('users.get', <String, dynamic>{'userId': userId});
+
+  /// type: 'followers' | 'following' → { userIds: [...] }
+  Future<Map<String, dynamic>?> listSocial(String userId, {required String type}) =>
+      call('social.list', <String, dynamic>{'userId': userId, 'type': type});
+
+  Future<void> savePreferences(List<String> genres) =>
+      call('users.preferences', <String, dynamic>{'genres': genres});
+
+  // ── Author tools ──────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>?> updateBook({
+    required String bookId,
+    String? title,
+    String? description,
+    String? genre,
+    String? coverUrl,
+  }) =>
+      call('books.update', <String, dynamic>{
+        'bookId': bookId,
+        if (title != null) 'title': title,
+        if (description != null) 'description': description,
+        if (genre != null) 'genre': genre,
+        if (coverUrl != null) 'coverUrl': coverUrl,
+      });
+
+  Future<Map<String, dynamic>?> bookStats(String bookId) =>
+      call('books.stats', <String, dynamic>{'bookId': bookId});
+
+  Future<Map<String, dynamic>?> bookmarkedBooks() => call('books.bookmarked');
+
+  Future<Map<String, dynamic>?> saveChapter({
+    required String bookId,
+    required int chapterNumber,
+    required String title,
+    required String content,
+  }) =>
+      call('chapters.save', <String, dynamic>{
+        'bookId': bookId,
+        'chapterNumber': chapterNumber,
+        'title': title,
+        'content': content,
+      });
+
+  Future<void> deleteChapter({required String bookId, required int chapterNumber}) =>
+      call('chapters.delete', <String, dynamic>{
+        'bookId': bookId,
+        'chapterNumber': chapterNumber,
+      });
+
+  Future<void> deleteReview(String bookId) =>
+      call('reviews.delete', <String, dynamic>{'bookId': bookId});
+
+  // ── Comments / discussions ────────────────────────────────────────────────
+  Future<Map<String, dynamic>?> postComment({
+    required String bookId,
+    required String body,
+    String displayName = 'Reader',
+  }) =>
+      call('comments.create', <String, dynamic>{
+        'bookId': bookId,
+        'body': body,
+        'displayName': displayName,
+      });
+
+  Future<Map<String, dynamic>?> listComments(String bookId) =>
+      call('comments.list', <String, dynamic>{'bookId': bookId});
+
+  // ── Moderation ────────────────────────────────────────────────────────────
+  Future<void> reportContent({
+    required String targetType,
+    required String targetId,
+    required String reason,
+    String details = '',
+  }) =>
+      call('moderation.report', <String, dynamic>{
+        'targetType': targetType,
+        'targetId': targetId,
+        'reason': reason,
+        'details': details,
+      });
+
   // ── Direct messages / book sharing ───────────────────────────────────────
   Future<Map<String, dynamic>?> sendMessage({
     String? conversationId,

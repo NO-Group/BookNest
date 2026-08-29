@@ -720,6 +720,220 @@ Deno.serve(async (req: Request) => {
         return ok({ read: p.notificationId });
       }
 
+      // ── users & social graph reads ───────────────────────────────────────
+      case 'users.get': {
+        const target = typeof p.userId === 'string' ? p.userId : '';
+        if (!target) return fail('A valid userId is required');
+        return ok({ userId: target, ...(await userStats(await db(), target)) });
+      }
+
+      case 'social.list': {
+        const target = typeof p.userId === 'string' ? p.userId : '';
+        if (!target) return fail('A valid userId is required');
+        const type = p.type === 'following' ? 'following' : 'followers';
+        const d = await db();
+        const query = type === 'followers'
+          ? { followeeId: target }
+          : { followerId: target };
+        const rows = await d.collection('follows')
+          .find(query).sort({ createdAt: -1 }).limit(200).toArray();
+        const userIds = rows.map((r) =>
+          type === 'followers' ? r.followerId : r.followeeId);
+        return ok({ type, userIds });
+      }
+
+      case 'users.preferences': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const genres = Array.isArray(p.genres)
+          ? p.genres.filter((g) => typeof g === 'string').slice(0, 22)
+          : [];
+        await (await db()).collection('user_prefs').updateOne(
+          { userId: uid },
+          { $set: { genres, updatedAt: new Date() }, $setOnInsert: { userId: uid } },
+          { upsert: true },
+        );
+        return ok({ saved: genres.length });
+      }
+
+      // ── author tools: book & chapter management ──────────────────────────
+      case 'books.update': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        const d = await db();
+        const book = await d.collection('books')
+          .findOne({ _id: new ObjectId(p.bookId as string) }, { projection: { authorId: 1 } });
+        if (!book) return fail('Book not found', 404);
+        if (book.authorId !== uid) return fail('Only the author can edit this book', 403);
+        const updates: Record<string, unknown> = { updatedAt: new Date() };
+        if (typeof p.title === 'string' && p.title.trim().length >= 2) {
+          updates.title = p.title.trim().slice(0, 200);
+        }
+        if (typeof p.description === 'string') {
+          updates.description = p.description.slice(0, 5000);
+        }
+        if (typeof p.genre === 'string' && p.genre.trim()) updates.genre = p.genre.trim();
+        if (typeof p.coverUrl === 'string' && p.coverUrl.startsWith('http')) {
+          updates.coverUrl = p.coverUrl;
+        }
+        await d.collection('books')
+          .updateOne({ _id: book._id }, { $set: updates });
+        return ok({ updated: true });
+      }
+
+      case 'books.stats': {
+        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        const d = await db();
+        const book = await d.collection('books')
+          .findOne({ _id: new ObjectId(p.bookId as string) });
+        if (!book) return fail('Book not found', 404);
+        const view = bookView(book as Record<string, unknown>);
+        const recent = await d.collection('reviews')
+          .find({ bookId: p.bookId as string })
+          .sort({ createdAt: -1 }).limit(5).toArray();
+        return ok({ stats: view, recentReviews: recent.map((r) => ({
+          id: String(r._id),
+          userName: r.userName ?? 'Reader',
+          rating: Number(r.rating ?? 0),
+          body: r.body ?? '',
+          createdAt: r.createdAt,
+        })) });
+      }
+
+      case 'books.bookmarked': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const d = await db();
+        const marks = await d.collection('book_bookmarks')
+          .find({ userId: uid }).sort({ createdAt: -1 }).limit(100).toArray();
+        const ids = marks.map((m) => m.bookId).filter(isHexId);
+        if (ids.length === 0) return ok({ books: [] });
+        const books = await d.collection('books')
+          .find({ _id: { $in: ids.map((id) => new ObjectId(id)) } })
+          .toArray();
+        const byId = new Map(books.map((b) => [String(b._id), b]));
+        const ordered = marks
+          .map((m) => byId.get(m.bookId))
+          .filter((b) => b != null)
+          .map((b) => bookView(b as Record<string, unknown>));
+        return ok({ books: ordered });
+      }
+
+      case 'chapters.save': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        const bookId = p.bookId as string;
+        const chapterNumber = Math.round(Number(p.chapterNumber ?? 1)) || 1;
+        const title = String(p.title ?? `Chapter ${chapterNumber}`).slice(0, 200);
+        const content = String(p.content ?? '').slice(0, 500_000);
+        const d = await db();
+        const book = await d.collection('books')
+          .findOne({ _id: new ObjectId(bookId) }, { projection: { authorId: 1 } });
+        if (!book) return fail('Book not found', 404);
+        if (book.authorId !== uid) return fail('Only the author can edit chapters', 403);
+        await d.collection('chapters').updateOne(
+          { bookId, chapterNumber },
+          { $set: { title, content, updatedAt: new Date() }, $setOnInsert: { bookId, chapterNumber, createdAt: new Date() } },
+          { upsert: true },
+        );
+        const total = await d.collection('chapters').countDocuments({ bookId });
+        await d.collection('books')
+          .updateOne({ _id: book._id }, { $set: { chaptersCount: total, updatedAt: new Date() } });
+        return ok({ saved: true, chaptersCount: total });
+      }
+
+      case 'chapters.delete': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        const bookId = p.bookId as string;
+        const chapterNumber = Math.round(Number(p.chapterNumber ?? 0));
+        const d = await db();
+        const book = await d.collection('books')
+          .findOne({ _id: new ObjectId(bookId) }, { projection: { authorId: 1 } });
+        if (!book) return fail('Book not found', 404);
+        if (book.authorId !== uid) return fail('Only the author can edit chapters', 403);
+        const removed = await d.collection('chapters')
+          .deleteOne({ bookId, chapterNumber });
+        return ok({ deleted: removed.deletedCount > 0 });
+      }
+
+      // ── reviews: delete own ──────────────────────────────────────────────
+      case 'reviews.delete': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        const bookId = p.bookId as string;
+        const d = await db();
+        const existing = await d.collection('reviews').findOne({ bookId, userId: uid });
+        if (!existing) return ok({ deleted: false });
+        await d.collection('reviews').deleteOne({ _id: existing._id });
+        await d.collection('books').updateOne(
+          { _id: new ObjectId(bookId) },
+          { $inc: { reviewCount: -1, ratingSum: -Number(existing.rating ?? 0) } },
+        );
+        return ok({ deleted: true });
+      }
+
+      // ── comments (book discussions) ──────────────────────────────────────
+      case 'comments.create': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        const body = String(p.body ?? '').trim().slice(0, 2000);
+        if (!body) return fail('Comment text is empty');
+        const d = await db();
+        const now = new Date();
+        const doc = {
+          bookId: p.bookId as string,
+          userId: uid,
+          userName: String(p.displayName ?? 'Reader').slice(0, 80),
+          body,
+          createdAt: now,
+        };
+        const inserted = await d.collection('comments').insertOne({ ...doc });
+        return ok({ comment: { id: String(inserted.insertedId), ...doc } });
+      }
+
+      case 'comments.list': {
+        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        const limit = Math.min(Number(p.limit ?? 30) || 30, 50);
+        const rows = await (await db()).collection('comments')
+          .find({ bookId: p.bookId as string })
+          .sort({ createdAt: -1 }).limit(limit).toArray();
+        return ok({
+          comments: rows.map((c) => ({
+            id: String(c._id),
+            userId: c.userId,
+            userName: c.userName ?? 'Reader',
+            body: c.body ?? '',
+            createdAt: c.createdAt,
+          })),
+        });
+      }
+
+      // ── moderation: user reports ─────────────────────────────────────────
+      case 'moderation.report': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const targetType = ['book', 'user', 'comment', 'review', 'post']
+          .includes(String(p.targetType)) ? String(p.targetType) : null;
+        const reason = String(p.reason ?? '').trim().slice(0, 80);
+        if (!targetType || !reason) return fail('targetType and reason are required');
+        await (await db()).collection('reports').insertOne({
+          targetType,
+          targetId: String(p.targetId ?? '').slice(0, 128),
+          reporterId: uid,
+          reason,
+          details: String(p.details ?? '').slice(0, 1000),
+          status: 'open',
+          createdAt: new Date(),
+        });
+        return ok({ reported: true });
+      }
+
       default:
         return fail(`Unknown action: ${action}`, 404);
     }

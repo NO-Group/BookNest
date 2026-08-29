@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
 import '../../../services/supabase_service.dart';
+import '../../components/booknest_ui.dart' show TagChip, kBookNestGenres;
 
 class BooksLibraryScreen extends StatefulWidget {
   const BooksLibraryScreen({super.key});
@@ -210,6 +211,21 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  // The 22 BookNest genres — tap to browse a genre shelf.
+                  SizedBox(
+                    height: 36,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: kBookNestGenres.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) => TagChip(
+                        label: kBookNestGenres[index],
+                        onTap: () => context.push(
+                            '/genre?name=${Uri.encodeComponent(kBookNestGenres[index])}'),
+                      ),
+                    ),
                   ),
                 ],
               ),

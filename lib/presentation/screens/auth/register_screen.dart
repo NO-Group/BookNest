@@ -42,7 +42,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       if (res.user != null && mounted) {
-        context.go('/feed');
+        context.go('/onboarding');
       }
     } on AuthException catch (e) {
       if (mounted) {

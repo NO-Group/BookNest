@@ -29,6 +29,13 @@ the last piece.
 
 ## Step 2 — Add the function secrets (dashboard table)
 
+> ℹ️ **Why Supabase rejected `SUPABASE_…` keys:** that's correct behaviour!
+> Keys starting with `SUPABASE_` are **reserved and auto-injected** into every
+> edge function (`SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+> `SUPABASE_SERVICE_ROLE_KEY` already exist inside your function). You never
+> add them manually. The only secrets BookNest needs from you are the five
+> below.
+
 1. Still in **Edge Functions**, open the **Secrets** tab
    (project sidebar: **Edge Functions → Secrets**).
 2. Add these keys one row at a time. The **values are the credentials you
@@ -38,17 +45,9 @@ the last piece.
    |---|---|---|
    | `MONGO_URI` | your full `mongodb+srv://…` string | Atlas → Connect → Drivers |
    | `MONGO_DB_NAME` | `booknest` | |
-   | `SUPABASE_SERVICE_ROLE_KEY` | your service-role key | Dashboard → Project Settings → API |
    | `CLOUDINARY_API_KEY` | your Cloudinary API key | Console → Settings → Access Keys |
    | `CLOUDINARY_API_SECRET` | your Cloudinary API secret | same page |
-   | `R2_ACCOUNT_ID` | *(leave for later)* | when your R2 bucket exists |
-   | `R2_ACCESS_KEY_ID` | *(leave for later)* | |
-   | `R2_SECRET_ACCESS_KEY` | *(leave for later)* | |
-   | `R2_BUCKET_NAME` | `booknest-stem-media` | |
-   | `R2_PUBLIC_DOMAIN_URL` | *(leave for later)* | |
-
-   R2 rows can wait — the function runs fine without them; heavy-media
-   features light up later.
+   | `R2_*` (5 keys) | *(leave for later)* | when your R2 bucket exists |
 
 ## Step 3 — Allow MongoDB to accept Supabase (one setting)
 

@@ -12,6 +12,25 @@ import '../presentation/screens/books/publish_details_screen.dart';
 import '../presentation/screens/books/book_details_screen.dart';
 import '../presentation/screens/dms/dm_list_screen.dart';
 import '../presentation/screens/dms/dm_chat_screen.dart';
+import '../presentation/screens/settings/settings_screen.dart';
+import '../presentation/screens/settings/edit_profile_screen.dart';
+import '../presentation/screens/library/my_library_screen.dart';
+import '../presentation/screens/notifications/notifications_screen.dart';
+import '../presentation/screens/profile/author_profile_screen.dart';
+import '../presentation/screens/profile/follow_list_screen.dart';
+import '../presentation/screens/books/writer_dashboard_screen.dart';
+import '../presentation/screens/books/manage_book_screen.dart';
+import '../presentation/screens/books/chapter_manager_screen.dart';
+import '../presentation/screens/books/chapter_editor_screen.dart';
+import '../presentation/screens/books/book_analytics_screen.dart';
+import '../presentation/screens/books/reviews_hub_screen.dart';
+import '../presentation/screens/books/book_reviews_screen.dart';
+import '../presentation/screens/books/book_discussion_screen.dart';
+import '../presentation/screens/books/genre_browse_screen.dart';
+import '../presentation/screens/search/global_search_screen.dart';
+import '../presentation/screens/onboarding/onboarding_screen.dart';
+import '../presentation/screens/support/privacy_screen.dart';
+import '../presentation/screens/support/about_screen.dart';
 import '../presentation/screens/profile/profile_screen.dart';
 import '../presentation/screens/feed/create_quote_screen.dart';
 import '../presentation/screens/feed/create_news_screen.dart';
@@ -37,6 +56,15 @@ const Set<String> _protectedRoutes = {
   '/editor',
   '/publish-details',
   '/chat',
+  '/settings',
+  '/library',
+  '/notifications',
+  '/dashboard',
+  '/manage',
+  '/write-chapter',
+  '/analytics',
+  '/my-reviews',
+  '/onboarding',
   '/create/club',
   '/create/community',
   '/create/organization',
@@ -100,6 +128,99 @@ final GoRouter appRouter = GoRouter(
         bookId: state.pathParameters['id'] ?? '',
       ),
     ),
+    GoRoute(
+      path: '/book/:id/reviews',
+      builder: (context, state) => BookReviewsScreen(
+        bookId: state.pathParameters['id'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/book/:id/discussion',
+      builder: (context, state) => BookDiscussionScreen(
+        bookId: state.pathParameters['id'] ?? '',
+      ),
+    ),
+    // ── Account & library ──
+    GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+    GoRoute(
+      path: '/settings/edit-profile',
+      builder: (context, state) => const EditProfileScreen(),
+    ),
+    GoRoute(path: '/library', builder: (context, state) => const MyLibraryScreen()),
+    GoRoute(
+      path: '/notifications',
+      builder: (context, state) => const NotificationsScreen(),
+    ),
+    GoRoute(
+      path: '/onboarding',
+      builder: (context, state) => const OnboardingScreen(),
+    ),
+    // ── Social ──
+    GoRoute(
+      path: '/user/:id',
+      builder: (context, state) => AuthorProfileScreen(
+        userId: state.pathParameters['id'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/user/:id/follows',
+      builder: (context, state) => FollowListScreen(
+        userId: state.pathParameters['id'] ?? '',
+        type: state.uri.queryParameters['type'] == 'following'
+            ? 'following'
+            : 'followers',
+      ),
+    ),
+    // ── Writer tools ──
+    GoRoute(
+      path: '/dashboard',
+      builder: (context, state) => const WriterDashboardScreen(),
+    ),
+    GoRoute(
+      path: '/manage/:bookId',
+      builder: (context, state) => ManageBookScreen(
+        bookId: state.pathParameters['bookId'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/manage/:bookId/chapters',
+      builder: (context, state) => ChapterManagerScreen(
+        bookId: state.pathParameters['bookId'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/write-chapter',
+      builder: (context, state) => ChapterEditorScreen(
+        bookId: state.uri.queryParameters['bookId'] ?? '',
+        chapterNumber:
+            int.tryParse(state.uri.queryParameters['number'] ?? '1') ?? 1,
+        initialTitle: state.uri.queryParameters['title'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/analytics/:bookId',
+      builder: (context, state) => BookAnalyticsScreen(
+        bookId: state.pathParameters['bookId'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/my-reviews',
+      builder: (context, state) => const ReviewsHubScreen(),
+    ),
+    // ── Discovery ──
+    GoRoute(
+      path: '/genre',
+      builder: (context, state) => GenreBrowseScreen(
+        genre: state.uri.queryParameters['name'] ?? 'Romance',
+      ),
+    ),
+    GoRoute(
+      path: '/search',
+      builder: (context, state) => const GlobalSearchScreen(),
+    ),
+    // ── Support ──
+    GoRoute(path: '/privacy', builder: (context, state) => const PrivacyScreen()),
+    GoRoute(path: '/about', builder: (context, state) => const AboutScreen()),
     // Telegram-style chat, opened full-screen (nav bar hidden).
     // `/chat/<conversationId>` continues a chat; `/chat/peer/<peerId>`
     // starts one (the edge function reuses the 1:1 conversation).

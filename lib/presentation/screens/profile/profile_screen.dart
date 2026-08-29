@@ -347,7 +347,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
               icon: Icons.menu_book_rounded,
               label: 'My library',
               subtitle: 'Books you love and write',
-              onTap: () => context.push('/books'),
+              onTap: () => context.go('/library'),
+            ),
+            _ProfileAction(
+              icon: Icons.dashboard_rounded,
+              label: 'Writer dashboard',
+              subtitle: 'Manage your books and chapters',
+              onTap: () => context.push('/dashboard'),
+            ),
+            _ProfileAction(
+              icon: Icons.person_outline_rounded,
+              label: 'My public profile',
+              subtitle: 'See what readers see',
+              onTap: () => context.push('/user/$_viewerId'),
+            ),
+            _ProfileAction(
+              icon: Icons.notifications_none_rounded,
+              label: 'Notifications',
+              subtitle: 'Messages and activity',
+              onTap: () => context.push('/notifications'),
+            ),
+            _ProfileAction(
+              icon: Icons.settings_rounded,
+              label: 'Settings',
+              subtitle: 'Theme, privacy and more',
+              onTap: () => context.push('/settings'),
             ),
             _ProfileAction(
               icon: Icons.logout_rounded,
