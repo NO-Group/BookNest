@@ -81,7 +81,7 @@ class _DMListScreenState extends State<DMListScreen> {
             .client
             .from('profiles')
             .select('id, username, display_name, avatar_url')
-            .in('id', peerIds);
+            .inFilter('id', peerIds);
         for (final row in rows as List) {
           final person = Map<String, dynamic>.from(row as Map);
           people[person['id']?.toString() ?? ''] = person;
@@ -134,7 +134,7 @@ class _DMListScreenState extends State<DMListScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _ContactPickerSheet(contacts: directory),
+      builder: (_) => _ContactPickerSheet(contacts: directory ?? const <Map<String, dynamic>>[]),
     );
   }
 

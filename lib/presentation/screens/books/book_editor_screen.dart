@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../config/theme.dart';
 
 import '../../../services/supabase_service.dart';
 
@@ -253,7 +254,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
             ),
             Divider(color: Theme.of(context).dividerColor, height: 1),
             Container(
-              color: const BookNestColors.darkReceivedMessage,
+              color: BookNestColors.darkReceivedMessage,
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -270,12 +271,12 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                       onPressed: () => _applyInlineStyle('*'),
                     ),
                     _buildToolbarButton(
-                      icon: Icons.format_header,
+                      icon: Icons.title,
                       tooltip: 'Heading 1 (# text)',
                       onPressed: () => _applyLinePrefix('# '),
                     ),
                     _buildToolbarButton(
-                      icon: Icons.format_header,
+                      icon: Icons.title,
                       tooltip: 'Heading 2 (## text)',
                       onPressed: () => _applyLinePrefix('## '),
                     ),

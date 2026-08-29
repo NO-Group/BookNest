@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class CreateReelScreen extends StatefulWidget {
@@ -64,7 +65,7 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
           TextButton(
             onPressed: _isLoading ? null : _publishReel,
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
@@ -86,7 +87,7 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: const BookNestColors.lightTextSecondary,
+                  color: BookNestColors.lightTextSecondary,
                   style: BorderStyle.solid,
                 ),
               ),

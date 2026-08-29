@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class CreateEventScreen extends StatefulWidget {
@@ -30,7 +31,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
+            colorScheme: ColorScheme.dark(
               primary: BookNestColors.cyan,
               surface: Theme.of(context).colorScheme.surface,
             ),
@@ -49,7 +50,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
+            colorScheme: ColorScheme.dark(
               primary: BookNestColors.cyan,
               surface: Theme.of(context).colorScheme.surface,
             ),
@@ -119,7 +120,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
           TextButton(
             onPressed: _isLoading ? null : _publishEvent,
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
@@ -158,7 +159,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
           // Date picker
           ListTile(
             leading: const Icon(Icons.calendar_today, color: BookNestColors.cyan),
-            title: const Text('Date', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+            title: Text('Date', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
             subtitle: Text(
               DateFormat('EEE, MMM d, yyyy').format(_selectedDate),
               style: const TextStyle(color: BookNestColors.lightTextSecondary),
@@ -170,7 +171,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
           // Time picker
           ListTile(
             leading: const Icon(Icons.access_time, color: BookNestColors.cyan),
-            title: const Text('Time', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+            title: Text('Time', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
             subtitle: Text(
               _selectedTime.format(context),
               style: const TextStyle(color: BookNestColors.lightTextSecondary),
@@ -184,14 +185,14 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
           // Online toggle
           SwitchListTile(
-            title: const Text('Online Event', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+            title: Text('Online Event', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
             subtitle: Text(
               _isOnline ? 'Virtual meeting link will be shared' : 'In-person event',
               style: const TextStyle(color: BookNestColors.lightTextSecondary),
             ),
             value: _isOnline,
             onChanged: (v) => setState(() => _isOnline = v),
-            activeThumbColor: const BookNestColors.cyan,
+            activeThumbColor: BookNestColors.cyan,
           ),
 
           // Location (only if not online)

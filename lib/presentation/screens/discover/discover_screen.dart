@@ -346,15 +346,15 @@ class _DiscoverCard extends StatelessWidget {
   Color get _typeColor {
     switch (item['type']) {
       case 'community':
-        return const BookNestColors.cyan;
+        return BookNestColors.cyan;
       case 'club':
-        return const BookNestColors.navy;
+        return BookNestColors.navy;
       case 'organization':
-        return const BookNestColors.cyan;
+        return BookNestColors.cyan;
       case 'school':
-        return const BookNestColors.navy;
+        return BookNestColors.navy;
       default:
-        return const BookNestColors.lightTextSecondary;
+        return BookNestColors.lightTextSecondary;
     }
   }
 
@@ -411,7 +411,7 @@ class _DiscoverCard extends StatelessWidget {
             Container(
               height: 120,
               decoration: BoxDecoration(
-                color: const BookNestColors.navy,
+                color: BookNestColors.navy,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 image: item['cover_image_url'] != null
                     ? DecorationImage(

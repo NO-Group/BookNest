@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class CreatePollScreen extends StatefulWidget {
@@ -85,7 +86,7 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
           TextButton(
             onPressed: _isLoading ? null : _publishPoll,
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
@@ -124,7 +125,7 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
                       height: 12,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: const BookNestColors.lightTextSecondary),
+                        border: Border.all(color: BookNestColors.lightTextSecondary),
                       ),
                     ),
                     const SizedBox(width: 12),

@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class CreateNewsScreen extends StatefulWidget {
@@ -63,7 +64,7 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
           TextButton(
             onPressed: _isLoading ? null : _publishNews,
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),

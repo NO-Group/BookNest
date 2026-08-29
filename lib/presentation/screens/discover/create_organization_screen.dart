@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class CreateOrganizationScreen extends StatefulWidget {
@@ -74,7 +75,7 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
           TextButton(
             onPressed: _isLoading ? null : _createOrganization,
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
@@ -91,10 +92,10 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
             width: double.infinity,
             height: 160,
             decoration: BoxDecoration(
-              color: const BookNestColors.navy,
+              color: BookNestColors.navy,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: const BookNestColors.lightTextSecondary,
+                color: BookNestColors.lightTextSecondary,
                 style: BorderStyle.solid,
               ),
             ),
@@ -135,7 +136,7 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? const BookNestColors.navy : Theme.of(context).colorScheme.surface,
+                    color: isSelected ? BookNestColors.navy : Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(20),
                     border: isSelected ? null : Border.all(color: Theme.of(context).dividerColor),
                   ),
@@ -193,7 +194,7 @@ class _CreateOrganizationScreenState extends State<CreateOrganizationScreen> {
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -237,7 +238,7 @@ class _FeatureRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: const BookNestColors.cyan),
+        Icon(icon, size: 16, color: BookNestColors.cyan),
         const SizedBox(width: 10),
         Expanded(
           child: Text(

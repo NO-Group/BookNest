@@ -424,7 +424,7 @@ class _QuotePostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const BookNestColors.cyan.withOpacity(0.1),
+              color: BookNestColors.cyan.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -458,7 +458,7 @@ class _QuotePostCard extends StatelessWidget {
                 width: 3,
                 height: 20,
                 decoration: BoxDecoration(
-                  color: const BookNestColors.cyan,
+                  color: BookNestColors.cyan,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -480,7 +480,7 @@ class _QuotePostCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 14,
-                backgroundColor: const BookNestColors.navy,
+                backgroundColor: BookNestColors.navy,
                 child: Text(
                   author[0].toUpperCase(),
                   style: const TextStyle(
@@ -531,7 +531,7 @@ class _NewsPostCard extends StatelessWidget {
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               child: CachedNetworkImage(
-                post['metadata']['image_url'],
+                imageUrl: post['metadata']['image_url'],
                 width: double.infinity,
                 height: 180,
                 fit: BoxFit.cover,
@@ -545,7 +545,7 @@ class _NewsPostCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const BookNestColors.navy.withOpacity(0.1),
+                    color: BookNestColors.navy.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
@@ -626,7 +626,7 @@ class _PollPostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const BookNestColors.cyan.withOpacity(0.1),
+              color: BookNestColors.cyan.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -654,7 +654,7 @@ class _PollPostCard extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: const BookNestColors.navy,
+                color: BookNestColors.navy,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Theme.of(context).dividerColor),
               ),
@@ -665,7 +665,7 @@ class _PollPostCard extends StatelessWidget {
                     height: 20,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: const BookNestColors.lightTextSecondary),
+                      border: Border.all(color: BookNestColors.lightTextSecondary),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -714,7 +714,7 @@ class _EventPostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const BookNestColors.navy.withOpacity(0.1),
+              color: BookNestColors.navy.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -764,7 +764,7 @@ class _EventPostCard extends StatelessWidget {
             child: ElevatedButton(
               onPressed: () => _showEventDetails(context, post),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const BookNestColors.cyan,
+                backgroundColor: BookNestColors.cyan,
                 foregroundColor: BookNestColors.navyDeep,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -804,7 +804,7 @@ class _ReelPostCard extends StatelessWidget {
               Container(
                 height: 240,
                 decoration: BoxDecoration(
-                  color: const BookNestColors.navy,
+                  color: BookNestColors.navy,
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(16),
                   ),
@@ -829,7 +829,7 @@ class _ReelPostCard extends StatelessWidget {
                 width: 60,
                 height: 60,
                 decoration: BoxDecoration(
-                  color: const BookNestColors.cyan.withOpacity(0.9),
+                  color: BookNestColors.cyan.withOpacity(0.9),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -912,7 +912,7 @@ class _ArticlePostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const BookNestColors.navy.withOpacity(0.1),
+              color: BookNestColors.navy.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(

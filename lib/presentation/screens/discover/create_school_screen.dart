@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class CreateSchoolScreen extends StatefulWidget {
@@ -75,7 +76,7 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
           TextButton(
             onPressed: _isLoading ? null : _createSchool,
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
@@ -92,10 +93,10 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
             width: double.infinity,
             height: 160,
             decoration: BoxDecoration(
-              color: const BookNestColors.navy,
+              color: BookNestColors.navy,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: const BookNestColors.lightTextSecondary,
+                color: BookNestColors.lightTextSecondary,
                 style: BorderStyle.solid,
               ),
             ),
@@ -136,7 +137,7 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? const BookNestColors.cyan : Theme.of(context).colorScheme.surface,
+                    color: isSelected ? BookNestColors.cyan : Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(20),
                     border: isSelected ? null : Border.all(color: Theme.of(context).dividerColor),
                   ),
@@ -228,7 +229,7 @@ class _CreateSchoolScreenState extends State<CreateSchoolScreen> {
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -275,7 +276,7 @@ class _FeatureRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: const BookNestColors.cyan),
+        Icon(icon, size: 16, color: BookNestColors.cyan),
         const SizedBox(width: 10),
         Expanded(
           child: Text(

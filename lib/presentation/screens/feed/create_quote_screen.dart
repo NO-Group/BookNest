@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class CreateQuoteScreen extends StatefulWidget {
@@ -61,7 +62,7 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
           TextButton(
             onPressed: _isLoading ? null : _publishQuote,
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
@@ -97,7 +98,7 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                     '"${_contentController.text.isEmpty ? 'Your quote will appear here' : _contentController.text}"',
                     style: TextStyle(
                       color: _contentController.text.isEmpty
-                          ? const BookNestColors.lightTextSecondary
+                          ? BookNestColors.lightTextSecondary
                           : Theme.of(context).colorScheme.onSurface,
                       fontSize: 18,
                       fontStyle: FontStyle.italic,
@@ -111,7 +112,7 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                         width: 3,
                         height: 20,
                         decoration: BoxDecoration(
-                          color: const BookNestColors.cyan,
+                          color: BookNestColors.cyan,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -120,8 +121,8 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
                         '— ${_authorController.text.isEmpty ? 'Author name' : _authorController.text}',
                         style: TextStyle(
                           color: _authorController.text.isEmpty
-                              ? const BookNestColors.lightTextSecondary
-                              : const BookNestColors.lightTextSecondary,
+                              ? BookNestColors.lightTextSecondary
+                              : BookNestColors.lightTextSecondary,
                           fontSize: 14,
                         ),
                       ),

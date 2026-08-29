@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class CreateClubScreen extends StatefulWidget {
@@ -77,7 +78,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
           TextButton(
             onPressed: _isLoading ? null : _createClub,
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
@@ -94,10 +95,10 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
             width: double.infinity,
             height: 160,
             decoration: BoxDecoration(
-              color: const BookNestColors.navy,
+              color: BookNestColors.navy,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: const BookNestColors.lightTextSecondary,
+                color: BookNestColors.lightTextSecondary,
                 style: BorderStyle.solid,
               ),
             ),
@@ -151,7 +152,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? const BookNestColors.navy : Theme.of(context).colorScheme.surface,
+                    color: isSelected ? BookNestColors.navy : Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(20),
                     border: isSelected ? null : Border.all(color: Theme.of(context).dividerColor),
                   ),
@@ -171,14 +172,14 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
 
           // Privacy
           SwitchListTile(
-            title: const Text('Private Club', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+            title: Text('Private Club', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
             subtitle: Text(
               _isPrivate ? 'Invite-only' : 'Anyone can join',
               style: const TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 12),
             ),
             value: _isPrivate,
             onChanged: (v) => setState(() => _isPrivate = v),
-            activeThumbColor: const BookNestColors.navy,
+            activeThumbColor: BookNestColors.navy,
           ),
         ],
       ),

@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class CreateCommunityScreen extends StatefulWidget {
@@ -80,7 +81,7 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
           TextButton(
             onPressed: _isLoading ? null : _createCommunity,
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
@@ -99,10 +100,10 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
               width: double.infinity,
               height: 160,
               decoration: BoxDecoration(
-                color: const BookNestColors.navy,
+                color: BookNestColors.navy,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: const BookNestColors.lightTextSecondary,
+                  color: BookNestColors.lightTextSecondary,
                   style: BorderStyle.solid,
                 ),
               ),

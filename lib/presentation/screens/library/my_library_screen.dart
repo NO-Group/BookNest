@@ -144,7 +144,7 @@ class _SavedTab extends StatelessWidget {
     }
     return RefreshIndicator(
       color: BookNestColors.cyan,
-      onRefresh: onRetry,
+      onRefresh: () async => onRetry(),
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
         itemCount: books.length,

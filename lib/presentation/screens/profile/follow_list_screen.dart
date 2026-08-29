@@ -56,7 +56,7 @@ class _FollowListScreenState extends State<FollowListScreen> {
           .client
           .from('profiles')
           .select('id, username, display_name, avatar_url')
-          .in('id', ids);
+          .inFilter('id', ids);
       if (!mounted) return;
       setState(() {
         _people = (rows as List)
