@@ -49,6 +49,12 @@ class SupabaseService {
     if (raw.contains('foreign key')) {
       return 'Your profile row is missing — restart the app once to repair it.';
     }
+    if (raw.contains('not defined') ||
+        raw.contains('Internal Server Error') ||
+        raw.contains('FunctionException')) {
+      return 'The BookNest service hit a snag — deploy the latest edge '
+          'function (Dashboard → Edge Functions → booknest-api) and retry.';
+    }
     return raw.replaceFirst(RegExp(r'^.*?\{\s*"'), 'Something went wrong: ');
   }
 

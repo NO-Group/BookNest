@@ -22,6 +22,11 @@ dependencies:
   flutter_cache_manager: ^3.3.0
   shared_preferences: ^2.2.0
 
+dependency_overrides:
+  # jni 1.0.1 is retracted and its Android Gradle file is broken
+  # ("Could not find method kotlin()"); 1.0.3 fixes the build.
+  jni: ^1.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

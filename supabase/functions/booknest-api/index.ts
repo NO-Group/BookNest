@@ -325,17 +325,17 @@ Deno.serve(async (req: Request) => {
       // ── resilience: RLS-exempt whitelisted write (ownership force-bound) ─
       case 'db.write': {
         const uid = await currentUserId(req);
-        if (!uid) return err('Sign in to make changes.', 401);
+        if (!uid) return fail('Sign in to make changes.', 401);
         const table = String(p.table ?? '');
         const op = String(p.op ?? 'insert');
-        if (!WRITABLE_TABLES.has(table)) return err('Table not writable.', 400);
+        if (!WRITABLE_TABLES.has(table)) return fail('Table not writable.', 400);
         const ownerCol = OWNER_COLUMN[table];
         const db = serviceClient().from(table);
         if (op === 'insert') {
           const values = { ...(p.values as Record<string, unknown> ?? {}) };
           if (ownerCol) values[ownerCol] = uid;
           const { data, error } = await db.insert(values).select().single();
-          if (error) return err(error.message, 400);
+          if (error) return fail(error.message, 400);
           return ok({ row: data });
         }
         if (op === 'update') {
@@ -343,17 +343,17 @@ Deno.serve(async (req: Request) => {
           if (ownerCol) match[ownerCol] = uid;
           const { data, error } = await db.update(p.values ?? {}).match(match)
             .select().single();
-          if (error) return err(error.message, 400);
+          if (error) return fail(error.message, 400);
           return ok({ row: data });
         }
         if (op === 'delete') {
           const match = { ...(p.match as Record<string, unknown> ?? {}) };
           if (ownerCol) match[ownerCol] = uid;
           const { error } = await db.delete().match(match);
-          if (error) return err(error.message, 400);
+          if (error) return fail(error.message, 400);
           return ok({ deleted: true });
         }
-        return err('Unsupported op.', 400);
+        return fail('Unsupported op.', 400);
       }
 
       // ── books: browse ────────────────────────────────────────────────────

@@ -123,7 +123,7 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
           ),
         ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

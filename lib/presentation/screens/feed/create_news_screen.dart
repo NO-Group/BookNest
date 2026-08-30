@@ -125,7 +125,7 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
           ),
         ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -152,7 +152,7 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
                 border: InputBorder.none,
               ),
             ),
-            const Spacer(),
+            const SizedBox(height: 24),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
