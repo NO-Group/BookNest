@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 // lib/presentation/screens/settings/settings_screen.dart
 //
 // The full settings facility. Every control writes to an AppSettings
@@ -285,6 +287,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => context.push('/settings/edit-profile'),
             ),
             _SettingsRow(
+              icon: Icons.diamond_outlined,
+              label: 'Gems wallet',
+              onTap: () => context.push('/wallet'),
+            ),
+            _SettingsRow(
               icon: Icons.password_rounded,
               label: 'Change password',
               onTap: _changePassword,
@@ -367,16 +374,23 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: Theme.of(context).colorScheme.surface,
-        border: Border.all(color: Theme.of(context).dividerColor),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            color: Theme.of(context).colorScheme.surface.withOpacity(.72),
+            border: Border.all(
+                color: BookNestColors.cyan.withOpacity(.16)),
+          ),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: children),
+        ),
       ),
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: children),
     );
   }
 }
@@ -406,11 +420,15 @@ class _SettingsGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Theme.of(context).colorScheme.surface,
-        border: Border.all(color: Theme.of(context).dividerColor),
+        color: Theme.of(context).colorScheme.surface.withOpacity(.72),
+        border: Border.all(color: BookNestColors.cyan.withOpacity(.16)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(children: [
@@ -420,6 +438,8 @@ class _SettingsGroup extends StatelessWidget {
             Divider(height: 1, indent: 56, color: Theme.of(context).dividerColor),
         ],
       ]),
+        ),
+      ),
     );
   }
 }

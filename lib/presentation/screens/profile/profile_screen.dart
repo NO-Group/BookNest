@@ -377,6 +377,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onTap: () => context.push('/user/$_viewerId'),
             ),
             _ProfileAction(
+              icon: Icons.diamond_outlined,
+              label: 'Gems wallet',
+              subtitle: 'Balance, daily bonus and activity',
+              onTap: () => context.push('/wallet'),
+            ),
+            _ProfileAction(
+              icon: Icons.auto_awesome_rounded,
+              label: 'Ask Jenny',
+              subtitle: 'Your AI reading companion',
+              onTap: () => context.push('/jenny'),
+            ),
+            _ProfileAction(
               icon: Icons.notifications_none_rounded,
               label: 'Notifications',
               subtitle: 'Messages and activity',

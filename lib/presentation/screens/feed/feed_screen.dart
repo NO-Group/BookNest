@@ -1,6 +1,7 @@
 // lib/presentation/screens/feed/feed_screen.dart
 
 import 'dart:math';
+import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -318,37 +319,42 @@ class _FeedScreenState extends State<FeedScreen>
   }
 
   Widget _buildPostTypeButton(_PostType type) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: () => _onPostTypeTap(type),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Theme.of(context).dividerColor),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: (dark
+                      ? BookNestColors.darkChatBackground
+                      : Colors.white)
+                  .withOpacity(.55),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: BookNestColors.cyan.withOpacity(.24)),
             ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(type.icon, color: type.color, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              type.label,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(type.icon, color: type.color, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  type.label,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

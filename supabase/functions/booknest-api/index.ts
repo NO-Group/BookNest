@@ -356,6 +356,107 @@ Deno.serve(async (req: Request) => {
         return fail('Unsupported op.', 400);
       }
 
+      // ── wallet: gems (balance in Supabase profiles, ledger in Mongo) ─────
+      case 'wallet.summary': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const col = dbFor('users').collection('gem_ledger');
+        const ledger = await col.find({ userId: uid })
+          .sort({ createdAt: -1 }).limit(50).toArray();
+        const prof = await serviceClient().from('profiles')
+          .select('gems').eq('id', uid).single();
+        return ok({
+          gems: prof.error ? 0 : Number(prof.data?.gems ?? 0),
+          ledger: ledger.map((d: any) => ({
+            delta: d.delta, reason: d.reason, day: d.day ?? null,
+            createdAt: d.createdAt,
+          })),
+        });
+      }
+
+      // One daily bonus claim per UTC day, enforced by the ledger itself.
+      case 'wallet.claim': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const col = dbFor('users').collection('gem_ledger');
+        const day = todayUtc();
+        const existing = await col.findOne({ userId: uid, reason: 'daily', day });
+        const prof = await serviceClient().from('profiles')
+          .select('gems').eq('id', uid).single();
+        const current = prof.error ? 0 : Number(prof.data?.gems ?? 0);
+        if (existing) return ok({ granted: false, gems: current });
+        await col.insertOne({
+          userId: uid, delta: 5, reason: 'daily', day,
+          createdAt: new Date(),
+        });
+        const gems = current + 5;
+        await serviceClient().from('profiles').update({ gems }).eq('id', uid);
+        return ok({ granted: true, gems });
+      }
+
+      // ── Jenny: the AI reading companion (JENNY_API_KEY edge secret) ──────
+      case 'jenny.chat': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const message = String(p.message ?? '').trim();
+        if (!message) return fail('Say something to Jenny first.');
+        const col = dbFor('chats').collection('jenny_messages');
+        const recent = await col.find({ userId: uid })
+          .sort({ createdAt: -1 }).limit(10).toArray();
+        const history = recent.reverse().map((d: any) => ({
+          role: d.role as string, content: String(d.content ?? ''),
+        }));
+        await col.insertOne({
+          userId: uid, role: 'user', content: message, createdAt: new Date(),
+        });
+        const apiKey = Deno.env.get('JENNY_API_KEY');
+        let reply: string;
+        let connected = true;
+        if (!apiKey) {
+          connected = false;
+          reply = "I'm not plugged into my brain yet — ask the library admin "
+            + 'to add the JENNY_API_KEY edge secret, and I will be all '
+            + 'ears (and all books) 📖';
+        } else {
+          try {
+            const base = Deno.env.get('JENNY_API_URL') ?? 'https://api.openai.com/v1';
+            const model = Deno.env.get('JENNY_MODEL') ?? 'gpt-4o-mini';
+            const res = await fetch(`${base}/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify({
+                model,
+                messages: [
+                  {
+                    role: 'system',
+                    content: "You are Jenny, BookNest's warm, book-loving AI "
+                      + 'companion. Keep replies short, kind and practical — '
+                      + 'recommend books, explain study topics, cheer the '
+                      + 'reader on. You know WAEC and African literature well.',
+                  },
+                  ...history,
+                  { role: 'user', content: message },
+                ],
+                max_tokens: 400,
+              }),
+            });
+            const data = await res.json();
+            reply = data?.choices?.[0]?.message?.content
+              ?? 'Hmm — my thoughts got tangled. Ask me again?';
+          } catch {
+            connected = false;
+            reply = 'I could not reach my service just now. Try again shortly.';
+          }
+        }
+        await col.insertOne({
+          userId: uid, role: 'assistant', content: reply, createdAt: new Date(),
+        });
+        return ok({ connected, reply });
+      }
+
       // ── books: browse ────────────────────────────────────────────────────
       case 'books.list': {
         const d = await dbFor('books');

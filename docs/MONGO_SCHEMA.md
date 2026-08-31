@@ -98,3 +98,15 @@ Index: `{userId:1, createdAt:-1}`
    (delta = new − old) — no aggregation jobs, no `countDocuments`.
 4. Chapter content capped at 500KB/chapter, 300 chapters/book.
 5. Cursor pagination everywhere (`createdAt`/`_id`), limits ≤ 50/100.
+
+## v1.2 additions
+
+| Database | Collection | Purpose |
+|---|---|---|
+| booknest_users | gem_ledger | One document per gem movement (`userId, delta, reason, day, createdAt`); the `daily` reason + unique UTC day enforces one claim per day |
+| booknest_chats | jenny_messages | Ask-Jenny conversation turns (`userId, role user|assistant, content, createdAt`); last 10 turns are replayed as model context |
+
+Balance source of truth stays `profiles.gems` (Supabase); the ledger is the
+audit trail. New edge actions: `wallet.summary`, `wallet.claim`, `jenny.chat`
+(Jenny needs the optional `JENNY_API_KEY` / `JENNY_API_URL` / `JENNY_MODEL`
+edge secrets — without a key she answers honestly that she is not connected).
