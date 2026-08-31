@@ -344,7 +344,9 @@ Deno.serve(async (req: Request) => {
     return fail('Invalid JSON body');
   }
   const action = body.action ?? '';
-  const p = body.payload ?? {};
+  // Accept both shapes: BackendApi sends { action, payload }, while the
+  // writeRow/updateRow fallbacks send fields at the top level.
+  const p = body.payload ?? body;
 
   try {
     switch (action) {

@@ -36,3 +36,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo/stylus_polished.svg
+    - assets/logo/booknest_logo_new_transparent_dark_theme.png

@@ -48,29 +48,25 @@ class _SplashScreenState extends State<SplashScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 100,
-                height: 100,
+                width: 116,
+                height: 116,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [BookNestColors.cyan, BookNestColors.cyanSoft],
-                  ),
-                  borderRadius: BorderRadius.circular(24),
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                      color: BookNestColors.cyan.withOpacity(.45)),
                   boxShadow: [
                     BoxShadow(
-                      color: BookNestColors.cyan.withOpacity(.35),
+                      color: BookNestColors.cyan.withOpacity(.3),
                       blurRadius: 34,
                       offset: const Offset(0, 10),
                     ),
                   ],
                 ),
-                child: const Center(
-                  child: Icon(
-                    Icons.menu_book,
-                    color: BookNestColors.navyDeep,
-                    size: 48,
-                  ),
+                padding: const EdgeInsets.all(12),
+                child: Image.asset(
+                  'assets/logo/booknest_logo_new_transparent_dark_theme.png',
+                  fit: BoxFit.contain,
                 ),
               ),
               const SizedBox(height: 24),
