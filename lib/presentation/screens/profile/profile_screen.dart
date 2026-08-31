@@ -509,10 +509,10 @@ class _CloudStatusChip extends StatelessWidget {
             ? BookNestColors.cyan
             : theme.hintColor;
     final label = checking
-        ? 'Checking BookNest cloud…'
+        ? 'Connecting…'
         : online
-            ? 'BookNest cloud connected ✓'
-            : 'Cloud not connected yet · tap to retry';
+            ? 'Synced ✓'
+            : 'Offline · tap to retry';
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: onRetry,

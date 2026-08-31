@@ -114,7 +114,8 @@ class _EventsAgendaScreenState extends State<EventsAgendaScreen> {
               ? EmptyState(
                   icon: Icons.wifi_off_rounded,
                   title: 'Agenda is offline',
-                  subtitle: 'The BookNest backend is not reachable yet.',
+                  subtitle: 'You seem offline — check your connection and try '
+                      'again.',
                   action: TextButton.icon(
                     onPressed: _load,
                     icon: const Icon(Icons.refresh_rounded,

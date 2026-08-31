@@ -278,6 +278,20 @@ def check_file(path, packages, violations):
                 f'{rel}:{line}: use x != null && instead of is Map && for a '
                 f'nullable maybeSingle result')
 
+    # production language: no infrastructure talk in user-visible strings
+    USER_BANNED = ['deploy', 'Dashboard', 'edge function', 'database upgrade',
+                   'backend is not reachable', 'JENNY_API_KEY']
+    for i, line in enumerate(src.split('\n')):
+        t = line.strip()
+        if t.startswith('//') or t.startswith('*') or t.startswith('import')                 or t.startswith('export') or t.startswith('part '):
+            continue
+        for word in USER_BANNED:
+            if word in line and ("'" in line or '"' in line):
+                violations.append(
+                    f'{rel}:{i + 1}: user-visible string contains '
+                    f'infrastructure language ({word!r}) — use production-safe '
+                    f'copy')
+
     # CachedNetworkImage positional guard
     for m in re.finditer(r'CachedNetworkImage\(', code):
         rest = code[m.end():m.end() + 40].lstrip()

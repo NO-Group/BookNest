@@ -452,9 +452,8 @@ Deno.serve(async (req: Request) => {
         let connected = true;
         if (!apiKey) {
           connected = false;
-          reply = "I'm not plugged into my brain yet — ask the library admin "
-            + 'to add the JENNY_API_KEY edge secret, and I will be all '
-            + 'ears (and all books) 📖';
+          reply = "I'm not connected to my brain yet — please check back "
+            + 'soon, I will be all ears (and all books) 📖';
         } else {
           try {
             const base = Deno.env.get('JENNY_API_URL') ?? 'https://api.openai.com/v1';

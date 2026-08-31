@@ -130,7 +130,8 @@ class _StreaksScreenState extends State<StreaksScreen> {
               ? EmptyState(
                   icon: Icons.wifi_off_rounded,
                   title: 'Streaks are offline',
-                  subtitle: 'The BookNest backend is not reachable yet.',
+                  subtitle: 'You seem offline — check your connection and try '
+                      'again.',
                   action: TextButton.icon(
                     onPressed: _load,
                     icon: const Icon(Icons.refresh_rounded,

@@ -110,8 +110,8 @@ class _WalletScreenState extends State<WalletScreen> {
               ? EmptyState(
                   icon: Icons.wifi_off_rounded,
                   title: 'Wallet is offline',
-                  subtitle: 'The BookNest backend is not reachable yet — '
-                      'deploy the edge function and retry.',
+                  subtitle: 'You seem offline — check your connection and try '
+                      'again.',
                   action: TextButton.icon(
                     onPressed: _load,
                     icon: const Icon(Icons.refresh_rounded,

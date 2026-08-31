@@ -69,7 +69,7 @@ class _BookAnalyticsScreenState extends State<BookAnalyticsScreen> {
                   title: 'Cloud not connected yet',
                   subtitle:
                       'Reading counts, likes, saves and reviews are counted in '
-                      'the BookNest cloud. They will appear here once deployed.',
+                      'the BookNest cloud. They will appear here once synced.',
                   action: GradientButton(
                       label: 'Retry',
                       icon: Icons.refresh_rounded,

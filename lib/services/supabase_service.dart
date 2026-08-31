@@ -37,25 +37,23 @@ class SupabaseService {
   // booknest-api edge function, which force-binds the row to the verified
   // caller. The caller never sees a raw 42501.
   // ───────────────────────────────────────────────────────────────────────
+  /// Production-safe error copy: end users never see infrastructure
+  /// details (services, dashboards, scripts). Raw errors are logged in
+  /// debug builds only.
   String _friendly(Object error) {
     final raw = error.toString();
-    if (raw.contains('42501') || raw.contains('row-level security')) {
-      return 'BookNest could not verify your permission to write — check '
-          'that the latest database upgrade script was run.';
-    }
     if (raw.contains('duplicate key') && raw.contains('username')) {
       return 'That username is already taken — try another.';
     }
+    if (raw.contains('42501') || raw.contains('row-level security')) {
+      return "That action isn't allowed for your account right now. "
+          'Please try again later.';
+    }
     if (raw.contains('foreign key')) {
-      return 'Your profile row is missing — restart the app once to repair it.';
+      return 'Your profile is still syncing — try again in a minute.';
     }
-    if (raw.contains('not defined') ||
-        raw.contains('Internal Server Error') ||
-        raw.contains('FunctionException')) {
-      return 'The BookNest service hit a snag — deploy the latest edge '
-          'function (Dashboard → Edge Functions → booknest-api) and retry.';
-    }
-    return raw.replaceFirst(RegExp(r'^.*?\{\s*"'), 'Something went wrong: ');
+    return "BookNest couldn't complete that just now — please try again "
+        'in a moment.';
   }
 
   dynamic _requireSession() {
@@ -105,6 +103,7 @@ class SupabaseService {
         if (auth.currentUser == null) {
           throw WriteException('Please sign in again to continue.');
         }
+        if (kDebugMode) debugPrint('writeRow fallback failed: $edgeError');
         throw WriteException(_friendly(edgeError));
       }
     }
@@ -142,6 +141,7 @@ class SupabaseService {
       } on WriteException {
         rethrow;
       } catch (edgeError) {
+        if (kDebugMode) debugPrint('updateRow fallback failed: $edgeError');
         throw WriteException(_friendly(edgeError));
       }
     }
