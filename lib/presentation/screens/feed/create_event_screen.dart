@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class CreateEventScreen extends StatefulWidget {
@@ -31,9 +30,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.dark(
-              primary: BookNestColors.cyan,
-              surface: Theme.of(context).colorScheme.surface,
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF00D4FF),
+              surface: Color(0xFF1F1F1F),
             ),
           ),
           child: child!,
@@ -50,9 +49,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.dark(
-              primary: BookNestColors.cyan,
-              surface: Theme.of(context).colorScheme.surface,
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF00D4FF),
+              surface: Color(0xFF1F1F1F),
             ),
           ),
           child: child!,
@@ -77,7 +76,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         _selectedTime.minute,
       );
 
-      await SupabaseService().writeRow('posts', {
+      await SupabaseService().client.from('posts').insert({
         'type': 'event',
         'title': _titleController.text.trim(),
         'content': _descriptionController.text.trim(),
@@ -96,14 +95,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Event posted!'),
-            backgroundColor: BookNestColors.navy,
+            backgroundColor: Color(0xFFFF6A00),
           ),
-        );
-      }
-    } on WriteException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
         );
       }
     } catch (e) {
@@ -120,18 +113,19 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('Create Event'),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _publishEvent,
             child: _isLoading
-                ? SizedBox(
+                ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Post', style: TextStyle(color: BookNestColors.navy)),
+                : const Text('Post', style: TextStyle(color: Color(0xFFFF6A00))),
           ),
         ],
       ),
@@ -140,65 +134,65 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         children: [
           TextField(
             controller: _titleController,
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 20, fontWeight: FontWeight.bold),
+            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
             decoration: const InputDecoration(
               hintText: 'Event title',
-              hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
+              hintStyle: TextStyle(color: Color(0xFF444444)),
               border: InputBorder.none,
             ),
           ),
           const SizedBox(height: 24),
           TextField(
             controller: _descriptionController,
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 16, height: 1.6),
+            style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
             maxLines: 4,
             decoration: const InputDecoration(
               hintText: 'What\'s happening?',
-              hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
+              hintStyle: TextStyle(color: Color(0xFF444444)),
               border: InputBorder.none,
             ),
           ),
           const SizedBox(height: 32),
-          Divider(color: Theme.of(context).dividerColor),
+          const Divider(color: Color(0xFF222222)),
           const SizedBox(height: 16),
 
           // Date picker
           ListTile(
-            leading: const Icon(Icons.calendar_today, color: BookNestColors.cyan),
-            title: Text('Date', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+            leading: const Icon(Icons.calendar_today, color: Color(0xFF00D4FF)),
+            title: const Text('Date', style: TextStyle(color: Colors.white)),
             subtitle: Text(
               DateFormat('EEE, MMM d, yyyy').format(_selectedDate),
-              style: const TextStyle(color: BookNestColors.lightTextSecondary),
+              style: const TextStyle(color: Color(0xFF888888)),
             ),
-            trailing: const Icon(Icons.chevron_right, color: BookNestColors.lightTextSecondary),
+            trailing: const Icon(Icons.chevron_right, color: Color(0xFF888888)),
             onTap: _pickDate,
           ),
 
           // Time picker
           ListTile(
-            leading: const Icon(Icons.access_time, color: BookNestColors.cyan),
-            title: Text('Time', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+            leading: const Icon(Icons.access_time, color: Color(0xFF00D4FF)),
+            title: const Text('Time', style: TextStyle(color: Colors.white)),
             subtitle: Text(
               _selectedTime.format(context),
-              style: const TextStyle(color: BookNestColors.lightTextSecondary),
+              style: const TextStyle(color: Color(0xFF888888)),
             ),
-            trailing: const Icon(Icons.chevron_right, color: BookNestColors.lightTextSecondary),
+            trailing: const Icon(Icons.chevron_right, color: Color(0xFF888888)),
             onTap: _pickTime,
           ),
 
-          Divider(color: Theme.of(context).dividerColor),
+          const Divider(color: Color(0xFF222222)),
           const SizedBox(height: 16),
 
           // Online toggle
           SwitchListTile(
-            title: Text('Online Event', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+            title: const Text('Online Event', style: TextStyle(color: Colors.white)),
             subtitle: Text(
               _isOnline ? 'Virtual meeting link will be shared' : 'In-person event',
-              style: const TextStyle(color: BookNestColors.lightTextSecondary),
+              style: const TextStyle(color: Color(0xFF888888)),
             ),
             value: _isOnline,
             onChanged: (v) => setState(() => _isOnline = v),
-            activeThumbColor: BookNestColors.cyan,
+            activeThumbColor: const Color(0xFF00D4FF),
           ),
 
           // Location (only if not online)
@@ -207,13 +201,13 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               padding: const EdgeInsets.only(top: 16),
               child: TextField(
                 controller: _locationController,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   hintText: 'Venue address',
-                  hintStyle: const TextStyle(color: BookNestColors.lightTextSecondary),
-                  prefixIcon: const Icon(Icons.location_on, color: BookNestColors.lightTextSecondary),
+                  hintStyle: const TextStyle(color: Color(0xFF666666)),
+                  prefixIcon: const Icon(Icons.location_on, color: Color(0xFF888888)),
                   filled: true,
-                  fillColor: Theme.of(context).colorScheme.surface,
+                  fillColor: const Color(0xFF1F1F1F),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,

@@ -19,7 +19,7 @@ class AuthGuard {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please sign in to continue.'),
-          backgroundColor: Color(0xFF00E5FF),
+          backgroundColor: Color(0xFF00D4FF),
           behavior: SnackBarBehavior.floating,
         ),
       );

@@ -5,12 +5,12 @@ class ClubsListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      
+    return const Scaffold(
+      backgroundColor: Color(0xFF0A0A0A),
       body: Center(
         child: Text(
           'Clubs',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+          style: TextStyle(color: Colors.white),
         ),
       ),
     );

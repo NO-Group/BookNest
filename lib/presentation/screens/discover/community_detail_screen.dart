@@ -13,16 +13,18 @@ class CommunityDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
-        title: Text(
+        backgroundColor: const Color(0xFF0A0A0A),
+        title: const Text(
           'Community',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+          style: TextStyle(color: Colors.white),
         ),
       ),
       body: Center(
         child: Text(
           'Community $id',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+          style: const TextStyle(color: Colors.white),
         ),
       ),
     );

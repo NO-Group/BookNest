@@ -1,11 +1,11 @@
 {
-    "name": "BookNest",
-    "short_name": "BookNest",
+    "name": "tether",
+    "short_name": "tether",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#000000",
-    "theme_color": "#071A3D",
-    "description": "BookNest by N.O Group \u2014 The Digital Library Ecosystem for Bookworms",
+    "background_color": "#0175C2",
+    "theme_color": "#0175C2",
+    "description": "A new Flutter project.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

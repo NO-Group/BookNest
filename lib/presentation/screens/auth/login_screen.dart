@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../config/theme.dart';
-
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -19,7 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _signIn() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all fields')),
+        const SnackBar(content: Text('Please fill in all fields'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -38,13 +36,13 @@ class _LoginScreenState extends State<LoginScreen> {
     } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
+          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('An unexpected error occurred: $e')),
+          SnackBar(content: Text('An unexpected error occurred: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -63,113 +61,83 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final onSurface = theme.colorScheme.onSurface;
-
     return Scaffold(
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              BookNestColors.navyDeep.withOpacity(.12),
-              theme.scaffoldBackgroundColor,
-              theme.scaffoldBackgroundColor,
-            ],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Welcome back',
-                  style: TextStyle(
-                    color: onSurface,
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                  ),
+      backgroundColor: const Color(0xFF1E1E1E),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Welcome back',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Log in to your account',
-                  style: TextStyle(color: theme.hintColor, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Log in to your account',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 16,
                 ),
-                const SizedBox(height: 32),
-                _buildTextField(
-                    controller: _emailController,
-                    hintText: 'Email address',
-                    keyboardType: TextInputType.emailAddress),
-                const SizedBox(height: 16),
-                _buildTextField(
-                    controller: _passwordController,
-                    hintText: 'Password',
-                    obscureText: true),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      gradient: const LinearGradient(
-                        colors: [BookNestColors.cyanSoft, BookNestColors.cyan],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: BookNestColors.cyan.withOpacity(.3),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
+              ),
+              const SizedBox(height: 32),
+              _buildTextField(controller: _emailController, hintText: 'Email address', keyboardType: TextInputType.emailAddress),
+              const SizedBox(height: 16),
+              _buildTextField(controller: _passwordController, hintText: 'Password', obscureText: true),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFE0FFFF), Color(0xFF00FFFF)],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
                     ),
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _signIn,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(
-                              color: BookNestColors.navyDeep)
-                          : const Text(
-                              'Log In',
-                              style: TextStyle(
-                                color: BookNestColors.navyDeep,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
+                  ),
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _signIn,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: _isLoading
+                        ? const CircularProgressIndicator(color: Colors.black)
+                        : const Text(
+                            'Log In',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
-                    ),
+                          ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text("Don't have an account? ",
-                        style: TextStyle(color: theme.hintColor)),
-                    GestureDetector(
-                      onTap: () => context.go('/register'),
-                      child: const Text(
-                        'Sign up',
-                        style: TextStyle(
-                            color: BookNestColors.cyan,
-                            fontWeight: FontWeight.bold),
-                      ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text("Don't have an account? ", style: TextStyle(color: Colors.grey)),
+                  GestureDetector(
+                    onTap: () => context.go('/register'),
+                    child: const Text(
+                      'Sign up',
+                      style: TextStyle(color: Color(0xFF00FFFF), fontWeight: FontWeight.bold),
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -182,32 +150,21 @@ class _LoginScreenState extends State<LoginScreen> {
     bool obscureText = false,
     TextInputType keyboardType = TextInputType.text,
   }) {
-    final theme = Theme.of(context);
     return TextField(
       controller: controller,
       obscureText: obscureText,
       keyboardType: keyboardType,
-      style: TextStyle(color: theme.colorScheme.onSurface),
+      style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: TextStyle(color: theme.hintColor),
+        hintStyle: const TextStyle(color: Colors.white54),
         filled: true,
-        fillColor: theme.colorScheme.surface,
+        fillColor: const Color(0xFF2A2A2A),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: theme.dividerColor),
+          borderSide: BorderSide.none,
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: theme.dividerColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: BookNestColors.cyan, width: 1.6),
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       ),
     );
   }

@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class CreateReelScreen extends StatefulWidget {
@@ -24,7 +23,7 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
 
     try {
       final userId = SupabaseService().auth.currentUser!.id;
-      await SupabaseService().writeRow('posts', {
+      await SupabaseService().client.from('posts').insert({
         'type': 'reel',
         'title': _titleController.text.trim(),
         'content': _descriptionController.text.trim(),
@@ -41,14 +40,8 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Reel placeholder created! Video upload coming soon.'),
-            backgroundColor: BookNestColors.cyan,
+            backgroundColor: Color(0xFF00D4FF),
           ),
-        );
-      }
-    } on WriteException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
         );
       }
     } catch (e) {
@@ -65,18 +58,19 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('Create Reel'),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _publishReel,
             child: _isLoading
-                ? SizedBox(
+                ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Post', style: TextStyle(color: BookNestColors.cyan)),
+                : const Text('Post', style: TextStyle(color: Color(0xFF00D4FF))),
           ),
         ],
       ),
@@ -90,10 +84,10 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
               width: double.infinity,
               height: 240,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
+                color: const Color(0xFF1F1F1F),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: BookNestColors.lightTextSecondary,
+                  color: const Color(0xFF444444),
                   style: BorderStyle.solid,
                 ),
               ),
@@ -103,13 +97,13 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
                   Icon(
                     Icons.videocam,
                     size: 48,
-                    color: BookNestColors.lightTextSecondary,
+                    color: Color(0xFF444444),
                   ),
                   SizedBox(height: 16),
                   Text(
                     'Video upload coming soon',
                     style: TextStyle(
-                      color: BookNestColors.lightTextSecondary,
+                      color: Color(0xFF888888),
                       fontSize: 14,
                     ),
                   ),
@@ -117,7 +111,7 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
                   Text(
                     'For now, create a placeholder reel',
                     style: TextStyle(
-                      color: BookNestColors.lightTextSecondary,
+                      color: Color(0xFF444444),
                       fontSize: 12,
                     ),
                   ),
@@ -127,21 +121,21 @@ class _CreateReelScreenState extends State<CreateReelScreen> {
             const SizedBox(height: 32),
             TextField(
               controller: _titleController,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 18, fontWeight: FontWeight.bold),
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
               decoration: const InputDecoration(
                 hintText: 'Reel title',
-                hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
+                hintStyle: TextStyle(color: Color(0xFF444444)),
                 border: InputBorder.none,
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _descriptionController,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 14, height: 1.6),
+              style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.6),
               maxLines: 3,
               decoration: const InputDecoration(
                 hintText: 'Description...',
-                hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
+                hintStyle: TextStyle(color: Color(0xFF444444)),
                 border: InputBorder.none,
               ),
             ),

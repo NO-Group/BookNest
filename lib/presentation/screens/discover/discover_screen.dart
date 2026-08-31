@@ -2,9 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-
-import '../../../config/theme.dart';
-import '../../components/booknest_ui.dart';
 import '../../../services/supabase_service.dart';
 
 class DiscoverScreen extends StatefulWidget {
@@ -31,10 +28,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   final List<String> _filters = ['All', 'Clubs', 'Organizations', 'Schools', 'Communities'];
 
   final List<_CreateOption> _createOptions = const [
-    _CreateOption(label: 'New Club', icon: Icons.menu_book, color: BookNestColors.cyan, route: '/create/club'),
-    _CreateOption(label: 'New Organization', icon: Icons.business, color: BookNestColors.navy, route: '/create/organization'),
-    _CreateOption(label: 'New School', icon: Icons.school, color: BookNestColors.cyan, route: '/create/school'),
-    _CreateOption(label: 'New Community', icon: Icons.account_tree, color: BookNestColors.navy, route: '/create/community'),
+    _CreateOption(label: 'New Club', icon: Icons.menu_book, color: Color(0xFF00D4FF), route: '/create/club'),
+    _CreateOption(label: 'New Organization', icon: Icons.business, color: Color(0xFFFF6A00), route: '/create/organization'),
+    _CreateOption(label: 'New School', icon: Icons.school, color: Color(0xFF00D4FF), route: '/create/school'),
+    _CreateOption(label: 'New Community', icon: Icons.account_tree, color: Color(0xFFFF6A00), route: '/create/community'),
   ];
 
   @override
@@ -107,6 +104,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0A0A),
       body: Stack(
         children: [
           SafeArea(
@@ -118,12 +116,12 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
+                      const Text(
                         'Discover',
                         style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface,
+                          color: Colors.white,
                           fontSize: 28,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                       GestureDetector(
@@ -137,21 +135,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [BookNestColors.cyanSoft, BookNestColors.cyan],
-                                  ),
+                                  color: const Color(0xFF1F1F1F),
                                   borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: BookNestColors.cyan.withOpacity(.3),
-                                      blurRadius: 14,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
+                                  border: Border.all(color: const Color(0xFF222222)),
                                 ),
                                 child: const Icon(
                                   Icons.add,
-                                  color: BookNestColors.navyDeep,
+                                  color: Color(0xFF00D4FF),
                                   size: 20,
                                 ),
                               ),
@@ -167,14 +157,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   child: TextField(
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                    style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Search communities, clubs, schools…',
-                      hintStyle: TextStyle(color: Theme.of(context).hintColor),
-                      prefixIcon: const Icon(Icons.search,
-                          color: BookNestColors.cyan),
+                      hintText: 'Search communities, clubs, schools...',
+                      hintStyle: const TextStyle(color: Color(0xFF666666)),
+                      prefixIcon: const Icon(Icons.search, color: Color(0xFF666666)),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surface,
+                      fillColor: const Color(0xFF1F1F1F),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
                         borderSide: BorderSide.none,
@@ -202,19 +191,17 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             decoration: BoxDecoration(
                               color: isActive
-                                  ? BookNestColors.cyan
-                                  : Theme.of(context).colorScheme.surface,
+                                  ? const Color(0xFF00D4FF)
+                                  : const Color(0xFF1F1F1F),
                               borderRadius: BorderRadius.circular(20),
                               border: isActive
                                   ? null
-                                  : Border.all(color: Theme.of(context).dividerColor),
+                                  : Border.all(color: const Color(0xFF222222)),
                             ),
                             child: Text(
                               filter,
                               style: TextStyle(
-                                color: isActive
-                                    ? BookNestColors.navyDeep
-                                    : Theme.of(context).colorScheme.onSurface,
+                                color: isActive ? const Color(0xFF0A0A0A) : Colors.white,
                                 fontSize: 13,
                                 fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                               ),
@@ -232,7 +219,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                 Expanded(
                   child: _isLoading
                       ? const Center(
-                          child: CircularProgressIndicator(color: BookNestColors.cyan),
+                          child: CircularProgressIndicator(color: Color(0xFF00D4FF)),
                         )
                       : _filteredItems.isEmpty
                           ? _buildEmptyState()
@@ -271,9 +258,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface,
+                          color: const Color(0xFF1F1F1F),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Theme.of(context).dividerColor),
+                          border: Border.all(color: const Color(0xFF222222)),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.3),
@@ -289,8 +276,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                             const SizedBox(width: 10),
                             Text(
                               option.label,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurface,
+                              style: const TextStyle(
+                                color: Colors.white,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -310,10 +297,23 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   }
 
   Widget _buildEmptyState() {
-    return EmptyState(
-      icon: Icons.explore_outlined,
-      title: 'Nothing here yet',
-      subtitle: 'Be the first to create a club, community, organization or school.',
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.explore_outlined, size: 64, color: Color(0xFF444444)),
+          SizedBox(height: 16),
+          Text(
+            'Nothing here yet',
+            style: TextStyle(color: Colors.white, fontSize: 18),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Be the first to create something',
+            style: TextStyle(color: Color(0xFF888888), fontSize: 14),
+          ),
+        ],
+      ),
     );
   }
 
@@ -346,15 +346,15 @@ class _DiscoverCard extends StatelessWidget {
   Color get _typeColor {
     switch (item['type']) {
       case 'community':
-        return BookNestColors.cyan;
+        return const Color(0xFF00D4FF);
       case 'club':
-        return BookNestColors.navy;
+        return const Color(0xFFFF6A00);
       case 'organization':
-        return BookNestColors.cyan;
+        return const Color(0xFF00D4FF);
       case 'school':
-        return BookNestColors.navy;
+        return const Color(0xFFFF6A00);
       default:
-        return BookNestColors.lightTextSecondary;
+        return const Color(0xFF888888);
     }
   }
 
@@ -400,9 +400,9 @@ class _DiscoverCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
+          color: const Color(0xFF1F1F1F),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Theme.of(context).dividerColor),
+          border: Border.all(color: const Color(0xFF222222)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -411,7 +411,7 @@ class _DiscoverCard extends StatelessWidget {
             Container(
               height: 120,
               decoration: BoxDecoration(
-                color: BookNestColors.navy,
+                color: const Color(0xFF2A2A2A),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 image: item['cover_image_url'] != null
                     ? DecorationImage(
@@ -457,15 +457,15 @@ class _DiscoverCard extends StatelessWidget {
                       ),
                       if (item['is_verified'] == true) ...[
                         const SizedBox(width: 8),
-                        const Icon(Icons.verified, color: BookNestColors.cyan, size: 16),
+                        const Icon(Icons.verified, color: Color(0xFF00D4FF), size: 16),
                       ],
                     ],
                   ),
                   const SizedBox(height: 10),
                   Text(
                     item['name'] ?? 'Unnamed',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
+                    style: const TextStyle(
+                      color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
@@ -474,7 +474,7 @@ class _DiscoverCard extends StatelessWidget {
                   Text(
                     item['description'] ?? 'No description',
                     style: const TextStyle(
-                      color: BookNestColors.lightTextSecondary,
+                      color: Color(0xFF888888),
                       fontSize: 13,
                       height: 1.4,
                     ),
@@ -484,23 +484,23 @@ class _DiscoverCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Icon(Icons.people, size: 14, color: BookNestColors.lightTextSecondary),
+                      const Icon(Icons.people, size: 14, color: Color(0xFF888888)),
                       const SizedBox(width: 6),
                       Text(
                         '$_memberCount members',
                         style: const TextStyle(
-                          color: BookNestColors.lightTextSecondary,
+                          color: Color(0xFF888888),
                           fontSize: 12,
                         ),
                       ),
                       if (item['type'] == 'school' && item['location'] != null) ...[
                         const SizedBox(width: 16),
-                        const Icon(Icons.location_on, size: 14, color: BookNestColors.lightTextSecondary),
+                        const Icon(Icons.location_on, size: 14, color: Color(0xFF888888)),
                         const SizedBox(width: 6),
                         Text(
                           item['location'],
                           style: const TextStyle(
-                            color: BookNestColors.lightTextSecondary,
+                            color: Color(0xFF888888),
                             fontSize: 12,
                           ),
                         ),
