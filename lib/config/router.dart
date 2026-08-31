@@ -16,6 +16,8 @@ import '../presentation/screens/dms/dm_chat_screen.dart';
 import '../presentation/screens/settings/settings_screen.dart';
 import '../presentation/screens/wallet/wallet_screen.dart';
 import '../presentation/screens/jenny/jenny_screen.dart';
+import '../presentation/screens/events/events_agenda_screen.dart';
+import '../presentation/screens/streaks/streaks_screen.dart';
 import '../presentation/screens/settings/edit_profile_screen.dart';
 import '../presentation/screens/library/my_library_screen.dart';
 import '../presentation/screens/notifications/notifications_screen.dart';
@@ -79,6 +81,8 @@ const Set<String> _protectedRoutes = {
   '/create/reel',
   '/wallet',
   '/jenny',
+  '/events',
+  '/streaks',
 };
 
 /// Global auth redirect.
@@ -149,6 +153,12 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
     GoRoute(path: '/wallet', builder: (context, state) => const WalletScreen()),
     GoRoute(path: '/jenny', builder: (context, state) => const JennyScreen()),
+    GoRoute(
+        path: '/events',
+        builder: (context, state) => const EventsAgendaScreen()),
+    GoRoute(
+        path: '/streaks',
+        builder: (context, state) => const StreaksScreen()),
     GoRoute(
       path: '/settings/edit-profile',
       builder: (context, state) => const EditProfileScreen(),

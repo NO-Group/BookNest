@@ -204,6 +204,42 @@ function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 const todayUtc = () => new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+// Consecutive-day streak math over UTC 'YYYY-MM-DD' day strings.
+function computeStreaks(days: string[]) {
+  const set = new Set(days);
+  const today = todayUtc();
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  let current = 0;
+  let cursor = set.has(today) ? today : set.has(yesterday) ? yesterday : null;
+  while (cursor && set.has(cursor)) {
+    current += 1;
+    cursor = new Date(new Date(cursor + 'T00:00:00Z').getTime() - 86400000)
+      .toISOString()
+      .slice(0, 10);
+  }
+  const sorted = [...set].sort();
+  let longest = 0;
+  let run = 0;
+  let prev: string | null = null;
+  for (const day of sorted) {
+    if (prev !== null) {
+      const gap = (new Date(day + 'T00:00:00Z').getTime() -
+        new Date(prev + 'T00:00:00Z').getTime()) / 86400000;
+      run = gap === 1 ? run + 1 : 1;
+    } else {
+      run = 1;
+    }
+    longest = Math.max(longest, run);
+    prev = day;
+  }
+  const last7: boolean[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    last7.push(set.has(day));
+  }
+  return { current, longest, total: sorted.length, last7 };
+}
+
 const isHexId = (v: unknown): boolean =>
   typeof v === 'string' && /^[a-f\d]{24}$/i.test(v);
 const isDupKey = (e: unknown): boolean =>
@@ -455,6 +491,167 @@ Deno.serve(async (req: Request) => {
           userId: uid, role: 'assistant', content: reply, createdAt: new Date(),
         });
         return ok({ connected, reply });
+      }
+
+      // ── events: agenda + RSVP (posts table; RSVPs in Mongo social) ───────
+      case 'events.list': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const supa = serviceClient();
+        const { data, error } = await supa.from('posts')
+          .select('id, title, content, metadata, created_at, profiles(display_name, username)')
+          .eq('type', 'event')
+          .order('created_at', { ascending: false })
+          .limit(100);
+        if (error) return fail(error.message, 400);
+        const rows = data ?? [];
+        const ids = rows.map((r: any) => r.id);
+        const col = dbFor('social').collection('event_rsvps');
+        const counts = ids.length
+          ? await col.aggregate([
+              { $match: { postId: { $in: ids } } },
+              { $group: { _id: '$postId', going: { $sum: 1 } } },
+            ]).toArray()
+          : [];
+        const mine = ids.length
+          ? await col.find({ userId: uid, postId: { $in: ids } }).toArray()
+          : [];
+        const countMap = new Map(counts.map((c: any) => [String(c._id), c.going]));
+        const mineSet = new Set(mine.map((m: any) => String(m.postId)));
+        return ok({
+          events: rows.map((r: any) => ({
+            id: r.id,
+            title: r.title ?? 'Untitled event',
+            content: r.content ?? '',
+            metadata: r.metadata ?? {},
+            createdAt: r.created_at,
+            author: r.profiles?.display_name ?? r.profiles?.username ?? 'Reader',
+            going: countMap.get(r.id) ?? 0,
+            rsvped: mineSet.has(r.id),
+          })),
+        });
+      }
+
+      case 'events.rsvp': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const postId = String(p.postId ?? '');
+        if (!postId) return fail('postId is required');
+        const col = dbFor('social').collection('event_rsvps');
+        const existing = await col.findOne({ userId: uid, postId });
+        if (existing) {
+          await col.deleteOne({ _id: existing._id });
+        } else {
+          await col.insertOne({ userId: uid, postId, createdAt: new Date() });
+        }
+        const going = await col.countDocuments({ postId });
+        return ok({ rsvped: !existing, going });
+      }
+
+      // ── streaks: daily reading log (+2 gems on the first log each day) ──
+      case 'streak.get': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const col = dbFor('social').collection('reading_logs');
+        const days = await col.distinct('day', { userId: uid });
+        return ok({
+          ...(computeStreaks(days.map(String))),
+          todayLogged: days.includes(todayUtc()),
+        });
+      }
+
+      case 'streak.log': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const day = todayUtc();
+        const minutes = Math.max(0, Math.min(600, Number(p.minutes ?? 0) || 0));
+        const col = dbFor('social').collection('reading_logs');
+        const existing = await col.findOne({ userId: uid, day });
+        let created = false;
+        if (!existing) {
+          await col.insertOne({ userId: uid, day, minutes, createdAt: new Date() });
+          created = true;
+        }
+        let gemsAwarded = 0;
+        if (created) {
+          gemsAwarded = 2;
+          const prof = await serviceClient().from('profiles')
+            .select('gems').eq('id', uid).single();
+          const current = prof.error ? 0 : Number(prof.data?.gems ?? 0);
+          await serviceClient().from('profiles')
+            .update({ gems: current + gemsAwarded }).eq('id', uid);
+          await dbFor('users').collection('gem_ledger').insertOne({
+            userId: uid, delta: gemsAwarded, reason: 'reading_streak', day,
+            createdAt: new Date(),
+          });
+        }
+        const days = await col.distinct('day', { userId: uid });
+        return ok({
+          ...(computeStreaks(days.map(String))),
+          todayLogged: true,
+          created,
+          gemsAwarded,
+        });
+      }
+
+      // ── moderation: club owner approves/denies submitted books ──────────
+      case 'moderation.queue': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const clubId = String(p.clubId ?? '');
+        if (!clubId) return fail('clubId is required');
+        const supa = serviceClient();
+        const club = await supa.from('clubs')
+          .select('id, name, owner_id').eq('id', clubId).single();
+        if (club.error || !club.data) return fail('Club not found', 404);
+        if (club.data.owner_id !== uid) {
+          return fail('Only the club owner can moderate submissions.', 403);
+        }
+        const { data, error } = await supa.from('club_books')
+          .select('id, title, author, description, cover_url, created_at')
+          .eq('club_id', clubId)
+          .eq('moderation_status', 'pending')
+          .order('created_at', { ascending: false });
+        if (error) return fail(error.message, 400);
+        return ok({ clubName: club.data.name, pending: data ?? [] });
+      }
+
+      case 'moderation.decide': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const bookId = String(p.bookId ?? '');
+        const approve = p.approve === true;
+        if (!bookId) return fail('bookId is required');
+        const supa = serviceClient();
+        const book = await supa.from('club_books')
+          .select('id, club_id, added_by, title, moderation_status')
+          .eq('id', bookId).single();
+        if (book.error || !book.data) return fail('Book not found', 404);
+        const club = await supa.from('clubs')
+          .select('owner_id').eq('id', book.data.club_id).single();
+        if (club.error || !club.data) return fail('Club not found', 404);
+        if (club.data.owner_id !== uid) {
+          return fail('Only the club owner can moderate submissions.', 403);
+        }
+        const status = approve ? 'approved' : 'denied';
+        const { error: upErr } = await supa.from('club_books')
+          .update({ moderation_status: status }).eq('id', bookId);
+        if (upErr) return fail(upErr.message, 400);
+        let gemsAwarded = 0;
+        const authorId = book.data.added_by?.toString() ?? '';
+        if (approve && authorId) {
+          gemsAwarded = 10;
+          const prof = await supa.from('profiles')
+            .select('gems').eq('id', authorId).single();
+          const current = prof.error ? 0 : Number(prof.data?.gems ?? 0);
+          await supa.from('profiles')
+            .update({ gems: current + gemsAwarded }).eq('id', authorId);
+          await dbFor('users').collection('gem_ledger').insertOne({
+            userId: authorId, delta: gemsAwarded, reason: 'book_publish',
+            day: todayUtc(), createdAt: new Date(),
+          });
+        }
+        return ok({ status, gemsAwarded });
       }
 
       // ── books: browse ────────────────────────────────────────────────────

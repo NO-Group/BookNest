@@ -389,6 +389,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onTap: () => context.push('/jenny'),
             ),
             _ProfileAction(
+              icon: Icons.event_note_rounded,
+              label: 'Events agenda',
+              subtitle: 'Every event, RSVPs and reminders',
+              onTap: () => context.push('/events'),
+            ),
+            _ProfileAction(
+              icon: Icons.local_fire_department_rounded,
+              label: 'Reading streaks',
+              subtitle: 'Log your days, keep the flame alive',
+              onTap: () => context.push('/streaks'),
+            ),
+            _ProfileAction(
               icon: Icons.notifications_none_rounded,
               label: 'Notifications',
               subtitle: 'Messages and activity',

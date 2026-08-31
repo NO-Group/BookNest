@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -99,6 +101,23 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              decoration: BoxDecoration(
+                color: (Theme.of(context).brightness == Brightness.dark
+                        ? BookNestColors.darkChatBackground
+                        : Colors.white)
+                    .withOpacity(.66),
+                border: Border(
+                  bottom: BorderSide(
+                      color: BookNestColors.cyan.withOpacity(.15)),
+                ),
+              ),
+            ),
+          ),
+        ),
         titleSpacing: 16,
         title: TextField(
           controller: _query,
@@ -138,7 +157,13 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                       ..._people.map((person) => Padding(
                             padding: const EdgeInsets.only(bottom: 6),
                             child: Material(
-                              color: theme.colorScheme.surface,
+                              color: theme.colorScheme.surface
+                                  .withOpacity(.72),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  side: BorderSide(
+                                      color: BookNestColors.cyan
+                                          .withOpacity(.16))),
                               borderRadius: BorderRadius.circular(16),
                               child: ListTile(
                                 shape: RoundedRectangleBorder(

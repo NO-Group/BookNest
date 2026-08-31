@@ -110,3 +110,16 @@ Balance source of truth stays `profiles.gems` (Supabase); the ledger is the
 audit trail. New edge actions: `wallet.summary`, `wallet.claim`, `jenny.chat`
 (Jenny needs the optional `JENNY_API_KEY` / `JENNY_API_URL` / `JENNY_MODEL`
 edge secrets — without a key she answers honestly that she is not connected).
+
+## v1.3 additions (events agenda · reading streaks · club moderation)
+
+| Database | Collection | Purpose |
+|---|---|---|
+| booknest_social | event_rsvps | One doc per RSVP (`userId, postId, createdAt`); toggle = insert/delete; per-event counts via aggregation |
+| booknest_social | reading_logs | One doc per logged day (`userId, day 'YYYY-MM-DD', minutes, createdAt`); streaks are computed from distinct `day` values; the first log of each UTC day awards +2 gems (ledger entry `reason: reading_streak`) |
+| (existing) | gem_ledger | New reasons: `reading_streak` (+2/day), `book_publish` (+10 on moderation approval) |
+
+New edge actions: `events.list`, `events.rsvp`, `streak.get`, `streak.log`,
+`moderation.queue`, `moderation.decide` (owner-verified server-side; no new
+SQL — events reuse the `posts` table, moderation reuses `club_books`
+moderation_status).

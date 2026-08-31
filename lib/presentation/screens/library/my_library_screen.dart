@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -76,6 +78,23 @@ class _MyLibraryScreenState extends State<MyLibraryScreen>
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              decoration: BoxDecoration(
+                color: (Theme.of(context).brightness == Brightness.dark
+                        ? BookNestColors.darkChatBackground
+                        : Colors.white)
+                    .withOpacity(.66),
+                border: Border(
+                  bottom: BorderSide(
+                      color: BookNestColors.cyan.withOpacity(.15)),
+                ),
+              ),
+            ),
+          ),
+        ),
         title: const Text('My library',
             style: TextStyle(fontWeight: FontWeight.w800)),
         bottom: TabBar(

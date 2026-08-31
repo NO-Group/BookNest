@@ -611,6 +611,92 @@ class AnimatedCount extends StatelessWidget {
   }
 }
 
+
+/// Universal glassmorphism panel: frosted blur + translucent base + cyan
+/// hairline. The one wrapper to reach for when a surface should read as
+/// glass. Respects dark/light automatically.
+class GlassPanel extends StatelessWidget {
+  final Widget child;
+  final double blur;
+  final double opacity;
+  final double radius;
+  final EdgeInsetsGeometry? padding;
+  final Border? border;
+
+  const GlassPanel({
+    super.key,
+    required this.child,
+    this.blur = 18,
+    this.opacity = .62,
+    this.radius = 20,
+    this.padding,
+    this.border,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final base =
+        dark ? BookNestColors.darkChatBackground : Colors.white;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: base.withOpacity(opacity),
+            borderRadius: BorderRadius.circular(radius),
+            border: border ??
+                Border.all(color: BookNestColors.cyan.withOpacity(.2)),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Frosted app bar: content scrolling beneath it is blurred in real time.
+class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
+  final String title;
+  final List<Widget>? actions;
+  final Widget? leading;
+
+  const GlassAppBar({super.key, required this.title, this.actions, this.leading});
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final base =
+        dark ? BookNestColors.darkChatBackground : Colors.white;
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      leading: leading,
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+      actions: actions,
+      flexibleSpace: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            decoration: BoxDecoration(
+              color: base.withOpacity(.66),
+              border: Border(
+                bottom: BorderSide(
+                    color: BookNestColors.cyan.withOpacity(.15)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 const List<String> kBookNestGenres = [
   'Romance',
   'Science Fiction',

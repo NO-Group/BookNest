@@ -1082,6 +1082,13 @@ void _showEventDetails(BuildContext context, dynamic post) {
   showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
+      backgroundColor: (Theme.of(dialogContext).brightness == Brightness.dark
+              ? BookNestColors.darkChatBackground
+              : Colors.white)
+          .withOpacity(.88),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: BorderSide(color: BookNestColors.cyan.withOpacity(.3))),
       title: Text(post?['title']?.toString() ?? 'Event'),
       content: Column(
         mainAxisSize: MainAxisSize.min,

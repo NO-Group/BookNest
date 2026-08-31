@@ -76,12 +76,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       backgroundColor: theme.brightness == Brightness.dark
           ? BookNestColors.darkChatBackground
           : BookNestColors.lightSurface,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text('Notifications',
-            style: TextStyle(fontWeight: FontWeight.w800)),
-      ),
+      appBar: const GlassAppBar(title: 'Notifications'),
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: BookNestColors.cyan))
@@ -141,7 +136,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   .format(createdAt.toLocal())
                               : '';
                           return Material(
-                            color: theme.colorScheme.surface,
+                            color: theme.colorScheme.surface
+                                .withOpacity(.72),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: BorderSide(
+                                    color: BookNestColors.cyan
+                                        .withOpacity(.16))),
                             borderRadius: BorderRadius.circular(16),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(16),
