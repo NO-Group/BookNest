@@ -1,0 +1,123 @@
+# BookNest Backend — Deploy Runbook
+
+> 🖱 **Prefer clicking over typing?** Use
+> **[`backend/DEPLOY_FROM_DASHBOARD.md`](./DEPLOY_FROM_DASHBOARD.md)** — the
+> same deployment done entirely in the Supabase dashboard (no CLI, no
+> terminal). Everything below is the CLI alternative.
+
+The Flutter app is **already wired** to everything below (see
+`lib/config/app_config.dart`, `lib/services/backend_api.dart`,
+`lib/services/cloudinary_service.dart`). You only run the server-side steps.
+Total time: ~15 minutes.
+
+```
+Flutter app ──► Supabase (auth + gateway, "the leader")
+                  └── booknest-api Edge Function ──► MongoDB Atlas (the heavy lifting:
+                        books, chapters, likes, saves, views,        $inc counters,
+                        reviews, follows, chats, notifications)      unique indexes
+                  └── images  → Cloudinary (unsigned uploads, public preset)
+                  └── media   → Cloudflare R2 (later — signed URLs, zero egress)
+```
+
+## One-time setup (your machine)
+
+1. **Install the CLI**
+   ```bash
+   npm install -g supabase
+   supabase login
+   ```
+2. **Create the secrets file** (this copy stays on your machine — it is git-ignored):
+   ```bash
+   cp backend/secrets.local.env.example backend/secrets.local.env
+   # open it and paste the real values
+   ```
+3. **MongoDB Atlas — one setting people always miss:**
+   Atlas → Network Access → *Add IP Address* → **Allow access from anywhere
+   (`0.0.0.0/0`)**. Supabase Edge Functions run on rotating shared IPs, so a
+   fixed allowlist will time out. Your DB password + RLS-equivalent rules are
+   what protect the data — not the IP list.
+4. **Run the deployer** (sets secrets, deploys `booknest-api`, prints a smoke test):
+   ```bash
+   bash backend/setup_secrets.sh
+   ```
+5. **Create the Supabase tables** — open the Supabase Dashboard → SQL Editor →
+   paste **`backend/supabase_min_schema.sql`** → Run. (Needed because the app
+   now points at project `ekgbbbbj…`, which is brand new and empty.)
+
+## Smoke tests (run after deploying)
+
+```bash
+# 1) Edge function + MongoDB alive?
+curl -s -X POST 'https://ekgbbbbjwgfixqarlnil.supabase.co/functions/v1/booknest-api' \
+  -H 'Authorization: Bearer <SUPABASE_ANON_KEY>' \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"ping","payload":{}}'
+# → {"ok":true,"data":{"db":"booknest",...}}
+
+# 2) Supabase auth alive?
+curl -s 'https://ekgbbbbjwgfixqarlnil.supabase.co/auth/v1/health' -H 'apikey: <SUPABASE_ANON_KEY>'
+# → {"date":...}
+
+# 3) Cloudinary unsigned preset alive? (uploads a 1×1 test pixel)
+curl -s -F 'upload_preset=BookNest' -F 'public_id=connectivity-test' \
+  -F 'file=@backend/test-pixel.png' \
+  'https://api.cloudinary.com/v1_1/deqdmwlt7/image/upload'
+# → JSON containing "secure_url": "https://res.cloudinary.com/deqdmwlt7/image/upload/.../connectivity-test.png"
+#   (delete the `connectivity-test` asset from your Media Library afterwards)
+```
+
+## Things to fix in your Cloudinary preset (Settings → Upload → BookNest)
+
+- **Notification URL** `https://wa.me/2347075536341.com` — WhatsApp links are
+  not servers; Cloudinary will retry-fail on every upload. Remove it for now
+  (or later point it at an Edge Function webhook).
+- `unique filename: false` + `discard original filename: true` means every
+  upload **needs** a distinct `public_id` or it silently overwrites. The app
+  passes one (e.g. `avatar-<userId>`), but keep it in mind for manual uploads.
+- Suggested add: folder restriction — limit the preset to `booknest/` so
+  nobody can upload outside your asset folder.
+
+## ⚠️ Rotate the credentials you pasted into chat
+
+These were shared in plaintext and should be rotated once the setup above is
+verified working (5 minutes in each dashboard):
+
+| Credential | Where to rotate |
+|---|---|
+| Supabase **service-role key** | Dashboard → Project Settings → API → Rotate |
+| MongoDB password | Atlas → Database Access → Edit user → Edit password |
+| Cloudinary **API secret** | Console → Settings → Access Keys → Generate new |
+| Supabase DB password | Dashboard → Project Settings → Database → Reset password |
+| Legacy JWT secret | leave unless you run custom auth providers |
+
+Rotating = update `backend/secrets.local.env` + re-run `bash backend/setup_secrets.sh`.
+**Never** put any of these in Flutter code or Git — the app only needs what is
+already in `lib/config/app_config.dart`.
+
+## Cloudflare R2 (when you're ready)
+
+1. Cloudflare Dashboard → R2 → Create bucket `booknest-stem-media`.
+2. R2 → Manage R2 API Tokens → create token (Object Read & Write, scoped to the
+   bucket). Note account ID, access key ID, secret.
+3. Enable public access via the managed `pub-xxxx.r2.dev` domain (or attach a
+   custom domain, e.g. `media.booknest.app` — better for the future).
+4. Fill the `R2_*` values into `backend/secrets.local.env` → re-run the deployer.
+5. Only then set `AppConfig.r2PublicBaseUrl` in `lib/config/app_config.dart`.
+6. Uploads will use pre-signed URLs generated by an edge function — the secret
+   keys never touch a phone.
+
+## How the pieces behave before/after deployment
+
+| Feature in app | Today | After `setup_secrets.sh` |
+|---|---|---|
+| Like / Save / Review / View counters | optimistic UI, session-only | persisted in MongoDB |
+| Share → pick contact | shows snackbar | **delivers** a 📖 book_share message into the 1:1 chat + notification |
+| Auth, feed, groups, library browsing | Supabase (transitional tables) | unchanged until the cutover |
+| Images | URLs only | unsigned Cloudinary upload via `CloudinaryService` |
+
+## Troubleshooting
+
+- `ping` returns `MONGO_URI secret is not set` → secrets push failed; re-run deployer.
+- `ping` times out → Atlas Network Access isn't `0.0.0.0/0` (step 3).
+- Function 404 → `supabase functions deploy booknest-api` didn't run; run manually.
+- Flutter shows "Backend unavailable" only in debug logs — expected pre-deploy.

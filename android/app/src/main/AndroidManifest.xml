@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Release builds run with no debug-network overrides: without this
+         permission the APK ships with NO network access at all. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="tether"
+        android:label="BookNest"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

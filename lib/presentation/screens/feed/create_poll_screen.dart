@@ -1,7 +1,9 @@
 // lib/presentation/screens/feed/create_poll_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class CreatePollScreen extends StatefulWidget {
@@ -34,6 +36,25 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
     }
   }
 
+
+  DateTime? _selectedPostDate;
+
+  Future<void> _pickPostDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedPostDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: ColorScheme.dark(primary: BookNestColors.cyan),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) setState(() => _selectedPostDate = picked);
+  }
+
   Future<void> _publishPoll() async {
     if (_questionController.text.isEmpty) return;
     final options = _optionControllers
@@ -46,12 +67,14 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
 
     try {
       final userId = SupabaseService().auth.currentUser!.id;
-      await SupabaseService().client.from('posts').insert({
+      await SupabaseService().writeRow('posts', {
         'type': 'poll',
         'content': _questionController.text.trim(),
         'metadata': {
           'options': options,
           'votes': 0,
+          if (_selectedPostDate != null)
+            'date': DateFormat('EEE, MMM d, yyyy').format(_selectedPostDate!),
         },
         'created_by': userId,
       });
@@ -61,7 +84,7 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Poll posted!'),
-            backgroundColor: Color(0xFF00D4FF),
+            backgroundColor: BookNestColors.cyan,
           ),
         );
       }
@@ -76,43 +99,74 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
     }
   }
 
+
+  /// Optional publish date chip shown above the submit button.
+  Widget _buildDateChip(ThemeData theme) {
+    return Center(
+      child: ActionChip(
+        avatar: Icon(Icons.event_outlined,
+            size: 18,
+            color: _selectedPostDate != null
+                ? BookNestColors.cyan
+                : theme.hintColor),
+        label: Text(
+          _selectedPostDate == null
+              ? 'Add date (optional)'
+              : DateFormat('EEE, MMM d, yyyy').format(_selectedPostDate!),
+          style:
+              TextStyle(color: theme.colorScheme.onSurface, fontSize: 13),
+        ),
+        side: BorderSide(
+            color: _selectedPostDate != null
+                ? BookNestColors.cyan.withOpacity(.6)
+                : theme.dividerColor),
+        backgroundColor: theme.colorScheme.surface,
+        onPressed: () async {
+          await _pickPostDate();
+          if (mounted) setState(() {});
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('Create Poll'),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _publishPoll,
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
                   )
-                : const Text('Post', style: TextStyle(color: Color(0xFF00D4FF))),
+                : const Text('Post', style: TextStyle(color: BookNestColors.cyan)),
           ),
         ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildDateChip(Theme.of(context)),
+            const SizedBox(height: 18),
             TextField(
               controller: _questionController,
-              style: const TextStyle(color: Colors.white, fontSize: 18),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 18),
               decoration: const InputDecoration(
                 hintText: 'Ask a question...',
-                hintStyle: TextStyle(color: Color(0xFF444444)),
+                hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
                 border: InputBorder.none,
               ),
             ),
             const SizedBox(height: 32),
             const Text(
               'Options',
-              style: TextStyle(color: Color(0xFF888888), fontSize: 14),
+              style: TextStyle(color: BookNestColors.lightTextSecondary, fontSize: 14),
             ),
             const SizedBox(height: 12),
             ...List.generate(_optionControllers.length, (index) {
@@ -125,19 +179,19 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
                       height: 12,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFF888888)),
+                        border: Border.all(color: BookNestColors.lightTextSecondary),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: TextField(
                         controller: _optionControllers[index],
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                         decoration: InputDecoration(
                           hintText: 'Option ${index + 1}',
-                          hintStyle: const TextStyle(color: Color(0xFF666666)),
+                          hintStyle: const TextStyle(color: BookNestColors.lightTextSecondary),
                           filled: true,
-                          fillColor: const Color(0xFF1F1F1F),
+                          fillColor: Theme.of(context).colorScheme.surface,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: BorderSide.none,
@@ -147,7 +201,7 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
                     ),
                     if (_optionControllers.length > 2)
                       IconButton(
-                        icon: const Icon(Icons.close, color: Color(0xFF888888), size: 20),
+                        icon: const Icon(Icons.close, color: BookNestColors.lightTextSecondary, size: 20),
                         onPressed: () => _removeOption(index),
                       ),
                   ],
@@ -157,8 +211,8 @@ class _CreatePollScreenState extends State<CreatePollScreen> {
             if (_optionControllers.length < 6)
               TextButton.icon(
                 onPressed: _addOption,
-                icon: const Icon(Icons.add, color: Color(0xFF00D4FF)),
-                label: const Text('Add option', style: TextStyle(color: Color(0xFF00D4FF))),
+                icon: const Icon(Icons.add, color: BookNestColors.cyan),
+                label: const Text('Add option', style: TextStyle(color: BookNestColors.cyan)),
               ),
           ],
         ),

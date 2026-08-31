@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../config/theme.dart';
 
 import '../../../services/supabase_service.dart';
 
@@ -102,7 +103,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please enter a book title.'),
-          backgroundColor: Colors.orangeAccent,
+          backgroundColor: BookNestColors.navy,
         ),
       );
       return;
@@ -112,7 +113,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please write at least one chapter.'),
-          backgroundColor: Colors.orangeAccent,
+          backgroundColor: BookNestColors.navy,
         ),
       );
       return;
@@ -131,7 +132,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
           ? '${content.substring(0, 200)}…'
           : content;
 
-      final bookResponse = await supabase.from('club_books').insert({
+      final book = await SupabaseService().writeRow('club_books', {
         'club_id': widget.clubId,
         'title': title,
         'author': user.email ?? user.userMetadata?['username'] ?? 'Anonymous',
@@ -139,15 +140,13 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
         'content_format': 'markdown',
         'moderation_status': 'pending',
         'added_by': user.id,
-      }).select();
-
-      if (bookResponse.isEmpty) {
+      });
+      if (book == null) {
         throw Exception('Failed to create the book record.');
       }
+      final bookId = book['id'].toString();
 
-      final bookId = bookResponse.first['id'];
-
-      await supabase.from('book_chapters').insert({
+      await SupabaseService().writeRow('book_chapters', {
         'club_book_id': bookId,
         'chapter_number': 1,
         'title': 'Chapter 1',
@@ -158,7 +157,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Book submitted for review.'),
-          backgroundColor: Color(0xFF00D4FF),
+          backgroundColor: BookNestColors.cyan,
         ),
       );
       context.pop();
@@ -183,7 +182,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: IconButton(
-        icon: Icon(icon, color: Colors.white70),
+        icon: Icon(icon, color: Theme.of(context).colorScheme.onSurface.withOpacity(.7)),
         tooltip: tooltip,
         onPressed: onPressed,
         visualDensity: VisualDensity.compact,
@@ -194,17 +193,15 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
         elevation: 1,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
-        title: const Text(
+        title: Text(
           'Write Book',
-          style: TextStyle(color: Colors.white, fontSize: 18),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 18),
         ),
         actions: [
           Padding(
@@ -217,14 +214,14 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Color(0xFF00D4FF),
+                        color: BookNestColors.cyan,
                       ),
                     )
                   : const Icon(Icons.rocket_launch, size: 18),
-              label: const Text(
+              label: Text(
                 'Publish',
                 style: TextStyle(
-                  color: Color(0xFF00D4FF),
+                  color: BookNestColors.cyan,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
@@ -241,21 +238,21 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: TextField(
                 controller: _titleController,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
                 decoration: const InputDecoration(
                   hintText: 'Book Title',
-                  hintStyle: TextStyle(color: Color(0xFF444444)),
+                  hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
                   border: InputBorder.none,
                 ),
               ),
             ),
-            const Divider(color: Color(0xFF222222), height: 1),
+            Divider(color: Theme.of(context).dividerColor, height: 1),
             Container(
-              color: const Color(0xFF141414),
+              color: BookNestColors.darkReceivedMessage,
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -272,12 +269,12 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                       onPressed: () => _applyInlineStyle('*'),
                     ),
                     _buildToolbarButton(
-                      icon: Icons.format_header,
+                      icon: Icons.title,
                       tooltip: 'Heading 1 (# text)',
                       onPressed: () => _applyLinePrefix('# '),
                     ),
                     _buildToolbarButton(
-                      icon: Icons.format_header,
+                      icon: Icons.title,
                       tooltip: 'Heading 2 (## text)',
                       onPressed: () => _applyLinePrefix('## '),
                     ),
@@ -296,7 +293,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                 ),
               ),
             ),
-            const Divider(color: Color(0xFF222222), height: 1),
+            Divider(color: Theme.of(context).dividerColor, height: 1),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
@@ -306,15 +303,15 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                   maxLines: null,
                   keyboardType: TextInputType.multiline,
                   textInputAction: TextInputAction.newline,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontSize: 16,
                     height: 1.7,
                   ),
                   decoration: const InputDecoration(
                     hintText:
                         'Start writing your story...\n\nUse the toolbar to format, or type Markdown directly.',
-                    hintStyle: TextStyle(color: Color(0xFF555555)),
+                    hintStyle: TextStyle(color: BookNestColors.lightTextSecondary),
                     border: InputBorder.none,
                   ),
                   onTapOutside: (_) => _contentFocusNode.unfocus(),
