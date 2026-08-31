@@ -122,3 +122,28 @@ create policy "announcement_groups readable" on public.announcement_groups for s
 
 -- Done. Club/school/community/organization creation, book writing and
 -- profile-photo saving now pass the permission check for signed-in users.
+
+-- ============================================================================
+-- 7 · VERIFICATION — run is complete when you see 'BookNest database ready'
+--     (the result grid below also shows your live policy count per table)
+-- ============================================================================
+do $$
+declare
+  policy_count int;
+  profile_count int;
+begin
+  select count(*) into policy_count
+  from pg_policies where schemaname = 'public';
+  select count(*) into profile_count
+  from public.profiles;
+  raise notice '================================================';
+  raise notice '  BookNest database ready';
+  raise notice '  policies installed : %', policy_count;
+  raise notice '  profiles in search : %', profile_count;
+  raise notice '================================================';
+end $$;
+
+select tablename, policyname
+from pg_policies
+where schemaname = 'public'
+order by tablename, policyname;
