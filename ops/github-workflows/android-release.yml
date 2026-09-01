@@ -1,12 +1,13 @@
 name: Android Release APK
 
 # Builds the installable release APK and uploads it as a downloadable
-# artifact. Run it from the Actions tab ("Run workflow") or by pushing
-# to main.
+# artifact. Runs automatically on pushes, or manually from the Actions
+# tab ("Run workflow").
+
 on:
   # Manual: Actions tab → Android Release APK → Run workflow (pick branch)
   workflow_dispatch:
-  # Automatic: every push to the build branch produces a fresh APK
+  # Automatic: every push to a build branch produces a fresh APK
   push:
     branches:
       - main
@@ -53,10 +54,14 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
-      - name: Upload build log on failure
+      # If the build fails, the last part of the build log is written
+      # into the run's summary page, so the cause is always visible at
+      # the top of the run (and readable via the checks API) without
+      # digging through raw logs.
+      - name: Publish build diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-error-log
-          path: build.log
-          if-no-files-found: ignore
+        run: |
+          echo "## Build error — last 200 lines" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 200 build.log 2>/dev/null | cut -c1-200 >> "$GITHUB_STEP_SUMMARY" || echo "(build.log missing — failure happened before the build step)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
