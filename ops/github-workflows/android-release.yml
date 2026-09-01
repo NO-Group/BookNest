@@ -13,6 +13,10 @@ on:
       - main
       - arena/01a03a7f-booknest
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   release-apk:
     runs-on: ubuntu-latest
@@ -54,14 +58,22 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
-      # If the build fails, the last part of the build log is written
-      # into the run's summary page, so the cause is always visible at
-      # the top of the run (and readable via the checks API) without
-      # digging through raw logs.
+      # If the build fails, the tail of the build log (a) goes to the
+      # run's Summary page for humans, and (b) is recorded as a
+      # dedicated "Build diagnostics" check run on the commit, whose
+      # full text is readable through the API.
       - name: Publish build diagnostics
         if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "## Build error — last 200 lines" >> "$GITHUB_STEP_SUMMARY"
-          echo '```text' >> "$GITHUB_STEP_SUMMARY"
-          tail -n 200 build.log 2>/dev/null | cut -c1-200 >> "$GITHUB_STEP_SUMMARY" || echo "(build.log missing — failure happened before the build step)" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 120 build.log 2>/dev/null | cut -c1-170 > errtail.txt || true
+          if [ ! -s errtail.txt ]; then echo "(build.log missing — failure happened before the build step)" > errtail.txt; fi
+          {
+            echo "## Build error — last lines"
+            echo '```text'
+            cat errtail.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          jq -n --rawfile t errtail.txt --arg sha "${{ github.sha }}" '{name:"Build diagnostics",head_sha:$sha,status:"completed",conclusion:"failure",output:{title:"Build error tail",summary:"Tail of the failed build log.",text:$t}}' > diag.json
+          gh api -X POST "repos/${{ github.repository }}/check-runs" --input diag.json > /dev/null && echo "diagnostics recorded" || echo "diagnostics upload failed" 
