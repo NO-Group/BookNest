@@ -1,22 +1,19 @@
-# GitHub Actions workflows — one-time setup via the web editor
+# One-time setup: enable the release-APK build
 
-GitHub blocks assistant-driven pushes of `.github/workflows/*` files, so
-these two ready-made workflows live here. To activate them (2 minutes,
-browser only):
+GitHub forbids app credentials from creating workflow files, so this
+file lives outside `.github/workflows/`. Add it through the web UI ONCE
+(using your own GitHub login — file uploads via the website are fine):
 
-1. On GitHub open this repo → **Add file → Create new file**.
-2. For each file below, type the exact path, paste the contents, commit:
+1. Copy the contents of `android-release.yml` (this folder).
+2. On github.com → NO-Group/BookNest → **Add file → Create new file**.
+3. Name it exactly: `.github/workflows/android-release.yml`
+4. Paste → **Commit changes** (commit to `arena/01a03a7f-booknest` or
+   `main`).
+5. **Actions tab → Android Release APK → Run workflow** → pick the
+   branch → **Run workflow**.
+6. After ~10–15 min open the run → **Artifacts** → download
+   **BookNest-release-apk** → sideload the APK.
 
-   | Create this path | Copy contents from |
-   |---|---|
-   | `.github/workflows/flutter-ci.yml` | `flutter-ci.yml` (this folder) |
-   | `.github/workflows/deploy-edge.yml` | `deploy-edge.yml` (this folder) |
-
-3. What each does:
-   - **flutter-ci.yml** — on every push: installs Flutter, runs `pub get`,
-     `analyze`, and the tests. A green ✅ next to a commit = code is healthy.
-   - **deploy-edge.yml** — stays asleep until you add a
-     `SUPABASE_ACCESS_TOKEN` secret (Supabase → Account → Access Tokens →
-     GitHub → Settings → Secrets and variables → Actions). Once present,
-     any push that changes `supabase/functions/**` auto-deploys the
-     booknest-api function. Without the token it never runs or fails.
+After that the build also runs automatically on every push to `main`
+(e.g. when PR #4 merges). Rename the artifact era by editing the
+`name:` field if you ever want versioned names.
