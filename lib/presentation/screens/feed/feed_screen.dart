@@ -71,6 +71,23 @@ class _FeedScreenState extends State<FeedScreen>
           .select('*, profiles(username, avatar_url)')
           .order('created_at', ascending: false);
 
+      // Attach cloud like stats (best-effort — the feed never blocks on it).
+      final ids = <String>[];
+      for (final p in response) {
+        if (p is Map && p['id'] != null) ids.add(p['id'].toString());
+      }
+      final stats = ids.isNotEmpty
+          ? await SupabaseService().feedStats(ids)
+          : <String, Map<String, dynamic>>{};
+      for (final p in response) {
+        if (p is! Map) continue;
+        final s = stats[p['id']?.toString()];
+        if (s != null) {
+          p['like_count'] = s['likeCount'];
+          p['liked_by_me'] = s['likedByMe'];
+        }
+      }
+
       setState(() {
         _posts = response;
         _filteredPosts = response;
@@ -1042,7 +1059,46 @@ class _PostActionButtons extends StatefulWidget {
 }
 
 class _PostActionButtonsState extends State<_PostActionButtons> {
-  bool _liked = false;
+  late bool _liked = widget.post is Map && widget.post['liked_by_me'] == true;
+  late int _count = widget.post is Map
+      ? ((widget.post['like_count'] as num?)?.toInt() ?? 0)
+      : 0;
+  bool _busy = false;
+
+  Future<void> _toggle() async {
+    if (_busy) return;
+    final post = widget.post;
+    final id =
+        post is Map && post['id'] != null ? post['id'].toString() : null;
+    final target = !_liked;
+    setState(() {
+      _liked = target;
+      _count = target ? _count + 1 : (_count > 0 ? _count - 1 : 0);
+    });
+    if (id == null) return; // post not synced yet — local-only like
+    _busy = true;
+    try {
+      final fresh = await SupabaseService().setFeedLike(id, liked: target);
+      if (mounted) setState(() => _count = fresh);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _liked = !target;
+          _count = target ? (_count > 0 ? _count - 1 : 0) : _count + 1;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error is WriteException
+                ? error.message
+                : "BookNest couldn't complete that just now — please try "
+                    "again in a moment."),
+          ),
+        );
+      }
+    } finally {
+      _busy = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1057,8 +1113,17 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
             size: 20,
           ),
           tooltip: _liked ? 'Unlike' : 'Like',
-          onPressed: () => setState(() => _liked = !_liked),
+          onPressed: _toggle,
         ),
+        AnimatedCount(
+          value: _count,
+          style: TextStyle(
+            color: _liked ? BookNestColors.cyan : muted,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 10),
         IconButton(
           icon: Icon(Icons.share_outlined, color: muted, size: 20),
           tooltip: 'Share post',

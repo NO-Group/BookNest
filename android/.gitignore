@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# BookNest release keystore is committed on purpose (stable install identity)
+!key/booknest-release.jks

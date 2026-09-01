@@ -592,21 +592,34 @@ class _ShimmerBoxState extends State<ShimmerBox> with SingleTickerProviderStateM
 }
 
 /// Number that animates when its value changes (likes, stats, counters).
-class AnimatedCount extends StatelessWidget {
+class AnimatedCount extends StatefulWidget {
   final int value;
   final TextStyle? style;
 
   const AnimatedCount({super.key, required this.value, this.style});
 
   @override
+  State<AnimatedCount> createState() => _AnimatedCountState();
+}
+
+class _AnimatedCountState extends State<AnimatedCount> {
+  late int _from = widget.value;
+
+  @override
+  void didUpdateWidget(AnimatedCount oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) _from = oldWidget.value;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<int>(
-      tween: IntTween(begin: value, end: value),
+      tween: IntTween(begin: _from, end: widget.value),
       duration: AppSettings.reduceMotion.value
           ? Duration.zero
           : const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
-      builder: (context, v, _) => Text('$v', style: style),
+      builder: (context, v, _) => Text('$v', style: widget.style),
     );
   }
 }

@@ -147,6 +147,60 @@ class SupabaseService {
     }
   }
 
+  // ── Feed post likes (stored in the social store via the edge API) ──
+
+  /// Like counts + whether the current user liked each post, keyed by post
+  /// id. Best-effort: an empty map is returned on failure so the feed never
+  /// blocks on it.
+  Future<Map<String, Map<String, dynamic>>> feedStats(List<String> postIds) async {
+    _requireSession();
+    try {
+      final res = await client.functions.invoke(
+        'booknest-api',
+        body: {'action': 'feed.stats', 'postIds': postIds},
+      );
+      final data = res.data;
+      if (data is Map && data['stats'] is Map) {
+        final raw = data['stats'] as Map;
+        return raw.map(
+          (k, v) => MapEntry(
+            k.toString(),
+            v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{},
+          ),
+        );
+      }
+      return {};
+    } catch (error) {
+      if (kDebugMode) debugPrint('feedStats unavailable: $error');
+      return {};
+    }
+  }
+
+  /// Likes or unlikes a feed post and returns the fresh server-side count.
+  /// Throws [WriteException] when the change could not be saved.
+  Future<int> setFeedLike(String postId, {required bool liked}) async {
+    _requireSession();
+    try {
+      final res = await client.functions.invoke(
+        'booknest-api',
+        body: {
+          'action': liked ? 'feed.like' : 'feed.unlike',
+          'postId': postId,
+        },
+      );
+      final data = res.data;
+      if (data is Map && data['likeCount'] is num) {
+        return (data['likeCount'] as num).toInt();
+      }
+      throw WriteException(
+          "BookNest couldn't complete that just now — please try again in a moment.");
+    } on WriteException {
+      rethrow;
+    } catch (error) {
+      throw WriteException(_friendly(error));
+    }
+  }
+
   /// Live profile search used by the DM contact picker and global search.
   /// Server-side `ilike` over username AND display name (matches any part).
   Future<List<Map<String, dynamic>>> searchProfiles(String term,

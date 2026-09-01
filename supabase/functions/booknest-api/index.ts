@@ -242,6 +242,10 @@ function computeStreaks(days: string[]) {
 
 const isHexId = (v: unknown): boolean =>
   typeof v === 'string' && /^[a-f\d]{24}$/i.test(v);
+
+const isUuid = (v: unknown): boolean =>
+  typeof v === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const isDupKey = (e: unknown): boolean =>
   e instanceof Error && e.message.includes('E11000');
 
@@ -495,6 +499,55 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── events: agenda + RSVP (posts table; RSVPs in Mongo social) ───────
+      // ── feed: post likes (social store; post ids are Supabase UUIDs) ─────
+      case 'feed.stats': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const raw = p.postIds;
+        const ids = Array.isArray(raw)
+          ? [...new Set(raw.filter((x): x is string => typeof x === 'string' && isUuid(x)))].slice(0, 200)
+          : [];
+        const stats: Record<string, { likeCount: number; likedByMe: boolean }> = {};
+        if (ids.length > 0) {
+          const docs = await (await dbFor('social')).collection('post_likes')
+            .find({ postId: { $in: ids } }, { projection: { postId: 1, userId: 1 } })
+            .toArray();
+          for (const id of ids) stats[id] = { likeCount: 0, likedByMe: false };
+          for (const doc of docs) {
+            const stat = stats[String(doc.postId)];
+            if (!stat) continue;
+            stat.likeCount += 1;
+            if (doc.userId === uid) stat.likedByMe = true;
+          }
+        }
+        return ok({ stats });
+      }
+
+      case 'feed.like':
+      case 'feed.unlike': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (!isUuid(p.postId)) return fail('A valid postId is required');
+        const postId = p.postId as string;
+        const likes = (await dbFor('social')).collection('post_likes');
+        try {
+          await likes.createIndex({ postId: 1, userId: 1 }, { unique: true });
+        } catch {
+          // index already exists with the same definition
+        }
+        if (action === 'feed.like') {
+          try {
+            await likes.insertOne({ postId, userId: uid, createdAt: new Date() });
+          } catch (error) {
+            if (!isDupKey(error)) throw error; // already liked → no-op
+          }
+        } else {
+          await likes.deleteOne({ postId, userId: uid });
+        }
+        const likeCount = await likes.countDocuments({ postId });
+        return ok({ liked: action === 'feed.like', likeCount });
+      }
+
       case 'events.list': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -25,11 +27,31 @@ android {
         versionName = flutter.versionName
     }
 
+    // Stable release identity: the keystore in android/key is committed,
+    // so CI and local builds share one signature and installs update in
+    // place instead of Android treating each build as a different app.
+    val keystoreProps = Properties().apply {
+        val f = rootProject.file("key/booknest-keystore.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+
+    signingConfigs {
+        if (keystoreProps.isNotEmpty()) {
+            create("booknestRelease") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystoreProps.isNotEmpty())
+                signingConfigs.getByName("booknestRelease")
+            else
+                signingConfigs.getByName("debug")
         }
     }
 }
