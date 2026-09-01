@@ -38,8 +38,13 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Flutter version (for the record)
+        run: flutter --version
+
       - name: Build release APK
-        run: flutter build apk --release
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee build.log
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -47,3 +52,11 @@ jobs:
           name: BookNest-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-error-log
+          path: build.log
+          if-no-files-found: ignore
