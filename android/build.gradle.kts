@@ -15,10 +15,6 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
-subprojects {
-    project.evaluationDependsOn(":app")
-}
-
 // androidx libraries (lifecycle 2.7.x, core 1.13.x, ...) require every
 // consuming module to compile against SDK 34 or newer, while plugin
 // modules default to the Flutter template's android-33. Raise each
@@ -30,6 +26,10 @@ subprojects {
             (androidExt as groovy.lang.GroovyObject).setProperty("compileSdk", 36)
         }
     }
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
 }
 
 tasks.register<Delete>("clean") {
