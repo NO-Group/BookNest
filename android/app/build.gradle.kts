@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.nogroup.booknest"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
