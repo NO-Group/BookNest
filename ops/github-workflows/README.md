@@ -17,3 +17,8 @@ file lives outside `.github/workflows/`. Add it through the web UI ONCE
 After that the build also runs automatically on every push to `main`
 (e.g. when PR #4 merges). Rename the artifact era by editing the
 `name:` field if you ever want versioned names.
+
+> **Flow note:** the project builds from the `arena/01a03a7f-booknest`
+> branch only — nothing is merged to main. Commit the workflow file on
+> that branch; it then builds automatically on every push to it, and
+> "Run workflow" also accepts the branch picker for manual builds.

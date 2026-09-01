@@ -4,9 +4,13 @@ name: Android Release APK
 # artifact. Run it from the Actions tab ("Run workflow") or by pushing
 # to main.
 on:
+  # Manual: Actions tab → Android Release APK → Run workflow (pick branch)
   workflow_dispatch:
+  # Automatic: every push to the build branch produces a fresh APK
   push:
-    branches: [main]
+    branches:
+      - main
+      - arena/01a03a7f-booknest
 
 jobs:
   release-apk:
