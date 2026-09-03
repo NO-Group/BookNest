@@ -317,9 +317,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: 'About BookNest',
               onTap: () => context.push('/about'),
             ),
+            _SettingsRow(
+              icon: Icons.wifi_tethering_rounded,
+              label: 'Connection status',
+              onTap: () => context.push('/status'),
+            ),
             const _SettingsRow(
               icon: Icons.verified_rounded,
-              label: 'Version 1.1.0 · build 30',
+              label: 'Version 1.3.0+4',
             ),
           ]),
           const SizedBox(height: 28),
