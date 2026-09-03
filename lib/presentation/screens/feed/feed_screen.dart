@@ -5,6 +5,7 @@ import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -236,15 +237,20 @@ class _FeedScreenState extends State<FeedScreen>
                         )
                       : _filteredPosts.isEmpty
                           ? _buildEmptyState()
-                          : ListView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              itemCount: _filteredPosts.length,
-                              itemBuilder: (context, index) {
-                                return Entrance(
-                                  index: index,
-                                  child: _PostCard(post: _filteredPosts[index]),
-                                );
-                              },
+                          : RefreshIndicator(
+                              color: BookNestColors.cyan,
+                              onRefresh: _loadPosts,
+                              child: ListView.builder(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 8),
+                                itemCount: _filteredPosts.length,
+                                itemBuilder: (context, index) {
+                                  return Entrance(
+                                    index: index,
+                                    child: _PostCard(post: _filteredPosts[index]),
+                                  );
+                                },
+                              ),
                             ),
                 ),
               ],
@@ -1071,6 +1077,7 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
     final id =
         post is Map && post['id'] != null ? post['id'].toString() : null;
     final target = !_liked;
+    HapticFeedback.lightImpact();
     setState(() {
       _liked = target;
       _count = target ? _count + 1 : (_count > 0 ? _count - 1 : 0);

@@ -16,6 +16,9 @@ import '../presentation/screens/dms/dm_chat_screen.dart';
 import '../presentation/screens/settings/settings_screen.dart';
 import '../presentation/screens/wallet/wallet_screen.dart';
 import '../presentation/screens/jenny/jenny_screen.dart';
+import '../presentation/screens/dictionary/dictionary_screen.dart';
+import '../presentation/screens/dictionary/word_detail_screen.dart';
+import '../services/dictionary_service.dart';
 import '../presentation/screens/events/events_agenda_screen.dart';
 import '../presentation/screens/streaks/streaks_screen.dart';
 import '../presentation/screens/settings/edit_profile_screen.dart';
@@ -153,6 +156,20 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
     GoRoute(path: '/wallet', builder: (context, state) => const WalletScreen()),
     GoRoute(path: '/jenny', builder: (context, state) => const JennyScreen()),
+    GoRoute(
+      path: '/dictionary',
+      builder: (context, state) => DictionaryScreen(
+        initialQuery: state.uri.queryParameters['q'],
+      ),
+    ),
+    GoRoute(
+      path: '/dictionary/word',
+      builder: (context, state) {
+        final extra = state.extra;
+        if (extra is WordEntry) return WordDetailScreen(entry: extra);
+        return const DictionaryScreen();
+      },
+    ),
     GoRoute(
         path: '/events',
         builder: (context, state) => const EventsAgendaScreen()),

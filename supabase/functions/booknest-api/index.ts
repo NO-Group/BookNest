@@ -56,6 +56,7 @@ export const DB_NAMES = {
   chats: 'booknest_chats', // conversations + messages
   notifications: 'booknest_notifications',
   users: 'booknest_users', // reader preferences
+  dictionary: 'booknest_dictionary', // Word Nest lookups + trending
   moderation: 'booknest_moderation', // reports
 } as const;
 
@@ -499,6 +500,35 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── events: agenda + RSVP (posts table; RSVPs in Mongo social) ───────
+      // ── dictionary: Word Nest community layer (own store) ────────────────
+      case 'dict.log': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const term = typeof p.term === 'string' ? p.term.trim().toLowerCase() : '';
+        if (term.length < 2 || term.length > 40) return ok({ logged: false });
+        await (await dbFor('dictionary')).collection('lookups').insertOne({
+          term,
+          userId: uid,
+          createdAt: new Date(),
+        });
+        return ok({ logged: true });
+      }
+
+      case 'dict.trending': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const rows = await (await dbFor('dictionary')).collection('lookups')
+          .aggregate([
+            { $match: { createdAt: { $gte: since } } },
+            { $group: { _id: '$term', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 8 },
+          ])
+          .toArray();
+        return ok({ trending: rows.map((r) => String(r._id)) });
+      }
+
       // ── feed: post likes (social store; post ids are Supabase UUIDs) ─────
       case 'feed.stats': {
         const uid = await currentUserId(req);

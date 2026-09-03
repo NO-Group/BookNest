@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.0+4 — 2026-09-01
+
+- **Word Nest is here**: a full dictionary built into the app — meanings,
+  examples, and kindred words for the vocabulary readers meet. Works
+  completely offline.
+- Word of the day, refreshed automatically; recent searches remembered on
+  your device.
+- **Trending words** shows what the community is looking up this week when
+  you are online.
+- Lucky dip: shake up a random word whenever curiosity strikes.
+- Find the dictionary from global search, or deep-link straight into a word.
+- The feed now refreshes with a pull, and likes give a little haptic tick.
+
 ## 1.2.0+3 — 2026-09-01
 
 - **Permanent app identity**: every build now ships with the same release

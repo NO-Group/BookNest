@@ -201,6 +201,44 @@ class SupabaseService {
     }
   }
 
+  // ── Word Nest dictionary community layer (best-effort, offline-safe) ──
+
+  /// Records a lookup so the community trending list stays fresh.
+  /// Failures are swallowed — the dictionary itself is offline-first.
+  Future<void> logDictionarySearch(String term) async {
+    final t = term.trim().toLowerCase();
+    if (t.length < 2 || t.length > 40) return;
+    _requireSession();
+    try {
+      await client.functions.invoke(
+        'booknest-api',
+        body: {'action': 'dict.log', 'term': t},
+      );
+    } catch (error) {
+      if (kDebugMode) debugPrint('dict.log skipped: $error');
+    }
+  }
+
+  /// Words the community looked up most in the last 7 days.
+  /// Returns an empty list when offline or unavailable.
+  Future<List<String>> fetchDictionaryTrending() async {
+    _requireSession();
+    try {
+      final res = await client.functions.invoke(
+        'booknest-api',
+        body: {'action': 'dict.trending'},
+      );
+      final data = res.data;
+      if (data is Map && data['trending'] is List) {
+        return (data['trending'] as List).map((t) => t.toString()).toList();
+      }
+      return const [];
+    } catch (error) {
+      if (kDebugMode) debugPrint('dict.trending unavailable: $error');
+      return const [];
+    }
+  }
+
   /// Live profile search used by the DM contact picker and global search.
   /// Server-side `ilike` over username AND display name (matches any part).
   Future<List<Map<String, dynamic>>> searchProfiles(String term,

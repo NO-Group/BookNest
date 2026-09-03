@@ -138,11 +138,59 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
         ),
       ),
       body: !_searched
-          ? const EmptyState(
-              icon: Icons.travel_explore_rounded,
-              title: 'Find your next favorite',
-              subtitle: 'Search titles, authors, topics — or the readers '
-                  'who love them.',
+          ? Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: GlassPanel(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () {
+                        final q = _query.text.trim();
+                        context.push(q.isEmpty
+                            ? '/dictionary'
+                            : '/dictionary?q=${Uri.encodeComponent(q)}');
+                      },
+                      child: Row(
+                        children: [
+                          const Icon(Icons.menu_book_rounded,
+                              color: BookNestColors.cyan),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Word Nest dictionary',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Meanings, examples, word of the day — works offline.',
+                                  style: TextStyle(
+                                      color: theme.hintColor, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right_rounded,
+                              color: theme.hintColor),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const Expanded(
+                  child: EmptyState(
+                    icon: Icons.travel_explore_rounded,
+                    title: 'Find your next favorite',
+                    subtitle: 'Search titles, authors, topics — or the readers '
+                        'who love them.',
+                  ),
+                ),
+              ],
             )
           : _searching
               ? const Center(
