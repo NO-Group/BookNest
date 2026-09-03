@@ -9,7 +9,7 @@ enum _Health { checking, ok, down }
 class _LayerResult {
   final _Health health;
   final String hint;
-  _LayerResult(this.health, this.hint);
+  const _LayerResult(this.health, this.hint);
 }
 
 /// Connection status — live check of the three layers every feature sits
