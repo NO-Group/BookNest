@@ -1,5 +1,6 @@
 -- ============================================================================
--- BookNest · Supabase bootstrap — run ONCE in Dashboard → SQL Editor → New query
+-- BookNest · Supabase bootstrap — run in Dashboard → SQL Editor → New query
+-- (idempotent: safe to re-run; follow with rls_v2_upgrade.sql)
 -- ============================================================================
 -- WHAT SUPABASE HOLDS (per the v2 architecture):
 --   PERMANENT   : authentication (managed) + profiles (1:1 with auth.users,
@@ -50,7 +51,9 @@ create table if not exists public.posts (
   created_at timestamptz not null default now()
 );
 alter table public.posts enable row level security;
+drop policy if exists "posts are readable" on public.posts;
 create policy "posts are readable"  on public.posts for select using (true);
+drop policy if exists "posts insert own" on public.posts;
 create policy "posts insert own"    on public.posts for insert with check (auth.uid() = created_by);
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -145,6 +148,7 @@ begin
     execute format('create policy "%s readable" on public.%I for select using (true);', t, t);
     execute format('drop policy if exists "%s manage own" on public.%I;', t, t);
     execute format('create policy "%s manage own" on public.%I for insert with check (auth.uid() = owner_id);', t, t);
+    execute format('drop policy if exists "%s update own" on public.%I;', t, t);
     execute format('create policy "%s update own" on public.%I for update using (auth.uid() = owner_id);', t, t);
   end loop;
 end $$;
@@ -187,7 +191,9 @@ create table if not exists public.club_books (
   created_at        timestamptz not null default now()
 );
 alter table public.club_books enable row level security;
+drop policy if exists "club_books readable" on public.club_books;
 create policy "club_books readable"  on public.club_books for select using (true);
+drop policy if exists "club_books insert own" on public.club_books;
 create policy "club_books insert own" on public.club_books for insert with check (auth.uid() = added_by);
 
 create table if not exists public.book_chapters (
@@ -200,11 +206,32 @@ create table if not exists public.book_chapters (
   unique (club_book_id, chapter_number)
 );
 alter table public.book_chapters enable row level security;
+drop policy if exists "book_chapters readable" on public.book_chapters;
 create policy "book_chapters readable" on public.book_chapters for select using (true);
+drop policy if exists "book_chapters insert own" on public.book_chapters;
 create policy "book_chapters insert own" on public.book_chapters for insert with check (
   exists (select 1 from public.club_books b where b.id = club_book_id and b.added_by = auth.uid())
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- Done. Next steps: backend/README.md → deploy the booknest-api edge function.
+-- Done. Next: run backend/rls_v2_upgrade.sql (signup trigger + backfill +
+-- the full v2 policy set). Then deploy the edge function — see README.
 -- ============================================================================
+
+-- Verification — you should see 'BookNest schema present' with 13 tables.
+do $$
+declare
+  table_count int;
+  policy_count int;
+begin
+  select count(*) into table_count
+  from information_schema.tables
+  where table_schema = 'public' and table_type = 'BASE TABLE';
+  select count(*) into policy_count
+  from pg_policies where schemaname = 'public';
+  raise notice '================================================';
+  raise notice '  BookNest schema present';
+  raise notice '  tables created      : %', table_count;
+  raise notice '  policies installed  : %', policy_count;
+  raise notice '================================================';
+end $$;

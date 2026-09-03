@@ -40,9 +40,17 @@ Flutter app ──► Supabase (auth + gateway, "the leader")
    ```bash
    bash backend/setup_secrets.sh
    ```
-5. **Create the Supabase tables** — open the Supabase Dashboard → SQL Editor →
-   paste **`backend/supabase_min_schema.sql`** → Run. (Needed because the app
-   now points at project `ekgbbbbj…`, which is brand new and empty.)
+5. **Set up the database** — Dashboard → SQL Editor → New query, and run the
+   two files **in this order**:
+
+   | your project state | run |
+   |---|---|
+   | brand-new / empty project | 1. `backend/supabase_min_schema.sql` (creates the 13 tables + base policies) 2. `backend/rls_v2_upgrade.sql` (signup trigger + backfill + full policy set) |
+   | tables already exist (the feed loads, or you are unsure) | just `backend/rls_v2_upgrade.sql` — it is idempotent and completes everything |
+
+   Both files are safe to re-run. Each prints a verification notice — you are
+   done when you see **`BookNest schema present`** / **`BookNest database
+   ready`** with the table, policy, and profile counts.
 
 ## Smoke tests (run after deploying)
 

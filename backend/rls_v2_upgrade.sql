@@ -18,6 +18,19 @@ begin
   )
   on conflict (id) do nothing;
   return new;
+exception
+  when unique_violation then
+    -- Someone else already holds that username (e.g. same email prefix).
+    -- Never fail a signup for a name clash: fall back to a guaranteed-
+    -- unique handle built from the full user id instead.
+    insert into public.profiles (id, username, display_name)
+    values (
+      new.id,
+      'reader_' || replace(new.id::text, '-', ''),
+      coalesce(nullif(new.raw_user_meta_data->>'username', ''), split_part(new.email, '@', 1), 'Reader')
+    )
+    on conflict do nothing;
+    return new;
 end $$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
