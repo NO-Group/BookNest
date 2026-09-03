@@ -357,12 +357,18 @@ Deno.serve(async (req: Request) => {
     switch (action) {
       // ── health ───────────────────────────────────────────────────────────
       case 'ping': {
-        const d = await dbFor('books');
-        return ok({
-          db: d.databaseName,
-          databases: DB_NAMES,
-          time: new Date().toISOString(),
-        });
+        // Always answers ok — the `mongo` field tells the truth about the
+        // data layer separately, so callers can distinguish "function is
+        // awake" from "data connection is live".
+        const base = { databases: DB_NAMES, time: new Date().toISOString() };
+        if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
+        try {
+          const d = await dbFor('books');
+          await d.command({ ping: 1 });
+          return ok({ ...base, db: d.databaseName, mongo: 'ready' });
+        } catch (_) {
+          return ok({ ...base, db: null, mongo: 'unreachable' });
+        }
       }
 
       // ── resilience: RLS-exempt whitelisted write (ownership force-bound) ─

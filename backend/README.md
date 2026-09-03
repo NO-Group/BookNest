@@ -40,17 +40,22 @@ Flutter app ──► Supabase (auth + gateway, "the leader")
    ```bash
    bash backend/setup_secrets.sh
    ```
-5. **Set up the database** — Dashboard → SQL Editor → New query, and run the
-   two files **in this order**:
+5. **Set up the database** — Dashboard → SQL Editor → New query → paste
+   **`backend/booknest_complete_setup.sql`** → Run. That single file handles
+   every starting state (brand-new, half-finished, or already running):
+   tables first, then signup automation and the full security rulebook.
+   You are done when it prints **`BookNest database ready`** with your
+   table, policy, and profile counts. Safe to re-run any time.
 
-   | your project state | run |
-   |---|---|
-   | brand-new / empty project | 1. `backend/supabase_min_schema.sql` (creates the 13 tables + base policies) 2. `backend/rls_v2_upgrade.sql` (signup trigger + backfill + full policy set) |
-   | tables already exist (the feed loads, or you are unsure) | just `backend/rls_v2_upgrade.sql` — it is idempotent and completes everything |
-
-   Both files are safe to re-run. Each prints a verification notice — you are
-   done when you see **`BookNest schema present`** / **`BookNest database
-   ready`** with the table, policy, and profile counts.
+   (The older pair — `supabase_min_schema.sql` + `rls_v2_upgrade.sql` — still
+   works when run in that order, but the complete file supersedes it.)
+6. **Connect the data store** — the smart services need one secret:
+   Dashboard → **Edge Functions** → **booknest-api** → **Secrets** →
+   **Add secret** → name **`MONGO_URI`**, value = your Atlas connection
+   string (Atlas → Connect → Drivers → `mongodb+srv://…`). Also allow
+   the connection in Atlas → **Network Access** (see
+   `DEPLOY_FROM_DASHBOARD.md`). Then re-deploy the function so it picks
+   the secret up.
 
 ## Smoke tests (run after deploying)
 

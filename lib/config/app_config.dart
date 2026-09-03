@@ -23,6 +23,9 @@
 ///    flutter build apk --dart-define=…
 ///  With no --dart-define flags, the defaults below are used.
 class AppConfig {
+  /// Display version — keep in sync with pubspec.yaml on every release.
+  static const String appVersion = '1.3.1+5';
+
   AppConfig._();
 
   // ── Supabase · authentication + edge-function gateway ────────────────────

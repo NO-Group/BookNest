@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../config/app_config.dart';
 import '../../../config/theme.dart';
 
 /// About BookNest — version, mission, credits.
@@ -61,7 +62,7 @@ class AboutScreen extends StatelessWidget {
             style: TextStyle(color: theme.hintColor, height: 1.5),
           ),
           const SizedBox(height: 28),
-          _Row(label: 'Version', value: '1.1.0 (v1.1)'),
+          _Row(label: 'Version', value: AppConfig.appVersion),
           _Row(label: 'Built with', value: 'Flutter'),
           _Row(label: 'Cloud', value: 'Supabase · MongoDB · Cloudinary · R2'),
           _Row(label: 'By', value: 'N.O Group'),

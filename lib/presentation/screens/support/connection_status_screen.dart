@@ -73,9 +73,19 @@ class _ConnectionStatusScreenState extends State<ConnectionStatusScreen> {
           .functions
           .invoke('booknest-api', body: {'action': 'ping'});
       final data = res.data;
-      if (data is Map && data['ok'] == true) {
+      final mongo = data is Map ? data['mongo']?.toString() : null;
+      if (data is Map && data['ok'] == true && mongo == 'ready') {
         setState(() => _services = const _LayerResult(_Health.ok,
-            'Responding — wallet, Jenny, likes and trends are live.'));
+            'Fully working — wallet, Jenny, likes and trends are live.'));
+      } else if (mongo == 'not_configured' || mongo == 'unreachable') {
+        setState(() => _services = const _LayerResult(_Health.down,
+            'The services are awake but their data connection needs one more '
+            'setting. This is being finished on the project side — check '
+            'back shortly.'));
+      } else if (data is Map && data['ok'] == true) {
+        setState(() => _services = const _LayerResult(_Health.down,
+            'Responding, but this build can’t verify its data layer. Update '
+            'the app and recheck.'));
       } else {
         setState(() => _services = const _LayerResult(_Health.down,
             'Responded with an unexpected answer. Try again shortly.'));

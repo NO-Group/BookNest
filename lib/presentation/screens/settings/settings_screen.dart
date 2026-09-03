@@ -17,6 +17,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../config/app_state.dart';
+import '../../../config/app_config.dart';
 import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
@@ -324,7 +325,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const _SettingsRow(
               icon: Icons.verified_rounded,
-              label: 'Version 1.3.0+4',
+              label: 'Version ${AppConfig.appVersion}',
             ),
           ]),
           const SizedBox(height: 28),

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.1+5 — 2026-09-03
+
+- **Connection status now tells the full truth**: the services check no
+  longer stops at "awake" — it verifies the data layer behind wallet,
+  Jenny, likes and trends, and says plainly when one more setting is
+  needed project-side.
+- Version shown in Settings now comes from the app's single config
+  source, so it can never go stale again.
+
 ## 1.3.0+4 — 2026-09-01
 
 - **Word Nest is here**: a full dictionary built into the app — meanings,
