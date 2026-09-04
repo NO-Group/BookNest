@@ -137,6 +137,20 @@ create policy "announcement_groups readable" on public.announcement_groups for s
 -- profile-photo saving now pass the permission check for signed-in users.
 
 -- ============================================================================
+-- PART 2.5 · Table access grants — the front-door keys
+-- Policies decide WHO may do WHAT; grants decide whether the app's roles may
+-- touch the tables at all. Both are required. This section guarantees the
+-- grants exist no matter how the tables were first created.
+-- ============================================================================
+grant usage on schema public to anon, authenticated, service_role;
+grant select on all tables in schema public to anon, authenticated, service_role;
+grant insert, update, delete on all tables in schema public to authenticated;
+grant all on all tables in schema public to service_role;
+grant all on all sequences in schema public to authenticated, service_role;
+alter default privileges in schema public grant select on tables to anon, authenticated;
+alter default privileges in schema public grant insert, update, delete on tables to authenticated;
+
+-- ============================================================================
 -- 7 · VERIFICATION — run is complete when you see 'BookNest database ready'
 --     (the result grid below also shows your live policy count per table)
 -- ============================================================================

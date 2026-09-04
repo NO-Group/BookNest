@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dictionary_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/app_config.dart';
@@ -216,6 +217,59 @@ class SupabaseService {
       );
     } catch (error) {
       if (kDebugMode) debugPrint('dict.log skipped: $error');
+    }
+  }
+
+  /// Looks any word up in the full dictionary (server-side, cached).
+  /// Returns null when the word can't be found or we're offline — the
+  /// bundled edition remains the offline base.
+  Future<WordEntry?> lookupOnline(String word) async {
+    _requireSession();
+    try {
+      final res = await client.functions.invoke(
+        'booknest-api',
+        body: {
+          'action': 'dict.lookup',
+          'word': word.trim().toLowerCase(),
+        },
+      );
+      final data = res.data;
+      if (data is! Map || data['word'] is! Map) return null;
+      final w = Map<String, dynamic>.from(data['word'] as Map);
+      final meanings =
+          ((w['meanings'] as List?) ?? const []).whereType<Map>().toList();
+      final defs = <String>[];
+      final examples = <String>[];
+      final syns = <String>[];
+      var pos = '';
+      for (final m in meanings) {
+        for (final d in ((m['defs'] as List?) ?? const [])) {
+          if (d is Map && d['d'] != null && d['d'].toString().isNotEmpty) {
+            defs.add(d['d'].toString());
+            final ex = d['ex'];
+            if (ex != null && ex.toString().isNotEmpty) {
+              examples.add(ex.toString());
+            }
+          }
+        }
+        for (final sy in ((m['syns'] as List?) ?? const [])) {
+          final v = sy.toString();
+          if (v.isNotEmpty) syns.add(v);
+        }
+        if (pos.isEmpty) pos = m['pos']?.toString() ?? '';
+        if (defs.length >= 6) break;
+      }
+      if (defs.isEmpty) return null;
+      return WordEntry(
+        word: w['word']?.toString() ?? word,
+        pos: pos,
+        definition: defs.first,
+        example: examples.isNotEmpty ? examples.first : '',
+        synonyms: syns.take(8).toList(),
+      );
+    } catch (error) {
+      if (kDebugMode) debugPrint('lookupOnline unavailable: $error');
+      return null;
     }
   }
 

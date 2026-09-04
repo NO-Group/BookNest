@@ -280,15 +280,66 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     );
   }
 
+  bool _onlineLooking = false;
+
+  Future<void> _lookupOnline() async {
+    final term = _controller.text.trim();
+    if (term.isEmpty || _onlineLooking) return;
+    setState(() => _onlineLooking = true);
+    WordEntry? entry;
+    try {
+      entry = await SupabaseService().lookupOnline(term);
+    } finally {
+      if (mounted) setState(() => _onlineLooking = false);
+    }
+    if (entry != null && mounted) {
+      try {
+        await SupabaseService().logDictionarySearch(term);
+      } catch (_) {}
+      await _openEntry(entry);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('That word isn\'t in the full dictionary either — '
+              'check the spelling and try again.'),
+        ),
+      );
+    }
+  }
+
   Widget _buildResults(ThemeData theme) {
     if (_results.isEmpty) {
+      final term = _controller.text.trim();
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
-          child: Text(
-            'No match in this edition yet.\nTry another spelling or a shorter word.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: theme.hintColor, height: 1.4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'No match in this edition yet.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: theme.hintColor, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              if (term.isNotEmpty)
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    foregroundColor: BookNestColors.navy,
+                    backgroundColor: BookNestColors.cyan,
+                  ),
+                  onPressed: _onlineLooking ? null : _lookupOnline,
+                  icon: _onlineLooking
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.travel_explore_rounded, size: 18),
+                  label: Text(_onlineLooking
+                      ? 'Searching the full dictionary…'
+                      : 'Search the full dictionary'),
+                ),
+            ],
           ),
         ),
       );

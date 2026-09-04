@@ -520,6 +520,61 @@ Deno.serve(async (req: Request) => {
         return ok({ logged: true });
       }
 
+      // Full-dictionary lookup: a free community API when online, with a
+      // Mongo cache so repeat lookups are instant. The bundled offline
+      // edition always stays available with no network.
+      case 'dict.lookup': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const term = typeof p.word === 'string' ? p.word.trim().toLowerCase() : '';
+        if (!/^[a-z][a-z' -]{0,38}$/.test(term)) return fail('Enter a word to look up');
+        const words = (await dbFor('dictionary')).collection('words');
+        const cached = await words.findOne({ _id: term } as never);
+        if (cached?.data) return ok({ word: cached.data, cached: true });
+        let apiRes: Response;
+        try {
+          apiRes = await fetch(
+            `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(term)}`,
+            { signal: AbortSignal.timeout(8000) },
+          );
+        } catch {
+          return ok({ word: null, reason: 'offline' });
+        }
+        if (!apiRes.ok) {
+          return ok({ word: null, reason: apiRes.status === 404 ? 'not_found' : 'unavailable' });
+        }
+        const entries = await apiRes.json().catch(() => null);
+        if (!Array.isArray(entries) || entries.length === 0) {
+          return ok({ word: null, reason: 'not_found' });
+        }
+        const e0 = entries[0] as {
+          word?: string; phonetic?: string;
+          phonetics?: { text?: string }[];
+          meanings?: { partOfSpeech?: string; synonyms?: string[];
+            definitions?: { definition?: string; example?: string }[] }[];
+        };
+        const phonetic = e0.phonetic ?? e0.phonetics?.find((x) => x.text)?.text ?? null;
+        const meanings: { pos: string; defs: { d: string; ex: string | null }[]; syns: string[] }[] = [];
+        for (const m of e0.meanings ?? []) {
+          meanings.push({
+            pos: String(m.partOfSpeech ?? ''),
+            defs: (m.definitions ?? []).slice(0, 4).map((d) => ({
+              d: String(d.definition ?? ''),
+              ex: d.example ? String(d.example) : null,
+            })),
+            syns: (m.synonyms ?? []).slice(0, 6).map(String),
+          });
+        }
+        if (meanings.length === 0) return ok({ word: null, reason: 'not_found' });
+        const word = { word: String(e0.word ?? term), phonetic, meanings };
+        try {
+          await words.insertOne({ _id: term, data: word, fetchedAt: new Date() });
+        } catch {
+          // cached in a parallel request — fine
+        }
+        return ok({ word, cached: false });
+      }
+
       case 'dict.trending': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
