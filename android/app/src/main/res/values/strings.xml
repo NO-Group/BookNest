@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sc_write">Write</string>
+    <string name="sc_write_long">Start writing</string>
+    <string name="sc_word">Word</string>
+    <string name="sc_word_long">Word of the day</string>
+    <string name="sc_search">Look up</string>
+    <string name="sc_search_long">Look up a word</string>
+    <string name="sc_wallet">Gems</string>
+    <string name="sc_wallet_long">Gems wallet</string>
+    <string name="desc_wotd">Today's word, refreshed daily</string>
+    <string name="desc_streak">Your reading streak at a glance</string>
+    <string name="desc_gems">Your gems balance</string>
+    <string name="desc_quick">Jump straight into BookNest</string>
+    <string name="desc_search">Look up any word instantly</string>
+</resources>

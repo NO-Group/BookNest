@@ -19,6 +19,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../config/app_state.dart';
 import '../../../config/app_config.dart';
 import '../../../config/theme.dart';
+import '../../../services/notification_service.dart';
 import '../../../services/supabase_service.dart';
 
 /// Settings — appearance (theme switcher), account shortcuts, support pages.
@@ -31,6 +32,19 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _clearingCache = false;
+  bool _dailyWordOn = false;
+  bool _streakReminderOn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    NotificationService.instance.dailyWordEnabled().then((v) {
+      if (mounted) setState(() => _dailyWordOn = v);
+    });
+    NotificationService.instance.streakReminderEnabled().then((v) {
+      if (mounted) setState(() => _streakReminderOn = v);
+    });
+  }
 
   void _toast(String message) {
     if (!mounted) return;
@@ -306,6 +320,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.shield_outlined,
               label: 'Privacy & safety',
               onTap: () => context.push('/privacy'),
+            ),
+          ]),
+          const SizedBox(height: 24),
+
+          const _SectionLabel('REMINDERS'),
+          const SizedBox(height: 10),
+          _SettingsGroup(children: [
+            SwitchListTile(
+              secondary: const Icon(Icons.menu_book_rounded,
+                  size: 21, color: BookNestColors.cyan),
+              title: const Text('Daily word · 9:00 AM',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 14.5)),
+              subtitle: const Text('A fresh word every morning',
+                  style: TextStyle(fontSize: 12)),
+              value: _dailyWordOn,
+              activeColor: BookNestColors.cyan,
+              onChanged: (v) async {
+                await NotificationService.instance.setDailyWord(v);
+                if (mounted) setState(() => _dailyWordOn = v);
+              },
+            ),
+            SwitchListTile(
+              secondary: const Icon(Icons.local_fire_department_rounded,
+                  size: 21, color: BookNestColors.cyan),
+              title: const Text('Streak reminder · 8:00 PM',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 14.5)),
+              subtitle: const Text('A gentle evening nudge',
+                  style: TextStyle(fontSize: 12)),
+              value: _streakReminderOn,
+              activeColor: BookNestColors.cyan,
+              onChanged: (v) async {
+                await NotificationService.instance.setStreakReminder(v);
+                if (mounted) setState(() => _streakReminderOn = v);
+              },
             ),
           ]),
           const SizedBox(height: 24),

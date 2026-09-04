@@ -6,11 +6,15 @@
 // writes the wallet ledger). Data: streak.get / streak.log edge actions;
 // logs live in booknest_social.reading_logs.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../components/booknest_ui.dart';
+
+import '../../../services/home_widgets_service.dart';
 
 class StreaksScreen extends StatefulWidget {
   const StreaksScreen({super.key});
@@ -55,6 +59,7 @@ class _StreaksScreenState extends State<StreaksScreen> {
   void _apply(Map<String, dynamic> res) {
     setState(() {
       _current = (res['current'] as num?)?.toInt() ?? 0;
+      unawaited(HomeWidgetsService.pushStreak(_current));
       _longest = (res['longest'] as num?)?.toInt() ?? 0;
       _total = (res['total'] as num?)?.toInt() ?? 0;
       _todayLogged = res['todayLogged'] == true;
