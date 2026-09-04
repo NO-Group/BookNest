@@ -38,7 +38,7 @@ class HomeWidgetsService {
             .select('gems')
             .eq('id', user.id)
             .maybeSingle();
-        final gems = row is Map ? (row['gems'] ?? 0).toString() : '0';
+        final gems = (row?['gems'] ?? 0).toString();
         await HomeWidget.saveWidgetData<String>('widget_gems', gems);
       }
     } catch (e) {
