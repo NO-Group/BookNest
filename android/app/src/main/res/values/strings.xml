@@ -8,7 +8,7 @@
     <string name="sc_search_long">Look up a word</string>
     <string name="sc_wallet">Gems</string>
     <string name="sc_wallet_long">Gems wallet</string>
-    <string name="desc_wotd">Today's word, refreshed daily</string>
+    <string name="desc_wotd">Today&#8217;s word, refreshed daily</string>
     <string name="desc_streak">Your reading streak at a glance</string>
     <string name="desc_gems">Your gems balance</string>
     <string name="desc_quick">Jump straight into BookNest</string>
