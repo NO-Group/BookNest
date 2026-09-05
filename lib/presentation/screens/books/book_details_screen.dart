@@ -9,7 +9,7 @@ import '../../../core/utils/auth_guard.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
-/// Store-style book landing page. Reading remains a separate, distraction-free route.
+/// Store-style book landing page. Reading opens the immersive Reader.
 class BookDetailsScreen extends StatefulWidget {
   final String bookId;
   const BookDetailsScreen({super.key, required this.bookId});
@@ -20,6 +20,7 @@ class BookDetailsScreen extends StatefulWidget {
 
 class _BookDetailsScreenState extends State<BookDetailsScreen> {
   Map<String, dynamic>? _book;
+  Map<String, dynamic>? _progress;
   List<Map<String, dynamic>> _recommended = [];
   bool _loading = true;
   bool _saved = false;
@@ -39,6 +40,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
       final results = await Future.wait([
         BackendApi.instance.fetchBook(widget.bookId),
         BackendApi.instance.call('books.list', {'limit': 8}),
+        BackendApi.instance.call('reader.progress.get', {'bookId': widget.bookId}),
       ]);
       if (!mounted) return;
       final bookRes = results[0];
@@ -48,6 +50,9 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
         final b = bookRes?['book'];
         _book = b is Map
             ? Map<String, dynamic>.from(b)
+            : null;
+        _progress = results[2]?['progress'] is Map
+            ? Map<String, dynamic>.from(results[2]['progress'] as Map)
             : null;
         if (_book != null && rows.isNotEmpty) {
           _book!['chapters'] = rows;
@@ -226,7 +231,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               ]),
               const SizedBox(height: 24),
               Row(children: [
-                Expanded(child: ElevatedButton.icon(onPressed: () => AuthGuard.run(context, () => context.push('/publish-details?bookId=${widget.bookId}')), icon: const Icon(Icons.menu_book_rounded), label: const Text('Read now'))),
+                Expanded(child: ElevatedButton.icon(onPressed: () => AuthGuard.run(context, () => context.push('/reader?bookId=${widget.bookId}')), icon: Icon(_progress != null ? Icons.auto_stories_rounded : Icons.menu_book_rounded), label: Text(_progress != null ? 'Continue · Chapter ${(_progress!['chapterNumber'] as num?)?.toInt() ?? 1}' : 'Read now'))),
                 const SizedBox(width: 10),
                 _RoundAction(icon: _saved ? Icons.bookmark : Icons.bookmark_border, selected: _saved, label: 'Save', onTap: () => _guard(_saved ? 'Removed from saved books.' : 'Saved to your library.', _toggleSave)),
                 _RoundAction(icon: _liked ? Icons.favorite : Icons.favorite_border, selected: _liked, label: 'Like', onTap: () => _guard(_liked ? 'Like removed.' : 'You liked this book.', _toggleLike)),

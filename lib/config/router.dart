@@ -14,6 +14,7 @@ import '../presentation/screens/books/book_details_screen.dart';
 import '../presentation/screens/dms/dm_list_screen.dart';
 import '../presentation/screens/dms/dm_chat_screen.dart';
 import '../presentation/screens/chat/chat_screen.dart';
+import '../presentation/screens/reader/reader_screen.dart';
 import '../presentation/screens/settings/settings_screen.dart';
 import '../presentation/screens/wallet/wallet_screen.dart';
 import '../presentation/screens/jenny/jenny_screen.dart';
@@ -66,6 +67,7 @@ const Set<String> _protectedRoutes = {
   '/editor',
   '/publish-details',
   '/club-chat',
+  '/reader',
   '/chat',
   '/settings',
   '/library',
@@ -273,6 +275,14 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => DMChatScreen(
         conversationId: state.pathParameters['conversationId'] ?? '',
         peerId: state.uri.queryParameters['peer'],
+      ),
+    ),
+    GoRoute(
+      path: '/reader',
+      builder: (context, state) => ReaderScreen(
+        bookId: state.uri.queryParameters['bookId'] ?? '',
+        initialChapter: int.tryParse(
+            state.uri.queryParameters['chapter'] ?? ''),
       ),
     ),
     GoRoute(

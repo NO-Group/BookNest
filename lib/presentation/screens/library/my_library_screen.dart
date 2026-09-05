@@ -24,6 +24,9 @@ class _MyLibraryScreenState extends State<MyLibraryScreen>
   bool _savedLoading = true;
   bool _cloudOffline = false;
 
+  /// Books the reader is partway through (immersive Reader progress).
+  List<Map<String, dynamic>> _continue = [];
+
   List<Map<String, dynamic>> _works = [];
   bool _worksLoading = true;
 
@@ -34,6 +37,22 @@ class _MyLibraryScreenState extends State<MyLibraryScreen>
     super.initState();
     _loadSaved();
     _loadWorks();
+    _loadContinue();
+  }
+
+  Future<void> _loadContinue() async {
+    final res = await BackendApi.instance.call('reader.progress.list');
+    if (!mounted) return;
+    setState(() {
+      _continue = ((res?['items'] as List?) ?? const [])
+          .map((row) => Map<String, dynamic>.from(row as Map))
+          .toList();
+    });
+  }
+
+  void _reloadEverything() {
+    _loadSaved();
+    _loadContinue();
   }
 
   Future<void> _loadSaved() async {
@@ -113,7 +132,8 @@ class _MyLibraryScreenState extends State<MyLibraryScreen>
             loading: _savedLoading,
             offline: _cloudOffline,
             books: _saved,
-            onRetry: _loadSaved,
+            continueItems: _continue,
+            onRetry: _reloadEverything,
           ),
           _WorksTab(loading: _worksLoading, books: _works),
         ],
@@ -126,12 +146,14 @@ class _SavedTab extends StatelessWidget {
   final bool loading;
   final bool offline;
   final List<Map<String, dynamic>> books;
+  final List<Map<String, dynamic>> continueItems;
   final VoidCallback onRetry;
 
   const _SavedTab({
     required this.loading,
     required this.offline,
     required this.books,
+    required this.continueItems,
     required this.onRetry,
   });
 
@@ -158,15 +180,19 @@ class _SavedTab extends StatelessWidget {
         subtitle: 'Tap the bookmark on any book and it will wait for you here.',
       );
     }
+    final showRail = continueItems.isNotEmpty;
     return RefreshIndicator(
       color: BookNestColors.cyan,
       onRefresh: () async => onRetry(),
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
-        itemCount: books.length,
+        itemCount: books.length + (showRail ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
-          final book = books[index];
+          if (index == 0 && showRail) {
+            return _ContinueRail(items: continueItems);
+          }
+          final book = books[index - (showRail ? 1 : 0)];
           return _LibraryBookCard(
             id: book['id']?.toString() ?? '',
             title: book['title']?.toString() ?? 'Untitled',
@@ -177,6 +203,112 @@ class _SavedTab extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// 'Continue reading' shelf — picks up exactly where the reader stopped.
+class _ContinueRail extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  const _ContinueRail({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.auto_stories_rounded,
+                color: BookNestColors.cyan, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'Continue reading',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 178,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              final percent =
+                  ((item['percent'] as num?)?.toDouble() ?? 0).clamp(0, 100);
+              return GestureDetector(
+                onTap: () => context
+                    .push('/reader?bookId=${item['bookId']}'),
+                child: SizedBox(
+                  width: 108,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        height: 120,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: BookCover(
+                                coverUrl: item['coverUrl']?.toString(),
+                                title: item['title']?.toString() ?? 'Untitled',
+                                width: 108,
+                                height: 120,
+                              ),
+                            ),
+                            if (percent >= 99)
+                              Positioned(
+                                top: 6,
+                                right: 6,
+                                child: CircleAvatar(
+                                  radius: 11,
+                                  backgroundColor: BookNestColors.cyan,
+                                  child: const Icon(Icons.done_rounded,
+                                      size: 14, color: Colors.black),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        item['title']?.toString() ?? 'Untitled',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 12.5),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Chapter ${item['chapterNumber'] ?? 1} of ${item['chaptersCount'] ?? 1}',
+                        style: TextStyle(
+                            fontSize: 11, color: Theme.of(context).hintColor),
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                          value: percent / 100,
+                          minHeight: 3,
+                          backgroundColor:
+                              BookNestColors.cyan.withOpacity(.15),
+                          color: BookNestColors.cyan,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

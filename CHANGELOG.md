@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.0+9 — 2026-09-05
+
+- **The BookNest Reader is here** — the big one. Every published book can
+  now be read inside the app, full screen and distraction-free:
+  - Typography that bends to you: text size from 14 to 22 pt, and
+    Snug / Comfy / Airy line spacing.
+  - Tap anywhere to fade the chrome away; the chapter, your percent read
+    and a cyan hairline of progress stay quietly in view.
+  - A chapters drawer to jump around, with the current chapter marked.
+  - **Resume anywhere**: your exact spot — chapter and scroll position —
+    is saved to your account as you read, so My Library's new
+    "Continue reading" shelf and the book page's Continue button put you
+    back in the story instantly.
+  - **Reading feeds your streak**: daily reading earns +2 gems and grows
+    your streak, celebrated right in the reader.
+  - All of it on the watermark canvas — a whisper of open books under
+    every page.
+
 ## 1.6.0+8 — 2026-09-05
 
 - **Chat, rebuilt**: 1:1 and all-new club group chats now sit on a custom
