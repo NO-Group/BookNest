@@ -39,7 +39,6 @@ class _FeedScreenState extends State<FeedScreen>
     'News',
     'Poll',
     'Event',
-    'Reel',
     'Article',
   ];
 
@@ -48,7 +47,6 @@ class _FeedScreenState extends State<FeedScreen>
     _PostType(label: 'News', icon: Icons.newspaper, color: BookNestColors.navy),
     _PostType(label: 'Poll', icon: Icons.poll, color: BookNestColors.cyan),
     _PostType(label: 'Event', icon: Icons.event, color: BookNestColors.navy),
-    _PostType(label: 'Reel', icon: Icons.videocam, color: BookNestColors.cyan),
     _PostType(label: 'Article', icon: Icons.article, color: BookNestColors.navy),
   ];
 
@@ -132,28 +130,26 @@ class _FeedScreenState extends State<FeedScreen>
     }
   }
 
-  void _onPostTypeTap(_PostType type) {
+  Future<void> _onPostTypeTap(_PostType type) async {
     _toggleStylus();
     switch (type.label) {
       case 'Quote':
-        context.push('/create/quote');
+        await context.push('/create/quote');
         break;
       case 'News':
-        context.push('/create/news');
+        await context.push('/create/news');
         break;
       case 'Poll':
-        context.push('/create/poll');
+        await context.push('/create/poll');
         break;
       case 'Event':
-        context.push('/create/event');
-        break;
-      case 'Reel':
-        context.push('/create/reel');
+        await context.push('/create/event');
         break;
       case 'Article':
-        context.push('/editor');
+        await context.push('/editor');
         break;
     }
+    _loadPosts();
   }
 
   @override
@@ -445,8 +441,6 @@ class _PostCard extends StatelessWidget {
         return _PollPostCard(post: post, author: author);
       case 'event':
         return _EventPostCard(post: post, author: author);
-      case 'reel':
-        return _ReelPostCard(post: post, author: author);
       case 'article':
         return _ArticlePostCard(post: post, author: author);
       default:
@@ -843,116 +837,6 @@ class _EventPostCard extends StatelessWidget {
                 ),
               ),
               child: const Text('RSVP'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Reel post (video thumbnail)
-class _ReelPostCard extends StatelessWidget {
-  final dynamic post;
-  final String author;
-
-  const _ReelPostCard({required this.post, required this.author});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme.of(context).dividerColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                height: 240,
-                decoration: BoxDecoration(
-                  color: BookNestColors.navy,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(16),
-                  ),
-                  image: post['metadata']?['thumbnail_url'] != null
-                      ? DecorationImage(
-                          image: NetworkImage(post['metadata']['thumbnail_url']),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
-                ),
-                child: post['metadata']?['thumbnail_url'] == null
-                    ? const Center(
-                        child: Icon(
-                          Icons.videocam,
-                          size: 48,
-                          color: BookNestColors.lightTextSecondary,
-                        ),
-                      )
-                    : null,
-              ),
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: BookNestColors.cyan.withOpacity(0.9),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.play_arrow,
-                  color: Colors.white,
-                  size: 32,
-                ),
-              ),
-              // Duration badge
-              Positioned(
-                bottom: 12,
-                right: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    post['metadata']?['duration'] ?? '0:00',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  post['title'] ?? 'Untitled Reel',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '$author • ${post['metadata']?['views'] ?? 0} views',
-                  style: const TextStyle(
-                    color: BookNestColors.lightTextSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
             ),
           ),
         ],

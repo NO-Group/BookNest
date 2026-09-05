@@ -235,15 +235,21 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                       ? const Center(
                           child: CircularProgressIndicator(color: BookNestColors.cyan),
                         )
-                      : _filteredItems.isEmpty
-                          ? _buildEmptyState()
-                          : ListView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                              itemCount: _filteredItems.length,
-                              itemBuilder: (context, index) {
-                                return _DiscoverCard(item: _filteredItems[index]);
-                              },
-                            ),
+                      : RefreshIndicator(
+                          color: BookNestColors.cyan,
+                          onRefresh: _loadAll,
+                          child: _filteredItems.isEmpty
+                              ? ListView(
+                                  children: [_buildEmptyState()],
+                                )
+                              : ListView.builder(
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                  itemCount: _filteredItems.length,
+                                  itemBuilder: (context, index) {
+                                    return _DiscoverCard(item: _filteredItems[index]);
+                                  },
+                                ),
+                        ),
                 ),
               ],
             ),
@@ -264,9 +270,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: _createOptions.map((option) {
                     return GestureDetector(
-                      onTap: () {
+                      onTap: () async {
                         _togglePlus();
-                        context.push(option.route);
+                        await context.push(option.route);
+                        if (mounted) _loadAll();
                       },
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 8),

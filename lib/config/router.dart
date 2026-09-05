@@ -46,7 +46,6 @@ import '../presentation/screens/feed/create_quote_screen.dart';
 import '../presentation/screens/feed/create_news_screen.dart';
 import '../presentation/screens/feed/create_poll_screen.dart';
 import '../presentation/screens/feed/create_event_screen.dart';
-import '../presentation/screens/feed/create_reel_screen.dart';
 import '../presentation/screens/discover/create_club_screen.dart';
 import '../presentation/screens/discover/create_community_screen.dart';
 import '../presentation/screens/discover/create_organization_screen.dart';
@@ -83,7 +82,6 @@ const Set<String> _protectedRoutes = {
   '/create/news',
   '/create/poll',
   '/create/event',
-  '/create/reel',
   '/wallet',
   '/jenny',
   '/events',
@@ -298,10 +296,6 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/create/event',
       builder: (context, state) => const CreateEventScreen(),
-    ),
-    GoRoute(
-      path: '/create/reel',
-      builder: (context, state) => const CreateReelScreen(),
     ),
     // Discover creation routes (fullscreen, hide the nav bar).
     GoRoute(
