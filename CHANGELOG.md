@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.0+7 — 2026-09-05
+
+- **The architecture is complete**: feed posts, clubs, communities,
+  organizations, schools, books and chapters now all live on the app's
+  own data store. Supabase keeps exactly two jobs — your sign-in and
+  your profile identity. Your existing posts, books and groups carried
+  over automatically, ids intact (likes and reviews untouched).
+- **Permissions, asked properly**: a single friendly screen requests
+  notifications and photo access once — with a plain-English reason for
+  each — and stays available in Settings → App permissions.
+- Connection status now tests the real data chain end to end.
+- Version numbering catches up to the shipped feature set.
+
 ## 1.3.1+5 — 2026-09-03
 
 - **Connection status now tells the full truth**: the services check no
