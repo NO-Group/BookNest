@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.6.0+8 — 2026-09-05
+
+- **Chat, rebuilt**: 1:1 and all-new club group chats now sit on a custom
+  BookNest watermark canvas — soft open-book and quill glyphs under glass
+  bubbles, day separators, delivery ticks, photo messages (stored in the
+  chat folder on Cloudinary) and the same composer everywhere. Group
+  chats are members-only and open from any club's page.
+- **Likes, fixed**: the feed now reads real like counts and your own
+  like state straight from the data store — tap once and it sticks.
+- **Your groups, visible**: creating a club/community/organization/school
+  returns you to a list that refreshes instantly (pull-to-refresh too),
+  and creators always see their own groups — private ones included.
+- **Reels removed**: BookNest is stories and pictures — the reel
+  composer, cards and routes are gone completely.
+- Every event now comes from the app's own data store.
+
 ## 1.5.0+7 — 2026-09-05
 
 - **The architecture is complete**: feed posts, clubs, communities,

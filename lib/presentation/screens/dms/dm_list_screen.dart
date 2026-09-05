@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../components/chat_kit.dart';
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
@@ -117,14 +118,15 @@ class _DMListScreenState extends State<DMListScreen> {
   }
 
   String _timeLabel(dynamic timestamp) {
-    if (timestamp is! DateTime) return '';
+    final time = chatTimestamp(timestamp);
+    if (time == null) return '';
     final now = DateTime.now();
-    final local = timestamp.toLocal();
-    if (local.year == now.year && local.month == now.month && local.day == now.day) {
-      return DateFormat('HH:mm').format(local);
-    }
-    if (now.difference(local).inDays < 7) return DateFormat('EEE').format(local);
-    return DateFormat('MMM d').format(local);
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(time.year, time.month, time.day);
+    final diff = today.difference(day).inDays;
+    if (diff == 0 || diff == 1) return DateFormat('HH:mm').format(time);
+    if (now.year == time.year) return DateFormat('EEE').format(time);
+    return DateFormat('d MMM').format(time);
   }
 
   Future<void> _pickContact() async {
@@ -145,7 +147,8 @@ class _DMListScreenState extends State<DMListScreen> {
 
     return Scaffold(
       backgroundColor: dark ? BookNestColors.darkChatBackground : BookNestColors.lightSurface,
-      body: SafeArea(
+      body: ChatCanvas(
+        child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -191,6 +194,7 @@ class _DMListScreenState extends State<DMListScreen> {
                     ),
             ),
           ],
+        ),
         ),
       ),
     );

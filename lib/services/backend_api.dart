@@ -225,6 +225,27 @@ class BackendApi {
   Future<Map<String, dynamic>?> listMessages(String conversationId) =>
       call('dm.messages', <String, dynamic>{'conversationId': conversationId});
 
+  // ── Club group chat ─────────────────────────────────────────────────────
+  /// Opens (or reuses) the membership-gated room for a group.
+  Future<Map<String, dynamic>?> ensureClubChat(String kind, String clubId) =>
+      call('chat.ensure', <String, dynamic>{'kind': kind, 'clubId': clubId});
+
+  Future<Map<String, dynamic>?> sendClubMessage({
+    required String conversationId,
+    String type = 'text',
+    String text = '',
+    String? mediaUrl,
+  }) =>
+      call('chat.send', <String, dynamic>{
+        'conversationId': conversationId,
+        'type': type,
+        'text': text,
+        if (mediaUrl != null) 'mediaUrl': mediaUrl,
+      });
+
+  Future<Map<String, dynamic>?> listClubMessages(String conversationId) =>
+      call('chat.messages', <String, dynamic>{'conversationId': conversationId});
+
   /// Shares a book profile card into the 1:1 conversation with [peerId]
   /// (creates or reuses the conversation server-side).
   Future<Map<String, dynamic>?> shareBook({

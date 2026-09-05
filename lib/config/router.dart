@@ -13,6 +13,7 @@ import '../presentation/screens/books/publish_details_screen.dart';
 import '../presentation/screens/books/book_details_screen.dart';
 import '../presentation/screens/dms/dm_list_screen.dart';
 import '../presentation/screens/dms/dm_chat_screen.dart';
+import '../presentation/screens/chat/chat_screen.dart';
 import '../presentation/screens/settings/settings_screen.dart';
 import '../presentation/screens/wallet/wallet_screen.dart';
 import '../presentation/screens/jenny/jenny_screen.dart';
@@ -64,6 +65,7 @@ import '../services/supabase_service.dart';
 const Set<String> _protectedRoutes = {
   '/editor',
   '/publish-details',
+  '/club-chat',
   '/chat',
   '/settings',
   '/library',
@@ -271,6 +273,14 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => DMChatScreen(
         conversationId: state.pathParameters['conversationId'] ?? '',
         peerId: state.uri.queryParameters['peer'],
+      ),
+    ),
+    GoRoute(
+      path: '/club-chat',
+      builder: (context, state) => ChatScreen(
+        clubId: state.uri.queryParameters['id'] ?? '',
+        kind: state.uri.queryParameters['kind'] ?? 'clubs',
+        title: state.uri.queryParameters['title'] ?? 'Group chat',
       ),
     ),
     GoRoute(

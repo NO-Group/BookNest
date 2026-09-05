@@ -27,6 +27,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
   String? _error;
   Map<String, dynamic>? _club;
   int _memberCount = 0;
+  bool _isMember = false;
   List<Map<String, dynamic>> _books = const [];
   List<Map<String, dynamic>> _pending = const [];
   bool _isOwner = false;
@@ -75,6 +76,9 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
             .map((row) => Map<String, dynamic>.from(row as Map))
             .toList();
         _isOwner = viewerId != null && owner == viewerId;
+        _isMember = _isOwner ||
+            (viewerId != null &&
+                members.any((m) => m['user_id']?.toString() == viewerId));
       });
       if (_isOwner) await _loadQueue();
       if (!mounted) return;
@@ -129,7 +133,24 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
     final onSurface = theme.colorScheme.onSurface;
 
     return Scaffold(
-      appBar: GlassAppBar(title: _club?['name']?.toString() ?? 'Club'),
+      appBar: GlassAppBar(
+        title: _club?['name']?.toString() ?? 'Club',
+        actions: [
+          if (_isMember)
+            IconButton(
+              icon: const Icon(Icons.forum_outlined),
+              tooltip: 'Group chat',
+              onPressed: () {
+                final id = _club?['id']?.toString() ?? '';
+                if (id.isEmpty) return;
+                context.push(
+                  '/club-chat?id=$id&kind=clubs'
+                  '&title=${Uri.encodeComponent(_club?['name']?.toString() ?? 'Club')}',
+                );
+              },
+            ),
+        ],
+      ),
       body: _loading
           ? const Center(
               child:
