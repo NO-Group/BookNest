@@ -1790,6 +1790,76 @@ Deno.serve(async (req: Request) => {
         });
       }
 
+      // ── reader: immersive reading progress (social store) ────────────────
+      case 'reader.progress.save': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const bookId = typeof p.bookId === 'string' ? p.bookId.slice(0, 64) : '';
+        if (!bookId || !isAnyId(bookId)) return fail('A valid bookId is required');
+        const chapterNumber = Math.max(1, Math.min(5000, Number(p.chapterNumber ?? 1) || 1));
+        const scroll = Math.max(0, Math.min(1, Number(p.scroll ?? 0) || 0));
+        const col = (await dbFor('social')).collection('reader_progress');
+        try {
+          await col.createIndex({ userId: 1, bookId: 1 }, { unique: true });
+        } catch { /* index exists */ }
+        try {
+          await col.updateOne(
+            { userId: uid, bookId },
+            { $set: { chapterNumber, scroll, updatedAt: new Date() } },
+          );
+        } catch {
+          await col.insertOne({
+            userId: uid, bookId, chapterNumber, scroll, updatedAt: new Date(),
+          });
+        }
+        return ok({ saved: true });
+      }
+
+      case 'reader.progress.get': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const bookId = typeof p.bookId === 'string' ? p.bookId.slice(0, 64) : '';
+        if (!bookId || !isAnyId(bookId)) return fail('A valid bookId is required');
+        const doc = await (await dbFor('social')).collection('reader_progress')
+          .findOne({ userId: uid, bookId });
+        return ok({ progress: doc ? {
+          chapterNumber: doc.chapterNumber ?? 1,
+          scroll: doc.scroll ?? 0,
+          updatedAt: doc.updatedAt ?? null,
+        } : null });
+      }
+
+      case 'reader.progress.list': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const rows = await (await dbFor('social')).collection('reader_progress')
+          .find({ userId: uid }).sort({ updatedAt: -1 }).limit(12).toArray();
+        const booksDb = (await dbFor('books')).collection('books');
+        const items = [];
+        for (const r of rows) {
+          const book = await booksDb.findOne(
+            { _id: bookOid(String(r.bookId)) } as never,
+            { projection: { title: 1, authorName: 1, coverUrl: 1, chaptersCount: 1 } },
+          );
+          if (!book) continue;
+          const chaptersCount = Math.max(1, Number(book.chaptersCount ?? 1));
+          const within = Math.max(0, Math.min(1, Number(r.scroll ?? 0)));
+          const percent = Math.min(100,
+            Math.round((((r.chapterNumber ?? 1) - 1 + within) / chaptersCount) * 100));
+          items.push({
+            bookId: String(r.bookId),
+            title: book.title ?? 'Untitled',
+            author: book.authorName ?? 'Unknown',
+            coverUrl: book.coverUrl ?? null,
+            chaptersCount,
+            chapterNumber: r.chapterNumber ?? 1,
+            percent,
+            updatedAt: r.updatedAt ?? null,
+          });
+        }
+        return ok({ items });
+      }
+
       // ── notifications ────────────────────────────────────────────────────
       case 'notifications.list': {
         const uid = await currentUserId(req);
