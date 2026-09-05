@@ -148,6 +148,27 @@ class _StreaksScreenState extends State<StreaksScreen> {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
                   children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: GlassPanel(
+                        radius: 20,
+                        blur: 14,
+                        child: ListTile(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18)),
+                          leading: const Icon(Icons.celebration_rounded,
+                              color: BookNestColors.cyan, size: 26),
+                          title: const Text('Your BookNest Wrapped',
+                              style: TextStyle(fontWeight: FontWeight.w800)),
+                          subtitle: const Text(
+                              'Your whole reading story on one page',
+                              style: TextStyle(fontSize: 12)),
+                          trailing: const Icon(Icons.chevron_right_rounded,
+                              color: BookNestColors.cyan),
+                          onTap: () => context.push('/wrapped'),
+                        ),
+                      ),
+                    ),
                     GlassPanel(
                       radius: 24,
                       blur: 22,

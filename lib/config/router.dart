@@ -15,6 +15,7 @@ import '../presentation/screens/dms/dm_list_screen.dart';
 import '../presentation/screens/dms/dm_chat_screen.dart';
 import '../presentation/screens/chat/chat_screen.dart';
 import '../presentation/screens/reader/reader_screen.dart';
+import '../presentation/screens/wrapped/wrapped_screen.dart';
 import '../presentation/screens/settings/settings_screen.dart';
 import '../presentation/screens/wallet/wallet_screen.dart';
 import '../presentation/screens/jenny/jenny_screen.dart';
@@ -276,6 +277,10 @@ final GoRouter appRouter = GoRouter(
         conversationId: state.pathParameters['conversationId'] ?? '',
         peerId: state.uri.queryParameters['peer'],
       ),
+    ),
+    GoRoute(
+      path: '/wrapped',
+      builder: (context, state) => const WrappedScreen(),
     ),
     GoRoute(
       path: '/reader',

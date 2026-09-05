@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -406,6 +407,34 @@ class _ReaderScreenState extends State<ReaderScreen>
         (_chapters.last['chapterNumber'] as num).toInt();
   }
 
+  /// The last page: pin progress to 100%, claim the one-time +5 gem finish
+  /// bonus, and celebrate properly.
+  Future<void> _celebrateFinish() async {
+    if (!_atLastChapter) return;
+    _scrollFraction = 1;
+    _flushProgress();
+    final res =
+        await BackendApi.instance.call('reader.finish', {
+      'bookId': widget.bookId,
+    });
+    if (!mounted) return;
+    final gems = (res?['gemsAwarded'] as num?)?.toInt() ?? 0;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _FinishSheet(
+        bookTitle: _bookTitle,
+        gems: gems,
+        claimed: res != null,
+      ),
+    );
+  }
+
+  bool get _atLastChapter =>
+      _chapters.isNotEmpty &&
+      _chapterNumber >= (_chapters.last['chapterNumber'] as num).toInt();
+
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -670,10 +699,10 @@ class _ReaderScreenState extends State<ReaderScreen>
                               icon: const Icon(Icons.chevron_right_rounded),
                               label: const Text('Next chapter'),
                             )
-                          : OutlinedButton.icon(
-                              onPressed: null,
-                              icon: const Icon(Icons.flag_rounded),
-                              label: const Text('The end'),
+                          : ElevatedButton.icon(
+                              onPressed: _celebrateFinish,
+                              icon: const Icon(Icons.emoji_events_rounded),
+                              label: const Text('Finish the book'),
                             ),
                     ),
                   ],
@@ -685,4 +714,217 @@ class _ReaderScreenState extends State<ReaderScreen>
       ),
     );
   }
+}
+
+// ── Finish celebration ───────────────────────────────────────────────────────
+
+class _FinishSheet extends StatefulWidget {
+  final String bookTitle;
+  final int gems;
+  final bool claimed;
+
+  const _FinishSheet({
+    required this.bookTitle,
+    required this.gems,
+    required this.claimed,
+  });
+
+  @override
+  State<_FinishSheet> createState() => _FinishSheetState();
+}
+
+class _FinishSheetState extends State<_FinishSheet>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _fall = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 4),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _fall.dispose();
+    super.dispose();
+  }
+
+  String get _gemsLine {
+    if (!widget.claimed) {
+      return 'Your +5 gems will land as soon as the cloud reconnects.';
+    }
+    if (widget.gems > 0) {
+      return '+${widget.gems} gems added to your wallet';
+    }
+    return 'Finish bonus already claimed — this one is yours forever.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            // Confetti canvas behind the card.
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _fall,
+                builder: (context, _) => CustomPaint(
+                  painter: _ConfettiPainter(_fall.value),
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(28),
+                border:
+                    Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+                boxShadow: [
+                  BoxShadow(
+                    color: BookNestColors.navyDeep.withOpacity(.35),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 76,
+                    height: 76,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(colors: [
+                        BookNestColors.cyan.withOpacity(.3),
+                        BookNestColors.cyanSoft.withOpacity(.15),
+                      ]),
+                      border: Border.all(
+                          color: BookNestColors.cyan.withOpacity(.6), width: 2),
+                    ),
+                    child: const Icon(Icons.emoji_events_rounded,
+                        color: BookNestColors.cyan, size: 38),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('You finished it!',
+                      style: theme.textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 6),
+                  Text(
+                    '“${widget.bookTitle}”',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: BookNestColors.cyan,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Every page. The whole story. Not many readers make it '
+                    'this far — well done.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: theme.hintColor, height: 1.4),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: BookNestColors.cyan.withOpacity(.12),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: BookNestColors.cyan.withOpacity(.35)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.diamond_rounded,
+                            color: BookNestColors.cyan, size: 18),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            _gemsLine,
+                            style: const TextStyle(
+                              color: BookNestColors.cyan,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Keep reading'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            context.go('/library');
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: BookNestColors.cyan,
+                            foregroundColor: Colors.black,
+                          ),
+                          child: const Text('Choose the next one'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConfettiPainter extends CustomPainter {
+  final double t;
+  _ConfettiPainter(this.t);
+
+  static const _colors = [
+    BookNestColors.cyan,
+    BookNestColors.navy,
+    Color(0xFF7FD8E8),
+    Color(0xFFB3C7F2),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rnd = math.Random(7);
+    final paint = Paint();
+    for (var i = 0; i < 46; i++) {
+      final speed = 0.55 + rnd.nextDouble() * 0.75;
+      final y = ((t * speed) % 1.15) * (size.height + 60) - 50;
+      final x = rnd.nextDouble() * size.width +
+          math.sin(t * 2 * math.pi + i * 1.3) * 14;
+      final w = 5 + rnd.nextDouble() * 5;
+      paint.color = _colors[i % _colors.length].withOpacity(.8);
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(t * 4 * math.pi + i);
+      canvas.drawRect(
+        Rect.fromCenter(center: Offset.zero, width: w, height: w * .6),
+        paint,
+      );
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ConfettiPainter oldDelegate) => oldDelegate.t != t;
 }

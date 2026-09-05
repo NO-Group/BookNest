@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.8.0+10 — 2026-09-05
+
+- **BookNest Wrapped** — your whole reading story on one beautiful page:
+  time inside books, day streak and best streak, gems earned, books
+  finished, chapters opened, words explored, stories shared, communities
+  joined and chapters you published. Find it at the top of Streaks.
+- **Finish-line magic**: reach the last chapter and the reader grows a
+  golden "Finish the book" button — tap it for confetti, a trophy, and a
+  one-time **+5 gem** finish bonus, counted forever in your Wrapped.
+
 ## 1.7.0+9 — 2026-09-05
 
 - **The BookNest Reader is here** — the big one. Every published book can
