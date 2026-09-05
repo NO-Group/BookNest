@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
+import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 
@@ -59,7 +60,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     setState(() => _searching = true);
     try {
       final pattern = '${Uri.encodeComponent(term)}';
-      final results = await Future.wait([
+      final results = await Future.wait<dynamic>([
         BackendApi.instance
             .call('books.list', {'search': term, 'limit': 20})
             .then((res) => (res?['books'] as List?) ?? const []),

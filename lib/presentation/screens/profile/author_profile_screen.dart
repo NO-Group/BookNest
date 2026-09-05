@@ -36,7 +36,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
 
   Future<void> _load() async {
     try {
-      final results = await Future.wait([
+      final results = await Future.wait<dynamic>([
         SupabaseService()
             .client
             .from('profiles')
