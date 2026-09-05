@@ -49,6 +49,9 @@ Future<void> _startupAftercare() async {
         case 'streaks':
           appRouter.go('/streaks');
           break;
+        case 'feed':
+          appRouter.go('/feed');
+          break;
       }
     }
 
