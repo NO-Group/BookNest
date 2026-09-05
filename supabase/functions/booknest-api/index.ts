@@ -57,6 +57,8 @@ export const DB_NAMES = {
   notifications: 'booknest_notifications',
   users: 'booknest_users', // reader preferences
   dictionary: 'booknest_dictionary', // Word Nest lookups + trending
+  feed: 'booknest_feed', // feed posts (cutover complete: was transitional SQL)
+  groups: 'booknest_groups', // clubs, communities, organizations, schools
   moderation: 'booknest_moderation', // reports
 } as const;
 
@@ -199,6 +201,146 @@ const OWNER_COLUMN: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Legacy SQL → MongoDB cutover migration (one-time, idempotent, preserving ids)
+// ---------------------------------------------------------------------------
+const GROUP_KINDS = ['clubs', 'communities', 'organizations', 'schools'] as const;
+
+let migrationMemo = false;
+
+async function migrateLegacy(req: Request): Promise<void> {
+  if (migrationMemo) return;
+  const meta = (await dbFor('books')).collection('meta');
+  const flag = await meta.findOne({ _id: 'legacy_migration_v1' });
+  if (flag?.done === true) {
+    migrationMemo = true;
+    return;
+  }
+  try {
+    const sc = serviceClient();
+    const feedDb = await dbFor('feed');
+    const groupsDb = await dbFor('groups');
+    const booksDb = await dbFor('books');
+
+    // posts (uuid preserved → existing post_likes keep working)
+    const posts = await sc.from('posts').select('*').limit(2000);
+    for (const row of posts.data ?? []) {
+      try {
+        await feedDb.collection('posts').insertOne({
+          _id: String(row.id),
+          type: row.type ?? 'post',
+          title: row.title ?? null,
+          content: row.content ?? '',
+          metadata: row.metadata ?? {},
+          createdBy: row.created_by ?? null,
+          createdAt: row.created_at ? new Date(row.created_at) : new Date(),
+        });
+      } catch (e) {
+        if (!isDupKey(e)) throw e;
+      }
+    }
+
+    // groups + members
+    for (const kind of GROUP_KINDS) {
+      const rows = await sc.from(kind).select('*').limit(2000);
+      for (const r of rows.data ?? []) {
+        try {
+          await groupsDb.collection(kind).insertOne({
+            _id: String(r.id),
+            name: r.name ?? '',
+            description: r.description ?? '',
+            genreTags: Array.isArray(r.genre_tags) ? r.genre_tags : [],
+            isPrivate: r.is_private === true,
+            coverUrl: r.cover_url ?? null,
+            ownerId: r.owner_id ?? null,
+            viceModeratorId: r.vice_moderator_id ?? null,
+            mission: r.mission ?? null,
+            orgType: r.org_type ?? null,
+            location: r.location ?? null,
+            website: r.website ?? null,
+            schoolType: r.school_type ?? null,
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+          });
+        } catch (e) {
+          if (!isDupKey(e)) throw e;
+        }
+      }
+      const members = await sc.from(`${kind}_members`).select('*').limit(5000);
+      for (const m of members.data ?? []) {
+        try {
+          await groupsDb.collection(`${kind}_members`).insertOne({
+            groupId: String(m[kind.slice(0, -1) + '_id']),
+            userId: String(m.user_id),
+            role: m.role ?? 'member',
+            joinedAt: m.joined_at ? new Date(m.joined_at) : new Date(),
+          });
+        } catch (e) {
+          if (!isDupKey(e)) throw e;
+        }
+      }
+    }
+
+    // books + chapters (uuid preserved; field map to the Mongo shape)
+    const legacyBooks = await sc.from('club_books').select('*').limit(2000);
+    const legacyChapters = await sc.from('book_chapters').select('*').limit(5000);
+    const chapterCount = new Map<string, number>();
+    for (const c of legacyChapters.data ?? []) {
+      const k = String(c.club_book_id);
+      chapterCount.set(k, (chapterCount.get(k) ?? 0) + 1);
+    }
+    for (const b of legacyBooks.data ?? []) {
+      try {
+        await booksDb.collection('books').insertOne({
+          _id: String(b.id),
+          title: b.title ?? 'Untitled',
+          authorName: b.author ?? 'Unknown',
+          authorId: b.added_by ?? null,
+          description: b.description ?? '',
+          genre: b.genre ?? null,
+          coverUrl: b.cover_url ?? null,
+          contentFormat: b.content_format ?? 'markdown',
+          moderationStatus: b.moderation_status === 'pending' ? 'approved' : (b.moderation_status ?? 'approved'),
+          clubId: b.club_id ?? null,
+          chaptersCount: chapterCount.get(String(b.id)) ?? 0,
+          likeCount: 0,
+          bookmarkCount: 0,
+          viewCount: 0,
+          reviewCount: 0,
+          ratingSum: 0,
+          createdAt: b.created_at ? new Date(b.created_at) : new Date(),
+          updatedAt: b.created_at ? new Date(b.created_at) : new Date(),
+        });
+      } catch (e) {
+        if (!isDupKey(e)) throw e;
+      }
+    }
+    for (const c of legacyChapters.data ?? []) {
+      try {
+        await booksDb.collection('chapters').insertOne({
+          bookId: String(c.club_book_id),
+          chapterNumber: Number(c.chapter_number ?? 1) || 1,
+          title: c.title ?? 'Chapter 1',
+          content: c.content ?? '',
+          createdAt: c.created_at ? new Date(c.created_at) : new Date(),
+        });
+      } catch (e) {
+        if (!isDupKey(e)) throw e;
+      }
+    }
+
+    await meta.updateOne(
+      { _id: 'legacy_migration_v1' },
+      { $set: { done: true, at: new Date().toISOString() }, $setOnInsert: { startedAt: new Date().toISOString() } },
+      { upsert: true },
+    );
+    migrationMemo = true;
+  } catch (error) {
+    // Never break the calling action because migration hit a snag — it
+    // retries on the next cold start.
+    console.log('legacy migration deferred:', error);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
 function escapeRegex(text: string): string {
@@ -247,6 +389,11 @@ const isHexId = (v: unknown): boolean =>
 const isUuid = (v: unknown): boolean =>
   typeof v === 'string' &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+// Books may carry either a native ObjectId (published after the MongoDB
+// cutover) or the legacy Supabase UUID (migrated rows) — both are valid.
+const isAnyId = (v: unknown): boolean => isHexId(v) || isUuid(v);
+const bookOid = (id: string) => (isHexId(id) ? new ObjectId(id) : id);
 const isDupKey = (e: unknown): boolean =>
   e instanceof Error && e.message.includes('E11000');
 
@@ -506,6 +653,198 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── events: agenda + RSVP (posts table; RSVPs in Mongo social) ───────
+      // ── cutover: one-time, idempotent migration of the legacy SQL rows ───
+      // (posts, groups, members, books, chapters) into their MongoDB homes.
+      // Post/club/book ids are preserved exactly, so existing likes, saves
+      // and reviews keep working. Guarded by a flag document; never fails
+      // the calling action.
+      case 'admin.migrate': {
+        await migrateLegacy(req);
+        const flag = await (await dbFor('books')).collection('meta').findOne({ _id: 'legacy_migration_v1' });
+        return ok({ migrated: flag?.done === true, at: flag?.at ?? null });
+      }
+
+      // ── feed: posts (feed store; author profiles remain on Supabase) ─────
+      case 'posts.list': {
+        await migrateLegacy(req);
+        const rows = await (await dbFor('feed')).collection('posts')
+          .find({}).sort({ createdAt: -1 }).limit(60).toArray();
+        const authorIds = [...new Set(rows.map((r) => String(r.createdBy)))];
+        const authors = new Map<string, Record<string, unknown>>();
+        if (authorIds.length > 0) {
+          const profs = await serviceClient().from('profiles')
+            .select('id,username,avatar_url,display_name').in('id', authorIds);
+          for (const pr of profs.data ?? []) {
+            authors.set(String(pr.id), pr as Record<string, unknown>);
+          }
+        }
+        return ok({
+          posts: rows.map((r) => ({
+            id: String(r._id),
+            type: r.type ?? 'post',
+            title: r.title ?? null,
+            content: r.content ?? '',
+            metadata: r.metadata ?? {},
+            created_by: r.createdBy ?? null,
+            created_at: r.createdAt ?? null,
+            profiles: authors.get(String(r.createdBy)) ??
+              { username: 'reader', avatar_url: null, display_name: 'Reader' },
+          })),
+        });
+      }
+
+      case 'posts.create': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const type = String(p.type ?? 'post').slice(0, 24);
+        const content = String(p.content ?? '').slice(0, 20_000);
+        const title = p.title == null ? null : String(p.title).slice(0, 200);
+        const metadata = (p.metadata ?? {}) as Record<string, unknown>;
+        const now = new Date();
+        const doc = {
+          _id: crypto.randomUUID(),
+          type, title, content, metadata,
+          createdBy: uid,
+          createdAt: now,
+        };
+        await (await dbFor('feed')).collection('posts').insertOne(doc);
+        const prof = await serviceClient().from('profiles')
+          .select('id,username,avatar_url,display_name').eq('id', uid).maybeSingle();
+        return ok({ post: {
+          id: doc._id, type, title, content, metadata,
+          created_by: uid, created_at: now,
+          profiles: prof.data ?? { username: 'reader', avatar_url: null },
+        } });
+      }
+
+      case 'posts.delete': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const id = String(p.postId ?? '');
+        if (!id) return fail('A valid postId is required');
+        const res = await (await dbFor('feed')).collection('posts')
+          .deleteOne({ _id: id, createdBy: uid } as never);
+        if (res.deletedCount === 0) return fail('Post not found (or not yours)', 404);
+        return ok({ deleted: true });
+      }
+
+      // ── groups: clubs / communities / organizations / schools ────────────
+      case 'groups.list': {
+        await migrateLegacy(req);
+        const kind = String(p.kind ?? 'clubs');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const col = (await dbFor('groups')).collection(kind);
+        const query: Record<string, unknown> = {};
+        if (p.private !== true) query.isPrivate = { $ne: true };
+        const rows = await col.find(query).sort({ createdAt: -1 }).limit(80).toArray();
+        const ownerIds = [...new Set(rows.map((r) => String(r.ownerId)))];
+        const owners = new Map<string, Record<string, unknown>>();
+        if (ownerIds.length > 0) {
+          const profs = await serviceClient().from('profiles')
+            .select('id,username,avatar_url,display_name').in('id', ownerIds);
+          for (const pr of profs.data ?? []) owners.set(String(pr.id), pr as Record<string, unknown>);
+        }
+        const membersCol = (await dbFor('groups')).collection(`${kind}_members`);
+        const counts: number[] = [];
+        for (const r of rows) {
+          counts.push(await membersCol.countDocuments({ groupId: String(r._id) }));
+        }
+        return ok({ groups: rows.map((r, i) => ({
+          id: String(r._id),
+          name: r.name ?? '',
+          description: r.description ?? '',
+          genre_tags: r.genreTags ?? [],
+          is_private: r.isPrivate === true,
+          cover_url: r.coverUrl ?? null,
+          owner_id: r.ownerId ?? null,
+          location: r.location ?? null,
+          website: r.website ?? null,
+          school_type: r.schoolType ?? null,
+          mission: r.mission ?? null,
+          org_type: r.orgType ?? null,
+          created_at: r.createdAt ?? null,
+          owner: owners.get(String(r.ownerId)) ?? null,
+          member_count: counts[i],
+        })) });
+      }
+
+      case 'groups.get': {
+        await migrateLegacy(req);
+        const kind = String(p.kind ?? 'clubs');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const id = String(p.groupId ?? '');
+        if (!id) return fail('A valid groupId is required');
+        const doc = await (await dbFor('groups')).collection(kind).findOne({ _id: id } as never);
+        if (!doc) return fail('Not found', 404);
+        const members = await (await dbFor('groups')).collection(`${kind}_members`)
+          .find({ groupId: id }).limit(500).toArray();
+        return ok({ group: { ...doc, _id: String(doc._id) }, members: members.map((m) => ({
+          user_id: m.userId, role: m.role ?? 'member', joined_at: m.joinedAt ?? null,
+        })) });
+      }
+
+      case 'groups.join':
+      case 'groups.leave': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'clubs');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const id = String(p.groupId ?? '');
+        if (!id) return fail('A valid groupId is required');
+        const members = (await dbFor('groups')).collection(`${kind}_members`);
+        try {
+          await members.createIndex({ groupId: 1, userId: 1 }, { unique: true });
+        } catch { /* index exists */ }
+        if (action === 'groups.join') {
+          try {
+            await members.insertOne({ groupId: id, userId: uid, role: 'member', joinedAt: new Date() });
+          } catch (error) {
+            if (!isDupKey(error)) throw error;
+          }
+        } else {
+          await members.deleteOne({ groupId: id, userId: uid });
+        }
+        return ok({ member: action === 'groups.join', count: await members.countDocuments({ groupId: id }) });
+      }
+
+      case 'groups.create': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'clubs');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const name = String(p.name ?? '').trim();
+        if (name.length < 2 || name.length > 120) return fail('Name must be 2–120 characters');
+        const now = new Date();
+        const prof = await serviceClient().from('profiles')
+          .select('username,display_name').eq('id', uid).maybeSingle();
+        const doc: Record<string, unknown> = {
+          _id: crypto.randomUUID(),
+          name,
+          description: String(p.description ?? '').slice(0, 4000),
+          ownerId: uid,
+          ownerName: String(prof.data?.display_name ?? prof.data?.username ?? 'Reader').slice(0, 80),
+          isPrivate: p.isPrivate === true,
+          createdAt: now,
+        };
+        if (Array.isArray(p.genreTags)) doc.genreTags = p.genreTags.slice(0, 12).map(String);
+        if (typeof p.coverUrl === 'string' && p.coverUrl.startsWith('http')) doc.coverUrl = p.coverUrl;
+        if (kind === 'organizations') {
+          doc.mission = String(p.mission ?? '').slice(0, 2000);
+          doc.orgType = typeof p.orgType === 'string' ? p.orgType.slice(0, 40) : null;
+        }
+        if (kind === 'schools') {
+          doc.location = typeof p.location === 'string' ? p.location.slice(0, 120) : null;
+          doc.website = typeof p.website === 'string' ? p.website.slice(0, 200) : null;
+          doc.schoolType = typeof p.schoolType === 'string' ? p.schoolType.slice(0, 40) : null;
+        }
+        await (await dbFor('groups')).collection(kind).insertOne(doc);
+        try {
+          await (await dbFor('groups')).collection(`${kind}_members`)
+            .insertOne({ groupId: doc._id, userId: uid, role: 'owner', joinedAt: now });
+        } catch { /* already a member */ }
+        return ok({ id: doc._id });
+      }
+
       // ── dictionary: Word Nest community layer (own store) ────────────────
       case 'dict.log': {
         const uid = await currentUserId(req);
@@ -813,6 +1152,8 @@ Deno.serve(async (req: Request) => {
           query.moderationStatus = p.moderationStatus ?? 'approved';
         }
         if (typeof p.genre === 'string' && p.genre.trim()) query.genre = p.genre.trim();
+        if (typeof p.clubId === 'string' && isAnyId(p.clubId)) query.clubId = p.clubId;
+        if (typeof p.authorId === 'string' && p.authorId.trim()) query.authorId = p.authorId.trim();
         const search = typeof p.search === 'string' ? p.search.trim() : '';
         if (search) {
           const rx = { $regex: escapeRegex(search), $options: 'i' };
@@ -832,10 +1173,10 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'books.get': {
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const d = await dbFor('books');
         const book = await d.collection('books')
-          .findOne({ _id: new ObjectId(p.bookId as string) });
+          .findOne({ _id: bookOid(String(p.bookId)) });
         if (!book) return fail('Book not found', 404);
         const chapters = await d.collection('chapters')
           .find({ bookId: String(book._id) })
@@ -846,7 +1187,7 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'books.chapter': {
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const chapterNumber = Number(p.chapterNumber ?? 1) || 1;
         const d = await dbFor('books');
         const chapter = await d.collection('chapters')
@@ -915,7 +1256,7 @@ Deno.serve(async (req: Request) => {
       case 'books.bookmark': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const active = action === 'books.like' ? p.liked === true : p.saved === true;
         const collection = action === 'books.like' ? 'book_likes' : 'book_bookmarks';
         const counter = action === 'books.like' ? 'likeCount' : 'bookmarkCount';
@@ -932,7 +1273,7 @@ Deno.serve(async (req: Request) => {
           const removed = await (await dbFor('social')).collection(collection).deleteOne(filter);
           if (removed.deletedCount === 0) {
             const book = await d.collection('books')
-              .findOne({ _id: new ObjectId(bookId) }, { projection: { [counter]: 1 } });
+              .findOne({ _id: bookOid(bookId) }, { projection: { [counter]: 1 } });
             return ok({
               [action === 'books.like' ? 'liked' : 'saved']: false,
               [counter]: Math.max(0, Number(book?.[counter] ?? 0)),
@@ -940,14 +1281,14 @@ Deno.serve(async (req: Request) => {
           }
         }
         const updated = await d.collection('books').findOneAndUpdate(
-          { _id: new ObjectId(bookId) },
+          { _id: bookOid(bookId) },
           { $inc: { [counter]: active ? 1 : -1 } },
           { returnDocument: 'after', projection: { [counter]: 1 } },
         );
         const value = Math.max(0, Number(updated?.[counter] ?? 0));
         if (value === 0) {
           await d.collection('books')
-            .updateOne({ _id: new ObjectId(bookId) }, { $set: { [counter]: 0 } });
+            .updateOne({ _id: bookOid(bookId) }, { $set: { [counter]: 0 } });
         }
         return ok({
           [action === 'books.like' ? 'liked' : 'saved']: active,
@@ -958,7 +1299,7 @@ Deno.serve(async (req: Request) => {
       case 'books.view': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const bookId = p.bookId as string;
         const d = await dbFor('books');
         // Unique (bookId, userId, day) index → one view per user per day.
@@ -977,14 +1318,14 @@ Deno.serve(async (req: Request) => {
         let viewCount = 0;
         if (counted) {
           const updated = await d.collection('books').findOneAndUpdate(
-            { _id: new ObjectId(bookId) },
+            { _id: bookOid(bookId) },
             { $inc: { viewCount: 1 } },
             { returnDocument: 'after', projection: { viewCount: 1 } },
           );
           viewCount = Number(updated?.viewCount ?? 1);
         } else {
           const book = await d.collection('books')
-            .findOne({ _id: new ObjectId(bookId) }, { projection: { viewCount: 1 } });
+            .findOne({ _id: bookOid(bookId) }, { projection: { viewCount: 1 } });
           viewCount = Number(book?.viewCount ?? 0);
         }
         return ok({ counted, viewCount });
@@ -994,7 +1335,7 @@ Deno.serve(async (req: Request) => {
       case 'reviews.create': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const bookId = p.bookId as string;
         const rating = Math.round(Number(p.rating ?? 0));
         if (rating < 1 || rating > 5) return fail('Rating must be between 1 and 5');
@@ -1023,17 +1364,17 @@ Deno.serve(async (req: Request) => {
             updatedAt: now,
           });
           await (await dbFor('books')).collection('books')
-            .updateOne({ _id: new ObjectId(bookId) }, { $inc: { reviewCount: 1 } });
+            .updateOne({ _id: bookOid(bookId) }, { $inc: { reviewCount: 1 } });
         }
         if (ratingDelta !== 0) {
           await (await dbFor('books')).collection('books')
-            .updateOne({ _id: new ObjectId(bookId) }, { $inc: { ratingSum: ratingDelta } });
+            .updateOne({ _id: bookOid(bookId) }, { $inc: { ratingSum: ratingDelta } });
         }
         return ok({ saved: true, edited: existing != null });
       }
 
       case 'reviews.list': {
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const limit = Math.min(Number(p.limit ?? 20) || 20, 50);
         const query: Record<string, unknown> = { bookId: p.bookId as string };
         if (typeof p.before === 'string' && p.before) {
@@ -1298,10 +1639,10 @@ Deno.serve(async (req: Request) => {
       case 'books.update': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const d = await dbFor('books');
         const book = await d.collection('books')
-          .findOne({ _id: new ObjectId(p.bookId as string) }, { projection: { authorId: 1 } });
+          .findOne({ _id: bookOid(String(p.bookId)) }, { projection: { authorId: 1 } });
         if (!book) return fail('Book not found', 404);
         if (book.authorId !== uid) return fail('Only the author can edit this book', 403);
         const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -1321,10 +1662,10 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'books.stats': {
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const d = await dbFor('books');
         const book = await d.collection('books')
-          .findOne({ _id: new ObjectId(p.bookId as string) });
+          .findOne({ _id: bookOid(String(p.bookId)) });
         if (!book) return fail('Book not found', 404);
         const view = bookView(book as Record<string, unknown>);
         const recent = await d.collection('reviews')
@@ -1345,10 +1686,10 @@ Deno.serve(async (req: Request) => {
         const d = await dbFor('social');
         const marks = await d.collection('book_bookmarks')
           .find({ userId: uid }).sort({ createdAt: -1 }).limit(100).toArray();
-        const ids = marks.map((m) => m.bookId).filter(isHexId);
+        const ids = marks.map((m) => String(m.bookId));
         if (ids.length === 0) return ok({ books: [] });
         const books = await (await dbFor('books')).collection('books')
-          .find({ _id: { $in: ids.map((id) => new ObjectId(id)) } })
+          .find({ _id: { $in: ids.map((id) => bookOid(id)) } })
           .toArray();
         const byId = new Map(books.map((b) => [String(b._id), b]));
         const ordered = marks
@@ -1361,14 +1702,14 @@ Deno.serve(async (req: Request) => {
       case 'chapters.save': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const bookId = p.bookId as string;
         const chapterNumber = Math.round(Number(p.chapterNumber ?? 1)) || 1;
         const title = String(p.title ?? `Chapter ${chapterNumber}`).slice(0, 200);
         const content = String(p.content ?? '').slice(0, 500_000);
         const d = await dbFor('books');
         const book = await d.collection('books')
-          .findOne({ _id: new ObjectId(bookId) }, { projection: { authorId: 1 } });
+          .findOne({ _id: bookOid(bookId) }, { projection: { authorId: 1 } });
         if (!book) return fail('Book not found', 404);
         if (book.authorId !== uid) return fail('Only the author can edit chapters', 403);
         await d.collection('chapters').updateOne(
@@ -1385,12 +1726,12 @@ Deno.serve(async (req: Request) => {
       case 'chapters.delete': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const bookId = p.bookId as string;
         const chapterNumber = Math.round(Number(p.chapterNumber ?? 0));
         const d = await dbFor('books');
         const book = await d.collection('books')
-          .findOne({ _id: new ObjectId(bookId) }, { projection: { authorId: 1 } });
+          .findOne({ _id: bookOid(bookId) }, { projection: { authorId: 1 } });
         if (!book) return fail('Book not found', 404);
         if (book.authorId !== uid) return fail('Only the author can edit chapters', 403);
         const removed = await d.collection('chapters')
@@ -1402,14 +1743,14 @@ Deno.serve(async (req: Request) => {
       case 'reviews.delete': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const bookId = p.bookId as string;
         const d = await dbFor('reviews');
         const existing = await d.collection('reviews').findOne({ bookId, userId: uid });
         if (!existing) return ok({ deleted: false });
         await d.collection('reviews').deleteOne({ _id: existing._id });
         await (await dbFor('books')).collection('books').updateOne(
-          { _id: new ObjectId(bookId) },
+          { _id: bookOid(bookId) },
           { $inc: { reviewCount: -1, ratingSum: -Number(existing.rating ?? 0) } },
         );
         return ok({ deleted: true });
@@ -1419,7 +1760,7 @@ Deno.serve(async (req: Request) => {
       case 'comments.create': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const body = String(p.body ?? '').trim().slice(0, 2000);
         if (!body) return fail('Comment text is empty');
         const d = await dbFor('reviews');
@@ -1436,7 +1777,7 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'comments.list': {
-        if (!isHexId(p.bookId)) return fail('A valid bookId is required');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const limit = Math.min(Number(p.limit ?? 30) || 30, 50);
         const rows = await (await dbFor('reviews')).collection('comments')
           .find({ bookId: p.bookId as string })
