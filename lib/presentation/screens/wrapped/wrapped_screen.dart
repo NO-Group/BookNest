@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
-import '../../../components/booknest_ui.dart';
-import '../../../components/watermark_background.dart';
+import '../../components/booknest_ui.dart';
+import '../../components/watermark_background.dart';
 import '../../../services/backend_api.dart';
 
 /// BookNest Wrapped — your whole reading life on one page: minutes in
