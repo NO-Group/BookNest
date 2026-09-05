@@ -51,8 +51,9 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
         _book = b is Map
             ? Map<String, dynamic>.from(b)
             : null;
-        _progress = results[2]?['progress'] is Map
-            ? Map<String, dynamic>.from(results[2]['progress'] as Map)
+        final progressRes = results[2];
+        _progress = progressRes is Map && progressRes['progress'] is Map
+            ? Map<String, dynamic>.from(progressRes['progress'] as Map)
             : null;
         if (_book != null && rows.isNotEmpty) {
           _book!['chapters'] = rows;
