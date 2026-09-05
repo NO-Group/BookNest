@@ -1860,6 +1860,110 @@ Deno.serve(async (req: Request) => {
         return ok({ items });
       }
 
+      // ── wrapped + finish bonus (delight layer) ───────────────────────────
+      case 'wrapped.get': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const social = await dbFor('social');
+        const days: string[] = await social.collection('reading_logs')
+          .distinct('day', { userId: uid });
+        const minutesRows = await social.collection('reading_logs').aggregate([
+          { $match: { userId: uid } },
+          { $group: { _id: null, minutes: { $sum: '$minutes' } } },
+        ]).toArray();
+        const minutes = Number(minutesRows[0]?.minutes ?? 0) || 0;
+        const streaks = computeStreaks(days.map(String));
+        const gemsRows = await (await dbFor('users')).collection('gem_ledger')
+          .aggregate([
+            { $match: { userId: uid } },
+            { $group: { _id: null, gems: { $sum: '$delta' } } },
+          ]).toArray();
+        const gemsEarned = Number(gemsRows[0]?.gems ?? 0) || 0;
+        const progressDocs = await social.collection('reader_progress')
+          .find({ userId: uid }, { projection: { bookId: 1, chapterNumber: 1 } })
+          .limit(200).toArray();
+        const booksCol = (await dbFor('books')).collection('books');
+        let booksFinished = 0;
+        let chaptersOpened = 0;
+        for (const d of progressDocs) {
+          const chapterNumber = Math.max(1, Number(d.chapterNumber ?? 1));
+          chaptersOpened += chapterNumber;
+          const book = await booksCol.findOne(
+            { _id: bookOid(String(d.bookId)) } as never,
+            { projection: { chaptersCount: 1 } },
+          );
+          if (!book) continue;
+          const chaptersCount = Math.max(1, Number(book.chaptersCount ?? 1));
+          if (chapterNumber >= chaptersCount) booksFinished += 1;
+        }
+        const wordsExplored = await (await dbFor('dictionary'))
+          .collection('lookups').countDocuments({ userId: uid });
+        const storiesShared = await (await dbFor('feed'))
+          .collection('posts').countDocuments({ createdBy: uid });
+        const groupsDb = await dbFor('groups');
+        let groupsJoined = 0;
+        for (const kind of GROUP_KINDS) {
+          groupsJoined += await groupsDb.collection(`${kind}_members`)
+            .countDocuments({ userId: uid });
+        }
+        const myBooks = await booksCol.find({ authorId: uid },
+          { projection: { _id: 1 } }).limit(500).toArray();
+        let chaptersPublished = 0;
+        for (const b of myBooks) {
+          chaptersPublished += await (await dbFor('books'))
+            .collection('chapters').countDocuments({ bookId: String(b._id) });
+        }
+        return ok({ wrapped: {
+          minutesRead: minutes,
+          daysRead: days.length,
+          currentStreak: streaks.current,
+          longestStreak: streaks.longest,
+          gemsEarned,
+          booksOpened: progressDocs.length,
+          booksFinished,
+          chaptersOpened,
+          wordsExplored,
+          storiesShared,
+          groupsJoined,
+          chaptersPublished,
+        } });
+      }
+
+      case 'reader.finish': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const bookId = typeof p.bookId === 'string' ? p.bookId.slice(0, 64) : '';
+        if (!bookId || !isAnyId(bookId)) return fail('A valid bookId is required');
+        const book = await (await dbFor('books')).collection('books')
+          .findOne({ _id: bookOid(bookId) } as never,
+            { projection: { chaptersCount: 1 } });
+        if (!book) return fail('Book not found', 404);
+        const progress = await (await dbFor('social')).collection('reader_progress')
+          .findOne({ userId: uid, bookId });
+        const chaptersCount = Math.max(1, Number(book.chaptersCount ?? 1));
+        if (!progress || Number(progress.chapterNumber ?? 1) < chaptersCount) {
+          return fail('Finish the last chapter first', 400);
+        }
+        const ledger = (await dbFor('users')).collection('gem_ledger');
+        const existing = await ledger.findOne({
+          userId: uid, reason: 'book_finished', bookId,
+        });
+        let gemsAwarded = 0;
+        if (!existing) {
+          gemsAwarded = 5;
+          await ledger.insertOne({
+            userId: uid, reason: 'book_finished', bookId,
+            delta: gemsAwarded, createdAt: new Date(),
+          });
+          const prof = await serviceClient().from('profiles')
+            .select('gems').eq('id', uid).single();
+          const current = prof.error ? 0 : Number(prof.data?.gems ?? 0);
+          await serviceClient().from('profiles')
+            .update({ gems: current + gemsAwarded }).eq('id', uid);
+        }
+        return ok({ finished: true, gemsAwarded });
+      }
+
       // ── notifications ────────────────────────────────────────────────────
       case 'notifications.list': {
         const uid = await currentUserId(req);
