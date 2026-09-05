@@ -36,16 +36,27 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     // silent no-op until the edge function is deployed.
     unawaited(BackendApi.instance.recordView(widget.bookId));
     try {
-      final client = SupabaseService().client;
       final results = await Future.wait([
-        client.from('club_books').select().eq('id', widget.bookId).maybeSingle(),
-        client.from('club_books').select().eq('moderation_status', 'approved').limit(8),
+        BackendApi.instance.fetchBook(widget.bookId),
+        BackendApi.instance.call('books.list', {'limit': 8}),
       ]);
       if (!mounted) return;
-      final rows = results[1] as List;
+      final bookRes = results[0];
+      final rows = ((bookRes?['chapters'] as List?) ?? const []);
+      final related = ((results[1]?['books'] as List?) ?? const []);
       setState(() {
-        _book = results[0] == null ? null : Map<String, dynamic>.from(results[0] as Map);
-        _recommended = rows.map((e) => Map<String, dynamic>.from(e as Map)).where((b) => b['id'] != widget.bookId).take(5).toList();
+        final b = bookRes?['book'];
+        _book = b is Map
+            ? Map<String, dynamic>.from(b)
+            : null;
+        if (_book != null && rows.isNotEmpty) {
+          _book!['chapters'] = rows;
+        }
+        _recommended = related
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .where((b) => b['id'] != widget.bookId)
+            .take(5)
+            .toList();
         _loading = false;
       });
     } catch (_) { if (mounted) setState(() => _loading = false); }

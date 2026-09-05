@@ -43,19 +43,15 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
 
   Future<void> _loadBook() async {
     try {
-      final supabase = SupabaseService().client;
-
-      final bookResponse = await supabase
-          .from('club_books')
-          .select()
-          .eq('id', widget.bookId)
-          .maybeSingle();
-
-      final chaptersResponse = await supabase
-          .from('book_chapters')
-          .select()
-          .eq('club_book_id', widget.bookId)
-          .order('chapter_number', ascending: true);
+      final res = await BackendApi.instance.fetchBook(widget.bookId);
+      final bookResponse = res?['book'];
+      final chaptersResponse = ((res?['chapters'] as List?) ?? const [])
+          .map((c) => {
+                'chapter_number': (c as Map)['chapterNumber'],
+                'title': c['title'],
+                'content': null,
+              })
+          .toList();
 
       if (!mounted) return;
 

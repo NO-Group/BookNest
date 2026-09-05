@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../config/theme.dart';
+import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 
@@ -65,13 +66,25 @@ class _FeedScreenState extends State<FeedScreen>
   }
 
   Future<void> _loadPosts() async {
+    // Cutover: the feed lives on the app's own data store now; the legacy
+    // SQL read remains as a graceful fallback while devices update.
+    List<dynamic> response;
     try {
-      final response = await SupabaseService()
-          .client
-          .from('posts')
-          .select('*, profiles(username, avatar_url)')
-          .order('created_at', ascending: false);
-
+      final res = await BackendApi.instance.call('posts.list');
+      response = (res?['posts'] as List?) ?? const [];
+    } catch (_) {
+      response = const [];
+    }
+    if (response.isEmpty) {
+      try {
+        response = await SupabaseService()
+            .client
+            .from('posts')
+            .select('*, profiles(username, avatar_url)')
+            .order('created_at', ascending: false);
+      } catch (_) {}
+    }
+    try {
       // Attach cloud like stats (best-effort — the feed never blocks on it).
       final ids = <String>[];
       for (final p in response) {

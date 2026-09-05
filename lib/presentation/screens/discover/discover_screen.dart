@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../components/booknest_ui.dart';
+import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
 class DiscoverScreen extends StatefulWidget {
@@ -53,10 +54,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   Future<void> _loadAll() async {
     try {
       final futures = await Future.wait([
-        SupabaseService().client.from('communities').select('*, community_members(count)').order('created_at', ascending: false),
-        SupabaseService().client.from('clubs').select('*, club_members(count)').eq('is_private', false).order('created_at', ascending: false),
-        SupabaseService().client.from('organizations').select('*, organization_members(count)').eq('is_private', false).order('created_at', ascending: false),
-        SupabaseService().client.from('schools').select('*, school_members(count)').eq('is_private', false).order('created_at', ascending: false),
+        BackendApi.instance.call('groups.list', {'kind': 'communities'}).then((r) => (r?['groups'] as List?) ?? const []),
+        BackendApi.instance.call('groups.list', {'kind': 'clubs'}).then((r) => (r?['groups'] as List?) ?? const []),
+        BackendApi.instance.call('groups.list', {'kind': 'organizations'}).then((r) => (r?['groups'] as List?) ?? const []),
+        BackendApi.instance.call('groups.list', {'kind': 'schools'}).then((r) => (r?['groups'] as List?) ?? const []),
       ]);
 
       setState(() {
@@ -389,8 +390,7 @@ class _DiscoverCard extends StatelessWidget {
   }
 
   int get _memberCount {
-    final key = '${item['type']}_members';
-    return item[key]?[0]?['count'] ?? 0;
+    return item['member_count'] ?? 0;
   }
 
   @override

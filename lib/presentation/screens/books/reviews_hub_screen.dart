@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
+import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 
@@ -28,12 +29,9 @@ class _ReviewsHubScreenState extends State<ReviewsHubScreen> {
 
   Future<void> _load() async {
     try {
-      final rows = await SupabaseService()
-          .client
-          .from('club_books')
-          .select('id, title, cover_url, genre')
-          .eq('added_by', _viewerId ?? '')
-          .order('created_at', ascending: false);
+      final res = await BackendApi.instance
+          .call('books.list', {'mine': true, 'limit': 60});
+      final rows = (res?['books'] as List?) ?? const [];
       if (!mounted) return;
       setState(() {
         _works = (rows as List)

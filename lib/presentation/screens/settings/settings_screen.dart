@@ -373,6 +373,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: 'Connection status',
               onTap: () => context.push('/status'),
             ),
+            _SettingsRow(
+              icon: Icons.admin_panel_settings_rounded,
+              label: 'App permissions',
+              onTap: () => context.push('/permissions'),
+            ),
             const _SettingsRow(
               icon: Icons.verified_rounded,
               label: 'Version ${AppConfig.appVersion}',

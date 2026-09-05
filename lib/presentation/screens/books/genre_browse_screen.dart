@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
+import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 
@@ -27,14 +28,9 @@ class _GenreBrowseScreenState extends State<GenreBrowseScreen> {
 
   Future<void> _load() async {
     try {
-      final rows = await SupabaseService()
-          .client
-          .from('club_books')
-          .select()
-          .eq('moderation_status', 'approved')
-          .eq('genre', widget.genre)
-          .order('created_at', ascending: false)
-          .limit(60);
+      final res = await BackendApi.instance
+          .call('books.list', {'genre': widget.genre, 'limit': 60});
+      final rows = (res?['books'] as List?) ?? const [];
       if (!mounted) return;
       setState(() {
         _books = (rows as List)

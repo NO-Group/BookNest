@@ -664,6 +664,77 @@ Deno.serve(async (req: Request) => {
         return ok({ migrated: flag?.done === true, at: flag?.at ?? null });
       }
 
+      // ── books: draft + chapter append (editor flow, Mongo-first) ─────────
+      case 'books.createDraft': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const title = String(p.title ?? '').trim();
+        if (title.length < 2 || title.length > 200) return fail('Title must be 2–200 characters');
+        const now = new Date();
+        const prof = await serviceClient().from('profiles')
+          .select('username,display_name').eq('id', uid).maybeSingle();
+        const doc = {
+          _id: crypto.randomUUID(),
+          title,
+          authorId: uid,
+          authorName: String(p.authorName ?? prof.data?.display_name ?? prof.data?.username ?? 'Unknown').slice(0, 80),
+          description: String(p.description ?? '').slice(0, 5000),
+          genre: typeof p.genre === 'string' && p.genre.trim() ? p.genre.trim() : null,
+          coverUrl: typeof p.coverUrl === 'string' && p.coverUrl.startsWith('http') ? p.coverUrl : null,
+          contentFormat: 'markdown',
+          moderationStatus: 'approved',
+          clubId: typeof p.clubId === 'string' && p.clubId ? p.clubId : null,
+          chaptersCount: 0,
+          likeCount: 0, bookmarkCount: 0, viewCount: 0, reviewCount: 0, ratingSum: 0,
+          createdAt: now, updatedAt: now,
+        };
+        await (await dbFor('books')).collection('books').insertOne(doc);
+        return ok({ id: doc._id });
+      }
+
+      case 'books.addChapter': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
+        const bookId = String(p.bookId);
+        const d = await dbFor('books');
+        const book = await d.collection('books')
+          .findOne({ _id: bookOid(bookId) }, { projection: { authorId: 1, chaptersCount: 1 } });
+        if (!book) return fail('Book not found', 404);
+        if (book.authorId !== uid) return fail('Only the author can add chapters', 403);
+        const existing = await d.collection('chapters')
+          .find({ bookId }, { projection: { chapterNumber: 1 } }).toArray();
+        const used = new Set(existing.map((c) => Number(c.chapterNumber)));
+        let n = 1;
+        while (used.has(n)) n++;
+        await d.collection('chapters').insertOne({
+          bookId,
+          chapterNumber: n,
+          title: String(p.title ?? `Chapter ${n}`).slice(0, 200),
+          content: String(p.content ?? '').slice(0, 500_000),
+          createdAt: new Date(),
+        });
+        await d.collection('books')
+          .updateOne({ _id: bookOid(bookId) }, { $set: { chaptersCount: used.size + 1, updatedAt: new Date() } });
+        return ok({ chapterNumber: n });
+      }
+
+      case 'groups.saveAnnouncementGroup': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const name = String(p.name ?? '').trim();
+        if (!name) return fail('A name is required');
+        const id = crypto.randomUUID();
+        await (await dbFor('groups')).collection('announcement_groups').insertOne({
+          _id: id,
+          communityId: String(p.communityId ?? ''),
+          name: name.slice(0, 120),
+          ownerId: uid,
+          createdAt: new Date(),
+        });
+        return ok({ id });
+      }
+
       // ── feed: posts (feed store; author profiles remain on Supabase) ─────
       case 'posts.list': {
         await migrateLegacy(req);

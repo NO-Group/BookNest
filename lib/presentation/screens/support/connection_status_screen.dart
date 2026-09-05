@@ -52,15 +52,19 @@ class _ConnectionStatusScreenState extends State<ConnectionStatusScreen> {
           : _LayerResult(_Health.ok, 'Signed in${user.email != null ? ' as ${user.email}' : ''}.');
     });
 
-    // 2 · Feed & library storage
+    // 2 · Feed & library storage (the app's own data store, via the gateway)
     try {
-      await SupabaseService()
+      final res = await SupabaseService()
           .client
-          .from('posts')
-          .select('id')
-          .limit(1);
-      setState(() => _storage =
-          const _LayerResult(_Health.ok, 'Reachable and responding.'));
+          .functions
+          .invoke('booknest-api', body: {'action': 'posts.list'});
+      if (res.data is Map && (res.data as Map)['ok'] == true) {
+        setState(() => _storage =
+            const _LayerResult(_Health.ok, 'Reachable and responding.'));
+      } else {
+        setState(() => _storage = const _LayerResult(_Health.down,
+            'Responded oddly. Pull down to check again in a moment.'));
+      }
     } catch (_) {
       setState(() => _storage = const _LayerResult(_Health.down,
           'Can’t be reached right now. Check your connection, then recheck.'));

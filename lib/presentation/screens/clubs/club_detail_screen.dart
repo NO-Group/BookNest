@@ -46,12 +46,11 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
     });
     final client = SupabaseService().client;
     try {
-      final club = await client
-          .from('clubs')
-          .select(
-              'id, name, description, genre_tags, is_private, cover_url, owner_id')
-          .eq('id', widget.clubId)
-          .maybeSingle();
+      final gres = await BackendApi.instance
+          .call('groups.get', {'kind': 'clubs', 'groupId': widget.clubId});
+      final club = gres?['group'] is Map
+          ? Map<String, dynamic>.from(gres!['group'] as Map)
+          : null;
       if (club == null) {
         if (!mounted) return;
         setState(() {
@@ -60,17 +59,12 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
         });
         return;
       }
-      final members = await client
-          .from('club_members')
-          .select('user_id')
-          .eq('club_id', widget.clubId);
-      final books = await client
-          .from('club_books')
-          .select('id, title, author, description, cover_url, genre')
-          .eq('club_id', widget.clubId)
-          .eq('moderation_status', 'approved')
-          .order('created_at', ascending: false)
-          .limit(50);
+      final members = ((gres?['members'] as List?) ?? const [])
+          .map((m) => {'user_id': (m as Map)['user_id']})
+          .toList();
+      final booksRes = await BackendApi.instance
+          .call('books.list', {'clubId': widget.clubId, 'limit': 50});
+      final books = (booksRes?['books'] as List?) ?? const [];
       final viewerId = SupabaseService().auth.currentUser?.id;
       final owner = club['owner_id']?.toString() ?? '';
       if (!mounted) return;

@@ -8,6 +8,7 @@ import 'config/router.dart';
 import 'config/theme.dart';
 import 'services/home_widgets_service.dart';
 import 'services/notification_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/supabase_service.dart';
 
 Future<void> main() async {
@@ -58,6 +59,16 @@ Future<void> _startupAftercare() async {
 
   try {
     await HomeWidgetsService.pushAll();
+  } catch (_) {}
+
+  // One-time permissions primer — only ever after the reader is signed in.
+  try {
+    if (SupabaseService().auth.currentUser != null) {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('perm_primer_done') != true) {
+        await appRouter.push('/permissions');
+      }
+    }
   } catch (_) {}
 }
 

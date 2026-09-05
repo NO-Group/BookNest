@@ -50,12 +50,9 @@ class _MyLibraryScreenState extends State<MyLibraryScreen>
 
   Future<void> _loadWorks() async {
     try {
-      final rows = await SupabaseService()
-          .client
-          .from('club_books')
-          .select()
-          .eq('added_by', _viewerId ?? '')
-          .order('created_at', ascending: false);
+      final res = await BackendApi.instance
+          .call('books.list', {'mine': true, 'limit': 60});
+      final rows = (res?['books'] as List?) ?? const [];
       if (!mounted) return;
       setState(() {
         _works = (rows as List)

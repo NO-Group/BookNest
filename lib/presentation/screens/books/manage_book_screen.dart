@@ -45,12 +45,8 @@ class _ManageBookScreenState extends State<ManageBookScreen> {
 
   Future<void> _load() async {
     try {
-      final row = await SupabaseService()
-          .client
-          .from('club_books')
-          .select()
-          .eq('id', widget.bookId)
-          .maybeSingle();
+      final res = await BackendApi.instance.fetchBook(widget.bookId);
+      final row = res?['book'];
       if (!mounted) return;
       setState(() {
         _book = row == null ? null : Map<String, dynamic>.from(row);
@@ -104,13 +100,6 @@ class _ManageBookScreenState extends State<ManageBookScreen> {
     setState(() => _saving = true);
     final coverUrl = _pickedCoverUrl;
     try {
-      await SupabaseService().client.from('club_books').update({
-        'title': title,
-        'description': _description.text.trim(),
-        'genre': _genre,
-        if (coverUrl != null) 'cover_url': coverUrl,
-      }).eq('id', widget.bookId);
-      // Best-effort sync to MongoDB (no-op until the cloud is connected).
       await BackendApi.instance.updateBook(
         bookId: widget.bookId,
         title: title,

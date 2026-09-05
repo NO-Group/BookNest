@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'backend_api.dart';
 import 'dictionary_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -65,13 +66,114 @@ class SupabaseService {
     return user;
   }
 
-  /// INSERT into a Supabase table with edge-function fallback.
-  /// Returns the inserted row (map) when available.
+  /// Routes cutover tables to the edge data store. Returns null for tables
+  /// still on the classic path (profiles and friends).
+  Future<Map<String, dynamic>?> _writeRouted(
+    String table,
+    Map<String, dynamic> values,
+  ) async {
+    final api = BackendApi.instance;
+    switch (table) {
+      case 'posts':
+        final res = await api.call('posts.create', {
+          'type': values['type'] ?? 'post',
+          'title': values['title'],
+          'content': values['content'] ?? '',
+          'metadata': values['metadata'] ?? <String, dynamic>{},
+        });
+        final post = res?['post'];
+        if (post is Map) return Map<String, dynamic>.from(post);
+        throw WriteException(
+            "BookNest couldn't complete that just now — please try again in a moment.");
+      case 'clubs':
+      case 'communities':
+      case 'organizations':
+      case 'schools':
+        final res = await api.call('groups.create', {
+          'kind': table,
+          'name': values['name'],
+          'description': values['description'] ?? '',
+          'genreTags': values['genre_tags'],
+          'isPrivate': values['is_private'] == true,
+          'coverUrl': values['cover_url'],
+          'mission': values['mission'],
+          'orgType': values['org_type'],
+          'location': values['location'],
+          'website': values['website'],
+          'schoolType': values['school_type'],
+        });
+        final id = res?['id'];
+        if (id is String) return {'id': id};
+        throw WriteException(
+            "BookNest couldn't complete that just now — please try again in a moment.");
+      case 'club_members':
+      case 'community_members':
+      case 'organization_members':
+      case 'school_members':
+        final kind = table.replaceAll('_members', '');
+        final groupId = values['club_id'] ??
+            values['community_id'] ??
+            values['organization_id'] ??
+            values['school_id'];
+        final res = await api.call('groups.join', {'kind': kind, 'groupId': groupId});
+        if (res != null) {
+          return {for (final e in values.entries) e.key: e.value};
+        }
+        throw WriteException(
+            "BookNest couldn't complete that just now — please try again in a moment.");
+      case 'club_books':
+        final res = await api.call('books.createDraft', {
+          'title': values['title'],
+          'authorName': values['author'],
+          'description': values['description'] ?? '',
+          'genre': values['genre'],
+          'coverUrl': values['cover_url'],
+          'clubId': values['club_id'],
+        });
+        final id = res?['id'];
+        if (id is String) {
+          return {
+            'id': id,
+            'title': values['title'] ?? '',
+            'author': values['author'] ?? 'Unknown',
+            'cover_url': values['cover_url'],
+            'genre': values['genre'],
+            'moderation_status': 'approved',
+          };
+        }
+        throw WriteException(
+            "BookNest couldn't complete that just now — please try again in a moment.");
+      case 'book_chapters':
+        final res = await api.call('books.addChapter', {
+          'bookId': values['club_book_id'],
+          'title': values['title'] ?? 'Chapter 1',
+          'content': values['content'] ?? '',
+        });
+        if (res != null) return Map<String, dynamic>.from(res);
+        throw WriteException(
+            "BookNest couldn't complete that just now — please try again in a moment.");
+      case 'announcement_groups':
+        final res = await api.call('groups.saveAnnouncementGroup', {
+          'communityId': values['community_id'],
+          'name': values['name'],
+        });
+        if (res != null) return {'id': res['id'] ?? ''};
+        throw WriteException(
+            "BookNest couldn't complete that just now — please try again in a moment.");
+    }
+    return null;
+  }
+
+  /// INSERT into a table. Cutover tables (posts, groups, books, chapters)
+  /// go straight to the app's own data store; the rest use Supabase with
+  /// the edge fallback. Returns the inserted row (map) when available.
   Future<Map<String, dynamic>?> writeRow(
     String table,
     Map<String, dynamic> values,
   ) async {
     _requireSession();
+    final routed = await _writeRouted(table, values);
+    if (routed != null) return routed;
     try {
       final res =
           await client.from(table).insert(values).select().single();

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
+import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart' show TagChip, kBookNestGenres;
 
@@ -41,13 +42,14 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
   ];
 
   final TextEditingController _search = TextEditingController();
-  Stream<List<Map<String, dynamic>>>? _stream;
+  List<Map<String, dynamic>> _books = const [];
+  bool _loading = true;
   final Set<String> _selectedGenres = {};
 
   @override
   void initState() {
     super.initState();
-    _subscribe();
+    _load();
     _search.addListener(() => setState(() {}));
   }
 
@@ -57,16 +59,16 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
     super.dispose();
   }
 
-  void _subscribe() {
-    _stream = SupabaseService()
-        .client
-        .from('club_books')
-        .stream(primaryKey: ['id'])
-        .eq('moderation_status', 'approved')
-        .order('created_at', ascending: false)
-        .map((rows) => rows
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList());
+  Future<void> _load() async {
+    final res = await BackendApi.instance.call('books.list', {'limit': 50});
+    if (!mounted) return;
+    setState(() {
+      _books = (res?['books'] as List?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList() ??
+          const [];
+      _loading = false;
+    });
   }
 
   List<Map<String, dynamic>> _filter(List<Map<String, dynamic>> books) {
@@ -231,34 +233,43 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
               ),
             ),
             Expanded(
-              child: StreamBuilder<List<Map<String, dynamic>>>(
-                stream: _stream,
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(
+              child: _loading
+                  ? const Center(
                       child: CircularProgressIndicator(
                           color: BookNestColors.cyan),
-                    );
-                  }
-                  final books = _filter(snapshot.data!);
-                  if (books.isEmpty) {
-                    return Center(
-                      child: Text('No books match your search.',
-                          style: TextStyle(color: muted)),
-                    );
-                  }
-                  return AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    child: ListView.builder(
-                      key: ValueKey(
-                          '${books.length}-${_search.text}-${_selectedGenres.length}'),
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 110),
-                      itemCount: books.length,
-                      itemBuilder: (_, index) =>
-                          _BookTile(book: books[index]),
-                    ),
-                  );
-                },
+                    )
+                  : RefreshIndicator(
+                      color: BookNestColors.cyan,
+                      onRefresh: _load,
+                      child: Builder(builder: (context) {
+                        final books = _filter(_books);
+                        if (books.isEmpty) {
+                          return ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(40),
+                                child: Center(
+                                  child: Text('No books match your search.',
+                                      style: TextStyle(color: muted)),
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        return AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: ListView.builder(
+                            key: ValueKey(
+                                '${books.length}-${_search.text}-${_selectedGenres.length}'),
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(20, 4, 20, 110),
+                            itemCount: books.length,
+                            itemBuilder: (_, index) =>
+                                _BookTile(book: books[index]),
+                          ),
+                        );
+                      }),
               ),
             ),
           ],

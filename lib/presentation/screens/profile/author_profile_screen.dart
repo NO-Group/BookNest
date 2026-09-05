@@ -43,14 +43,9 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
             .select('id, username, display_name, avatar_url')
             .eq('id', widget.userId)
             .maybeSingle(),
-        SupabaseService()
-            .client
-            .from('club_books')
-            .select()
-            .eq('added_by', widget.userId)
-            .eq('moderation_status', 'approved')
-            .order('created_at', ascending: false)
-            .limit(50),
+        BackendApi.instance
+            .call('books.list', {'authorId': widget.userId, 'limit': 50})
+            .then((res) => (res?['books'] as List?) ?? const []),
       ]);
       if (!mounted) return;
       setState(() {

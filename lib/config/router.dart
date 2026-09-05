@@ -40,6 +40,7 @@ import '../presentation/screens/onboarding/onboarding_screen.dart';
 import '../presentation/screens/support/privacy_screen.dart';
 import '../presentation/screens/support/about_screen.dart';
 import '../presentation/screens/support/connection_status_screen.dart';
+import '../presentation/screens/support/permissions_screen.dart';
 import '../presentation/screens/profile/profile_screen.dart';
 import '../presentation/screens/feed/create_quote_screen.dart';
 import '../presentation/screens/feed/create_news_screen.dart';
@@ -156,6 +157,7 @@ final GoRouter appRouter = GoRouter(
     // ── Account & library ──
     GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
     GoRoute(path: '/status', builder: (context, state) => const ConnectionStatusScreen()),
+    GoRoute(path: '/permissions', builder: (context, state) => const PermissionsScreen()),
     GoRoute(path: '/wallet', builder: (context, state) => const WalletScreen()),
     GoRoute(path: '/jenny', builder: (context, state) => const JennyScreen()),
     GoRoute(

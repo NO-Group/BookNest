@@ -60,13 +60,9 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     try {
       final pattern = '${Uri.encodeComponent(term)}';
       final results = await Future.wait([
-        SupabaseService()
-            .client
-            .from('club_books')
-            .select('id, title, author, description, cover_url, genre')
-            .eq('moderation_status', 'approved')
-            .or('title.ilike.%$pattern%,author.ilike.%$pattern%,description.ilike.%$pattern%')
-            .limit(20),
+        BackendApi.instance
+            .call('books.list', {'search': term, 'limit': 20})
+            .then((res) => (res?['books'] as List?) ?? const []),
         SupabaseService()
             .client
             .from('profiles')

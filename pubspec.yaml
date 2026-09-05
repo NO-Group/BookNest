@@ -25,6 +25,7 @@ dependencies:
   app_links: ^6.4.0
   flutter_local_notifications: ^18.0.1
   timezone: ^0.10.0
+  permission_handler: ^13.0.2
 
 dependency_overrides:
   # jni 1.0.1 is retracted and its Android Gradle file is broken
