@@ -1,0 +1,79 @@
+name: Android Release APK
+
+# Builds the installable release APK and uploads it as a downloadable
+# artifact. Runs automatically on pushes, or manually from the Actions
+# tab ("Run workflow").
+
+on:
+  # Manual: Actions tab → Android Release APK → Run workflow (pick branch)
+  workflow_dispatch:
+  # Automatic: every push to a build branch produces a fresh APK
+  push:
+    branches:
+      - main
+      - arena/01a03a7f-booknest
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  release-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Flutter version (for the record)
+        run: flutter --version
+
+      - name: Build release APK
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee build.log
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BookNest-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      # If the build fails, the tail of the build log (a) goes to the
+      # run's Summary page for humans, and (b) is recorded as a
+      # dedicated "Build diagnostics" check run on the commit, whose
+      # full text is readable through the API.
+      - name: Publish build diagnostics
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tail -n 120 build.log 2>/dev/null | cut -c1-170 > errtail.txt || true
+          if [ ! -s errtail.txt ]; then echo "(build.log missing — failure happened before the build step)" > errtail.txt; fi
+          {
+            echo "## Build error — last lines"
+            echo '```text'
+            cat errtail.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          jq -n --rawfile t errtail.txt --arg sha "${{ github.sha }}" '{name:"Build diagnostics",head_sha:$sha,status:"completed",conclusion:"failure",output:{title:"Build error tail",summary:"Tail of the failed build log.",text:$t}}' > diag.json
+          gh api -X POST "repos/${{ github.repository }}/check-runs" --input diag.json > /dev/null && echo "diagnostics recorded" || echo "diagnostics upload failed" 

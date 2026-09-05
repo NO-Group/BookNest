@@ -24,7 +24,6 @@ class MainShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       body: navigationShell,
       bottomNavigationBar: BookNestBottomNav(
         currentIndex: navigationShell.currentIndex,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -19,7 +21,7 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _checkAuth() async {
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
-    
+
     final session = SupabaseService().auth.currentSession;
     if (session != null) {
       context.go('/feed');
@@ -30,54 +32,68 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // The splash is always the brand gradient — it reads identically in
+    // light and dark mode (like Telegram's launch screen).
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFFFFD000), Color(0xFFFF6A00)],
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [BookNestColors.navyDeep, BookNestColors.navy, Color(0xFF0D356E)],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 116,
+                height: 116,
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                      color: BookNestColors.cyan.withOpacity(.45)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: BookNestColors.cyan.withOpacity(.3),
+                      blurRadius: 34,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
                 ),
-                borderRadius: BorderRadius.circular(24),
+                padding: const EdgeInsets.all(12),
+                child: Image.asset(
+                  'assets/logo/booknest_logo_new_transparent_dark_theme.png',
+                  fit: BoxFit.contain,
+                ),
               ),
-              child: const Center(
-                child: Icon(
-                  Icons.menu_book,
+              const SizedBox(height: 24),
+              const Text(
+                'BookNest',
+                style: TextStyle(
                   color: Colors.white,
-                  size: 48,
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: .5,
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'BookNest',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 36,
-                fontWeight: FontWeight.bold,
+              const SizedBox(height: 8),
+              Text(
+                'by N.O Group',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(.65),
+                  fontSize: 14,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'by N.O Group',
-              style: TextStyle(
-                color: Color(0xFF888888),
-                fontSize: 14,
+              const SizedBox(height: 48),
+              const CircularProgressIndicator(
+                color: BookNestColors.cyan,
+                strokeWidth: 3,
               ),
-            ),
-            const SizedBox(height: 48),
-            const CircularProgressIndicator(
-              color: Color(0xFFFF6A00),
-              strokeWidth: 3,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

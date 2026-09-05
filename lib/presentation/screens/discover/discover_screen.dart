@@ -2,6 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../../config/theme.dart';
+import '../../components/booknest_ui.dart';
+import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
 class DiscoverScreen extends StatefulWidget {
@@ -28,10 +32,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   final List<String> _filters = ['All', 'Clubs', 'Organizations', 'Schools', 'Communities'];
 
   final List<_CreateOption> _createOptions = const [
-    _CreateOption(label: 'New Club', icon: Icons.menu_book, color: Color(0xFF00D4FF), route: '/create/club'),
-    _CreateOption(label: 'New Organization', icon: Icons.business, color: Color(0xFFFF6A00), route: '/create/organization'),
-    _CreateOption(label: 'New School', icon: Icons.school, color: Color(0xFF00D4FF), route: '/create/school'),
-    _CreateOption(label: 'New Community', icon: Icons.account_tree, color: Color(0xFFFF6A00), route: '/create/community'),
+    _CreateOption(label: 'New Club', icon: Icons.menu_book, color: BookNestColors.cyan, route: '/create/club'),
+    _CreateOption(label: 'New Organization', icon: Icons.business, color: BookNestColors.navy, route: '/create/organization'),
+    _CreateOption(label: 'New School', icon: Icons.school, color: BookNestColors.cyan, route: '/create/school'),
+    _CreateOption(label: 'New Community', icon: Icons.account_tree, color: BookNestColors.navy, route: '/create/community'),
   ];
 
   @override
@@ -50,10 +54,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   Future<void> _loadAll() async {
     try {
       final futures = await Future.wait([
-        SupabaseService().client.from('communities').select('*, community_members(count)').order('created_at', ascending: false),
-        SupabaseService().client.from('clubs').select('*, club_members(count)').eq('is_private', false).order('created_at', ascending: false),
-        SupabaseService().client.from('organizations').select('*, organization_members(count)').eq('is_private', false).order('created_at', ascending: false),
-        SupabaseService().client.from('schools').select('*, school_members(count)').eq('is_private', false).order('created_at', ascending: false),
+        BackendApi.instance.call('groups.list', {'kind': 'communities'}).then((r) => (r?['groups'] as List?) ?? const []),
+        BackendApi.instance.call('groups.list', {'kind': 'clubs'}).then((r) => (r?['groups'] as List?) ?? const []),
+        BackendApi.instance.call('groups.list', {'kind': 'organizations'}).then((r) => (r?['groups'] as List?) ?? const []),
+        BackendApi.instance.call('groups.list', {'kind': 'schools'}).then((r) => (r?['groups'] as List?) ?? const []),
       ]);
 
       setState(() {
@@ -104,7 +108,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       body: Stack(
         children: [
           SafeArea(
@@ -116,12 +119,12 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Discover',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.onSurface,
                           fontSize: 28,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                       GestureDetector(
@@ -135,13 +138,21 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF1F1F1F),
+                                  gradient: const LinearGradient(
+                                    colors: [BookNestColors.cyanSoft, BookNestColors.cyan],
+                                  ),
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: const Color(0xFF222222)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: BookNestColors.cyan.withOpacity(.3),
+                                      blurRadius: 14,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
                                 child: const Icon(
                                   Icons.add,
-                                  color: Color(0xFF00D4FF),
+                                  color: BookNestColors.navyDeep,
                                   size: 20,
                                 ),
                               ),
@@ -157,13 +168,14 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   child: TextField(
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                     decoration: InputDecoration(
-                      hintText: 'Search communities, clubs, schools...',
-                      hintStyle: const TextStyle(color: Color(0xFF666666)),
-                      prefixIcon: const Icon(Icons.search, color: Color(0xFF666666)),
+                      hintText: 'Search communities, clubs, schools…',
+                      hintStyle: TextStyle(color: Theme.of(context).hintColor),
+                      prefixIcon: const Icon(Icons.search,
+                          color: BookNestColors.cyan),
                       filled: true,
-                      fillColor: const Color(0xFF1F1F1F),
+                      fillColor: Theme.of(context).colorScheme.surface,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
                         borderSide: BorderSide.none,
@@ -191,17 +203,19 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             decoration: BoxDecoration(
                               color: isActive
-                                  ? const Color(0xFF00D4FF)
-                                  : const Color(0xFF1F1F1F),
+                                  ? BookNestColors.cyan
+                                  : Theme.of(context).colorScheme.surface,
                               borderRadius: BorderRadius.circular(20),
                               border: isActive
                                   ? null
-                                  : Border.all(color: const Color(0xFF222222)),
+                                  : Border.all(color: Theme.of(context).dividerColor),
                             ),
                             child: Text(
                               filter,
                               style: TextStyle(
-                                color: isActive ? const Color(0xFF0A0A0A) : Colors.white,
+                                color: isActive
+                                    ? BookNestColors.navyDeep
+                                    : Theme.of(context).colorScheme.onSurface,
                                 fontSize: 13,
                                 fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                               ),
@@ -219,17 +233,23 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                 Expanded(
                   child: _isLoading
                       ? const Center(
-                          child: CircularProgressIndicator(color: Color(0xFF00D4FF)),
+                          child: CircularProgressIndicator(color: BookNestColors.cyan),
                         )
-                      : _filteredItems.isEmpty
-                          ? _buildEmptyState()
-                          : ListView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                              itemCount: _filteredItems.length,
-                              itemBuilder: (context, index) {
-                                return _DiscoverCard(item: _filteredItems[index]);
-                              },
-                            ),
+                      : RefreshIndicator(
+                          color: BookNestColors.cyan,
+                          onRefresh: _loadAll,
+                          child: _filteredItems.isEmpty
+                              ? ListView(
+                                  children: [_buildEmptyState()],
+                                )
+                              : ListView.builder(
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                  itemCount: _filteredItems.length,
+                                  itemBuilder: (context, index) {
+                                    return _DiscoverCard(item: _filteredItems[index]);
+                                  },
+                                ),
+                        ),
                 ),
               ],
             ),
@@ -250,17 +270,18 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: _createOptions.map((option) {
                     return GestureDetector(
-                      onTap: () {
+                      onTap: () async {
                         _togglePlus();
-                        context.push(option.route);
+                        await context.push(option.route);
+                        if (mounted) _loadAll();
                       },
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1F1F1F),
+                          color: Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF222222)),
+                          border: Border.all(color: Theme.of(context).dividerColor),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.3),
@@ -276,8 +297,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                             const SizedBox(width: 10),
                             Text(
                               option.label,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -297,23 +318,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   }
 
   Widget _buildEmptyState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.explore_outlined, size: 64, color: Color(0xFF444444)),
-          SizedBox(height: 16),
-          Text(
-            'Nothing here yet',
-            style: TextStyle(color: Colors.white, fontSize: 18),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Be the first to create something',
-            style: TextStyle(color: Color(0xFF888888), fontSize: 14),
-          ),
-        ],
-      ),
+    return EmptyState(
+      icon: Icons.explore_outlined,
+      title: 'Nothing here yet',
+      subtitle: 'Be the first to create a club, community, organization or school.',
     );
   }
 
@@ -346,15 +354,15 @@ class _DiscoverCard extends StatelessWidget {
   Color get _typeColor {
     switch (item['type']) {
       case 'community':
-        return const Color(0xFF00D4FF);
+        return BookNestColors.cyan;
       case 'club':
-        return const Color(0xFFFF6A00);
+        return BookNestColors.navy;
       case 'organization':
-        return const Color(0xFF00D4FF);
+        return BookNestColors.cyan;
       case 'school':
-        return const Color(0xFFFF6A00);
+        return BookNestColors.navy;
       default:
-        return const Color(0xFF888888);
+        return BookNestColors.lightTextSecondary;
     }
   }
 
@@ -389,8 +397,7 @@ class _DiscoverCard extends StatelessWidget {
   }
 
   int get _memberCount {
-    final key = '${item['type']}_members';
-    return item[key]?[0]?['count'] ?? 0;
+    return item['member_count'] ?? 0;
   }
 
   @override
@@ -400,9 +407,9 @@ class _DiscoverCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1F1F1F),
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF222222)),
+          border: Border.all(color: Theme.of(context).dividerColor),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -411,7 +418,7 @@ class _DiscoverCard extends StatelessWidget {
             Container(
               height: 120,
               decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
+                color: BookNestColors.navy,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 image: item['cover_image_url'] != null
                     ? DecorationImage(
@@ -457,15 +464,15 @@ class _DiscoverCard extends StatelessWidget {
                       ),
                       if (item['is_verified'] == true) ...[
                         const SizedBox(width: 8),
-                        const Icon(Icons.verified, color: Color(0xFF00D4FF), size: 16),
+                        const Icon(Icons.verified, color: BookNestColors.cyan, size: 16),
                       ],
                     ],
                   ),
                   const SizedBox(height: 10),
                   Text(
                     item['name'] ?? 'Unnamed',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
@@ -474,7 +481,7 @@ class _DiscoverCard extends StatelessWidget {
                   Text(
                     item['description'] ?? 'No description',
                     style: const TextStyle(
-                      color: Color(0xFF888888),
+                      color: BookNestColors.lightTextSecondary,
                       fontSize: 13,
                       height: 1.4,
                     ),
@@ -484,23 +491,23 @@ class _DiscoverCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Icon(Icons.people, size: 14, color: Color(0xFF888888)),
+                      const Icon(Icons.people, size: 14, color: BookNestColors.lightTextSecondary),
                       const SizedBox(width: 6),
                       Text(
                         '$_memberCount members',
                         style: const TextStyle(
-                          color: Color(0xFF888888),
+                          color: BookNestColors.lightTextSecondary,
                           fontSize: 12,
                         ),
                       ),
                       if (item['type'] == 'school' && item['location'] != null) ...[
                         const SizedBox(width: 16),
-                        const Icon(Icons.location_on, size: 14, color: Color(0xFF888888)),
+                        const Icon(Icons.location_on, size: 14, color: BookNestColors.lightTextSecondary),
                         const SizedBox(width: 6),
                         Text(
                           item['location'],
                           style: const TextStyle(
-                            color: Color(0xFF888888),
+                            color: BookNestColors.lightTextSecondary,
                             fontSize: 12,
                           ),
                         ),
