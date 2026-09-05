@@ -430,6 +430,48 @@ function conversationView(c: Record<string, unknown>, me: string) {
   };
 }
 
+/** Finds or creates the club room conversation for a group (reused forever). */
+async function ensureClubRoom(
+  kind: string,
+  clubId: string,
+  uid: string,
+): Promise<Record<string, unknown> | null> {
+  const d = await dbFor('chats');
+  const col = d.collection('conversations');
+  try {
+    await col.createIndex({ clubKey: 1 }, { unique: true });
+  } catch { /* index exists */ }
+  const clubKey = `${kind}:${clubId}`;
+  const found = await col.findOne({ clubKey });
+  if (found) return found;
+  const club = await (await dbFor('groups')).collection(kind)
+    .findOne({ _id: clubId } as never);
+  const now = new Date();
+  const doc = {
+    type: 'club',
+    clubKey,
+    clubId,
+    kind,
+    title: String((club?.name as string) ?? 'Group chat').slice(0, 120),
+    memberIds: [uid],
+    createdAt: now,
+    updatedAt: now,
+    lastMessage: null,
+  };
+  try {
+    const inserted = await col.insertOne({ ...doc });
+    return { ...doc, _id: inserted.insertedId };
+  } catch (error) {
+    if (isDupKey(error)) return await col.findOne({ clubKey });
+    throw error;
+  }
+}
+
+async function isClubMember(kind: string, clubId: string, uid: string): Promise<boolean> {
+  const members = (await dbFor('groups')).collection(`${kind}_members`);
+  return (await members.countDocuments({ groupId: clubId, userId: uid })) > 0;
+}
+
 async function userStats(userId: string) {
   const d = await dbFor('social');
   const doc = await d.collection('user_stats').findOne({ userId });
@@ -738,8 +780,22 @@ Deno.serve(async (req: Request) => {
       // ── feed: posts (feed store; author profiles remain on Supabase) ─────
       case 'posts.list': {
         await migrateLegacy(req);
+        const uid = await currentUserId(req);
         const rows = await (await dbFor('feed')).collection('posts')
           .find({}).sort({ createdAt: -1 }).limit(60).toArray();
+        const pageIds = rows.map((r) => String(r._id));
+        const likeRows = pageIds.length
+          ? await (await dbFor('social')).collection('post_likes')
+              .find({ postId: { $in: pageIds } }, { projection: { postId: 1, userId: 1 } })
+              .toArray()
+          : [];
+        const likeCounts = new Map<string, number>();
+        const likedByMe = new Set<string>();
+        for (const l of likeRows) {
+          const key = String(l.postId);
+          likeCounts.set(key, (likeCounts.get(key) ?? 0) + 1);
+          if (uid && String(l.userId) === uid) likedByMe.add(key);
+        }
         const authorIds = [...new Set(rows.map((r) => String(r.createdBy)))];
         const authors = new Map<string, Record<string, unknown>>();
         if (authorIds.length > 0) {
@@ -756,6 +812,8 @@ Deno.serve(async (req: Request) => {
             title: r.title ?? null,
             content: r.content ?? '',
             metadata: r.metadata ?? {},
+            like_count: likeCounts.get(String(r._id)) ?? 0,
+            liked_by_me: likedByMe.has(String(r._id)),
             created_by: r.createdBy ?? null,
             created_at: r.createdAt ?? null,
             profiles: authors.get(String(r.createdBy)) ??
@@ -805,8 +863,13 @@ Deno.serve(async (req: Request) => {
         const kind = String(p.kind ?? 'clubs');
         if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
         const col = (await dbFor('groups')).collection(kind);
-        const query: Record<string, unknown> = {};
-        if (p.private !== true) query.isPrivate = { $ne: true };
+        const uid = await currentUserId(req);
+        let query: Record<string, unknown> = {};
+        if (p.private !== true) {
+          query = uid
+            ? { $or: [{ isPrivate: { $ne: true } }, { ownerId: uid }] }
+            : { isPrivate: { $ne: true } };
+        }
         const rows = await col.find(query).sort({ createdAt: -1 }).limit(80).toArray();
         const ownerIds = [...new Set(rows.map((r) => String(r.ownerId)))];
         const owners = new Map<string, Record<string, unknown>>();
@@ -1052,15 +1115,16 @@ Deno.serve(async (req: Request) => {
       case 'events.list': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const supa = serviceClient();
-        const { data, error } = await supa.from('posts')
-          .select('id, title, content, metadata, created_at, profiles(display_name, username)')
-          .eq('type', 'event')
-          .order('created_at', { ascending: false })
-          .limit(100);
-        if (error) return fail(error.message, 400);
-        const rows = data ?? [];
-        const ids = rows.map((r: any) => r.id);
+        const rows = await (await dbFor('feed')).collection('posts')
+          .find({ type: 'event' }).sort({ createdAt: -1 }).limit(100).toArray();
+        const authorIds = [...new Set(rows.map((r) => String(r.createdBy)))];
+        const authors = new Map<string, Record<string, unknown>>();
+        if (authorIds.length > 0) {
+          const profs = await serviceClient().from('profiles')
+            .select('id,username,display_name').in('id', authorIds);
+          for (const pr of profs.data ?? []) authors.set(String(pr.id), pr as Record<string, unknown>);
+        }
+        const ids = rows.map((r) => String(r._id));
         const col = dbFor('social').collection('event_rsvps');
         const counts = ids.length
           ? await col.aggregate([
@@ -1074,15 +1138,19 @@ Deno.serve(async (req: Request) => {
         const countMap = new Map(counts.map((c: any) => [String(c._id), c.going]));
         const mineSet = new Set(mine.map((m: any) => String(m.postId)));
         return ok({
-          events: rows.map((r: any) => ({
-            id: r.id,
+          events: rows.map((r) => ({
+            id: String(r._id),
             title: r.title ?? 'Untitled event',
             content: r.content ?? '',
             metadata: r.metadata ?? {},
-            createdAt: r.created_at,
-            author: r.profiles?.display_name ?? r.profiles?.username ?? 'Reader',
-            going: countMap.get(r.id) ?? 0,
-            rsvped: mineSet.has(r.id),
+            createdAt: r.createdAt ?? null,
+            author: (() => {
+              const a = authors.get(String(r.createdBy)) as
+                { display_name?: string; username?: string } | undefined;
+              return a?.display_name ?? a?.username ?? 'Reader';
+            })(),
+            going: countMap.get(String(r._id)) ?? 0,
+            rsvped: mineSet.has(String(r._id)),
           })),
         });
       }
@@ -1591,7 +1659,7 @@ Deno.serve(async (req: Request) => {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         const rows = await (await dbFor('chats')).collection('conversations')
-          .find({ memberIds: uid })
+          .find({ memberIds: uid, clubKey: { $exists: false } })
           .sort({ updatedAt: -1 })
           .limit(50)
           .toArray();
@@ -1625,6 +1693,96 @@ Deno.serve(async (req: Request) => {
             text: m.text ?? '',
             bookId: m.bookId ?? null,
             bookTitle: m.bookTitle ?? null,
+            mediaUrl: m.mediaUrl ?? null,
+            createdAt: m.createdAt,
+          })),
+          nextCursor: hasMore ? String(rows[limit - 1]._id) : null,
+        });
+      }
+
+      // ── chat: club group rooms (chats store; membership-gated) ──────────
+      case 'chat.ensure': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'clubs');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const clubId = String(p.clubId ?? '');
+        if (!clubId) return fail('A valid clubId is required');
+        if (!(await isClubMember(kind, clubId, uid))) {
+          return fail('Join this group to open its chat', 403);
+        }
+        const room = await ensureClubRoom(kind, clubId, uid);
+        if (!room) return fail('Could not open the chat — please try again', 503);
+        return ok({ conversation: {
+          id: String(room._id),
+          type: 'club',
+          title: room.title ?? 'Group chat',
+        } });
+      }
+
+      case 'chat.send': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const d = await dbFor('chats');
+        const conversationId = typeof p.conversationId === 'string' ? p.conversationId : '';
+        if (!isHexId(conversationId)) return fail('A valid conversationId is required');
+        const room = await d.collection('conversations')
+          .findOne({ _id: new ObjectId(conversationId) });
+        if (!room || room.type !== 'club') return fail('Conversation not found', 404);
+        if (!(await isClubMember(String(room.kind), String(room.clubId), uid))) {
+          return fail('Join this group to chat', 403);
+        }
+        const type = ['text', 'image', 'file', 'voice'].includes(String(p.type))
+          ? String(p.type)
+          : 'text';
+        const text = String(p.text ?? '').trim().slice(0, 4000);
+        if (type === 'text' && !text) return fail('Message text is empty');
+        const mediaUrl = typeof p.mediaUrl === 'string' && p.mediaUrl.startsWith('http')
+          ? p.mediaUrl
+          : null; // Cloudinary/R2 URLs only — never raw media in the database.
+        const now = new Date();
+        const message = { conversationId, senderId: uid, type, text, mediaUrl, createdAt: now };
+        const inserted = await d.collection('messages').insertOne({ ...message });
+        await d.collection('conversations').updateOne(
+          { _id: room._id as unknown as ObjectId },
+          { $set: { updatedAt: now, lastMessage: {
+            text: (type === 'text' ? text : 'Sent an attachment').slice(0, 140),
+            senderId: uid, type, createdAt: now,
+          } } },
+        );
+        return ok({
+          conversationId,
+          messageId: String(inserted.insertedId),
+          message: { id: String(inserted.insertedId), ...message },
+        });
+      }
+
+      case 'chat.messages': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const d = await dbFor('chats');
+        const conversationId = typeof p.conversationId === 'string' ? p.conversationId : '';
+        if (!isHexId(conversationId)) return fail('A valid conversationId is required');
+        const room = await d.collection('conversations')
+          .findOne({ _id: new ObjectId(conversationId) });
+        if (!room || room.type !== 'club') return fail('Conversation not found', 404);
+        if (!(await isClubMember(String(room.kind), String(room.clubId), uid))) {
+          return fail('Join this group to read the chat', 403);
+        }
+        const limit = Math.min(Number(p.limit ?? 60) || 60, 100);
+        const query: Record<string, unknown> = { conversationId };
+        if (typeof p.before === 'string' && isHexId(p.before)) {
+          query._id = { $lt: new ObjectId(p.before as string) };
+        }
+        const rows = await d.collection('messages')
+          .find(query).sort({ _id: -1 }).limit(limit + 1).toArray();
+        const hasMore = rows.length > limit;
+        return ok({
+          messages: rows.slice(0, limit).reverse().map((m) => ({
+            id: String(m._id),
+            senderId: m.senderId,
+            type: m.type,
+            text: m.text ?? '',
             mediaUrl: m.mediaUrl ?? null,
             createdAt: m.createdAt,
           })),
