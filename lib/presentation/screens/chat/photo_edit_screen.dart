@@ -101,11 +101,11 @@ class _PhotoEditScreenState extends State<PhotoEditScreen> {
     final b = _brightness;
     final c = _contrast;
     // Contrast around mid-grey, then brightness offset.
-    final cm = [
-      c, 0, 0, 0, (0.5 * (1 - c)) * 255 + (b - 1) * 96,
-      0, c, 0, 0, (0.5 * (1 - c)) * 255 + (b - 1) * 96,
-      0, 0, c, 0, (0.5 * (1 - c)) * 255 + (b - 1) * 96,
-      0, 0, 0, 1, 0,
+    final List<double> cm = [
+      c, 0.0, 0.0, 0.0, (0.5 * (1 - c)) * 255 + (b - 1) * 96,
+      0.0, c, 0.0, 0.0, (0.5 * (1 - c)) * 255 + (b - 1) * 96,
+      0.0, 0.0, c, 0.0, (0.5 * (1 - c)) * 255 + (b - 1) * 96,
+      0.0, 0.0, 0.0, 1.0, 0.0,
     ];
     return _multiply(f, cm);
   }

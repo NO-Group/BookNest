@@ -131,7 +131,7 @@ Future<_LinkData?> _fetchLink(String url) {
         ];
         for (final p in patterns) {
           final m = p.firstMatch(body);
-          if (m != null) return _decode(m.group(1));
+          if (m != null) return _decode(m.group(1) ?? '');
         }
         return null;
       }

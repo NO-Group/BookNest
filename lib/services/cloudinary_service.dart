@@ -54,7 +54,9 @@ class CloudinaryService {
       }
       if (kDebugMode) {
         debugPrint('Cloudinary upload failed: '
-            '${body['error'] is Map ? (body['error'] as Map)['message'] : 'HTTP ${streamed.statusCode}'}');
+            body['error'] is Map
+                ? '\${(body['error'] as Map)['message']}'
+                : 'HTTP \${streamed.statusCode}');
       }
       return null;
     } catch (error) {
@@ -71,27 +73,31 @@ class CloudinaryService {
     required String filename,
   }) async {
     final safeName = filename.trim().isEmpty ? 'attachment' : filename.trim();
-    final uri =
-        Uri.parse('$_base/${AppConfig.cloudinaryCloudName}/auto/upload');
+    final uri = Uri.parse('$_base/${AppConfig.cloudinaryCloudName}/auto/upload');
     final request = http.MultipartRequest('POST', uri)
       ..fields['upload_preset'] = AppConfig.cloudinaryUploadPreset
       ..fields['folder'] = '${AppConfig.cloudinaryBaseFolder}/files';
-    request.files.add(http.MultipartFile.fromBytes('file', bytes,
-        filename: safeName));
+    request.files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: safeName));
     try {
-      final streamed = await request.send().timeout(const Duration(seconds: 90));
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 90));
       final body = jsonDecode(await streamed.stream.bytesToString())
           as Map<String, dynamic>;
       if (streamed.statusCode == 200 && body['secure_url'] is String) {
         return body['secure_url'] as String;
       }
       if (kDebugMode) {
-        debugPrint('Cloudinary raw upload failed: '
-            body['error'] is Map ? '\${(body['error'] as Map)['message']}' : 'HTTP \${streamed.statusCode}');
+        final message = body['error'] is Map
+            ? ((body['error'] as Map)['message'] ?? 'rejected').toString()
+            : 'HTTP ' + streamed.statusCode.toString();
+        debugPrint('Cloudinary raw upload failed: ' + message);
       }
       return null;
     } catch (error) {
-      if (kDebugMode) debugPrint('Cloudinary raw upload error: $error');
+      if (kDebugMode) {
+        debugPrint('Cloudinary raw upload error: ' + error.toString());
+      }
       return null;
     }
   }
