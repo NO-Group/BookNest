@@ -164,7 +164,8 @@ class _ReaderScreenState extends State<ReaderScreen>
             ? quill.QuillController(
                 document: quill.Document.fromJson(deltaList),
                 selection: const TextSelection.collapsed(offset: 0),
-              )..readOnly = true
+                readOnly: true,
+              )
             : null;
       } catch (_) {
         rich = null;
