@@ -207,6 +207,8 @@ class BackendApi {
     String? mediaUrl,
     String? fileName,
     int? fileSize,
+    bool forwarded = false,
+    bool animated = false,
   }) =>
       call('dm.send', <String, dynamic>{
         if (conversationId != null) 'conversationId': conversationId,
@@ -218,6 +220,8 @@ class BackendApi {
         if (mediaUrl != null) 'mediaUrl': mediaUrl,
         if (fileName != null) 'fileName': fileName,
         if (fileSize != null) 'fileSize': fileSize,
+        if (forwarded) 'forwarded': true,
+        if (animated) 'animated': true,
       });
 
   Future<Map<String, dynamic>?> listConversations() => call('dm.list');
@@ -241,6 +245,8 @@ class BackendApi {
     String? mediaUrl,
     String? fileName,
     int? fileSize,
+    bool forwarded = false,
+    bool animated = false,
   }) =>
       call('chat.send', <String, dynamic>{
         'conversationId': conversationId,
@@ -249,10 +255,39 @@ class BackendApi {
         if (mediaUrl != null) 'mediaUrl': mediaUrl,
         if (fileName != null) 'fileName': fileName,
         if (fileSize != null) 'fileSize': fileSize,
+        if (forwarded) 'forwarded': true,
+        if (animated) 'animated': true,
       });
 
   Future<Map<String, dynamic>?> listClubMessages(String conversationId) =>
       call('chat.messages', <String, dynamic>{'conversationId': conversationId});
+
+  // ── message toolkit: reactions, deletes, read receipts, forwarding ────────
+
+  Future<Map<String, dynamic>?> reactDmMessage(String messageId, String emoji) =>
+      call('dm.react', <String, dynamic>{'messageId': messageId, 'emoji': emoji});
+
+  Future<Map<String, dynamic>?> reactClubMessage(String messageId, String emoji) =>
+      call('chat.react', <String, dynamic>{'messageId': messageId, 'emoji': emoji});
+
+  Future<Map<String, dynamic>?> deleteDmMessage(String messageId,
+          {required bool forEveryone}) =>
+      call('dm.deleteMessage',
+          <String, dynamic>{'messageId': messageId, 'forEveryone': forEveryone});
+
+  Future<Map<String, dynamic>?> deleteClubMessage(String messageId,
+          {required bool forEveryone}) =>
+      call('chat.deleteMessage',
+          <String, dynamic>{'messageId': messageId, 'forEveryone': forEveryone});
+
+  Future<Map<String, dynamic>?> markDmRead(String conversationId) =>
+      call('dm.read', <String, dynamic>{'conversationId': conversationId});
+
+  Future<Map<String, dynamic>?> markClubRead(String conversationId) =>
+      call('chat.read', <String, dynamic>{'conversationId': conversationId});
+
+  /// The reader's club/group rooms (forward targets).
+  Future<Map<String, dynamic>?> listClubChatRooms() => call('chats.list');
 
   /// Shares a book profile card into the 1:1 conversation with [peerId]
   /// (creates or reuses the conversation server-side).

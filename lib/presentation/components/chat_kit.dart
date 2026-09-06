@@ -13,6 +13,8 @@ import '../screens/chat/media_viewer_screen.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/supabase_service.dart';
 import 'booknest_ui.dart';
+import 'booknest_emojis.dart';
+import 'booknest_keyboard.dart';
 import 'watermark_background.dart';
 
 /// Shared chat kit — one messaging language across 1:1 and club chats.
@@ -89,7 +91,11 @@ class ChatCanvas extends StatelessWidget {
 
 // ── Bubbles ──────────────────────────────────────────────────────────────────
 
-class ChatBubble extends StatelessWidget {
+/// A single chat message. Knows about real read receipts (the blue
+/// ticks light up only when someone actually read it), reactions,
+/// forwarding, deletes and emote messages — and opens the message
+/// toolkit on long-press.
+class ChatBubble extends StatefulWidget {
   final Map<String, dynamic> message;
   final bool mine;
 
@@ -97,54 +103,255 @@ class ChatBubble extends StatelessWidget {
   /// opens that reader's profile.
   final String? senderName;
   final String? senderId;
+  final String viewerId;
   final VoidCallback? onOpenBook;
   final VoidCallback? onOpenImage;
   final VoidCallback? onOpenFile;
+  final ValueChanged<String>? onReact;
+  final VoidCallback? onForward;
+  final VoidCallback? onInfo;
+  final VoidCallback? onDeleteForMe;
+  final VoidCallback? onDeleteForEveryone;
 
   const ChatBubble({
     super.key,
     required this.message,
     required this.mine,
+    this.viewerId = '',
     this.senderName,
     this.senderId,
     this.onOpenBook,
     this.onOpenImage,
     this.onOpenFile,
+    this.onReact,
+    this.onForward,
+    this.onInfo,
+    this.onDeleteForMe,
+    this.onDeleteForEveryone,
   });
+
+  @override
+  State<ChatBubble> createState() => _ChatBubbleState();
+}
+
+class _ChatBubbleState extends State<ChatBubble>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _burst = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 520),
+    value: 1,
+  );
+
+  @override
+  void dispose() {
+    _burst.dispose();
+    super.dispose();
+  }
+
+  bool get _pending => widget.message['pending'] == true;
+  bool get _failed => widget.message['failed'] == true;
+  bool get _deletedForEveryone => widget.message['deletedForEveryone'] == true;
+  String get _type =>
+      _deletedForEveryone ? 'deleted' : (widget.message['type']?.toString() ?? 'text');
+  String get _text => widget.message['text']?.toString() ?? '';
+  String get _mediaUrl => widget.message['mediaUrl']?.toString() ?? '';
+  bool get _isMine => widget.mine;
+
+  /// The blue ticks. True only when someone OTHER than the sender has
+  /// actually read this message on the server.
+  bool get _readBySomeone {
+    final readBy = widget.message['readBy'];
+    if (readBy is! List) return false;
+    return readBy.any((r) => r != null && r.toString() != widget.viewerId);
+  }
+
+  Map<String, int> get _reactionCounts {
+    final raw = widget.message['reactions'];
+    final counts = <String, int>{};
+    if (raw is Map) {
+      for (final e in raw.values) {
+        final code = e?.toString() ?? '';
+        if (code.isEmpty) continue;
+        counts[code] = (counts[code] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }
+
+  bool _reactedByMe(String code) {
+    final raw = widget.message['reactions'];
+    if (raw is! Map) return false;
+    return raw[widget.viewerId]?.toString() == code;
+  }
+
+  void _fireBurst() {
+    _burst.forward(from: 0);
+    widget.onReact?.call(doubleTapReactionCode);
+  }
+
+  void _showToolkit() {
+    final canAct = !_pending && !_failed && !_deletedForEveryone;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.onReact != null && canAct) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    for (final code in quickReactionCodes)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(30),
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          widget.onReact?.call(code);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(5),
+                          child: BookNestEmojiView(code, size: 34, animate: true),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+            ],
+            if (widget.onForward != null && canAct)
+              ListTile(
+                leading: const Icon(Icons.shortcut_rounded,
+                    color: BookNestColors.cyan),
+                title: const Text('Forward',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  widget.onForward?.call();
+                },
+              ),
+            if (widget.onInfo != null && canAct)
+              ListTile(
+                leading: const Icon(Icons.info_outline_rounded,
+                    color: BookNestColors.cyan),
+                title: const Text('Message info',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  widget.onInfo?.call();
+                },
+              ),
+            if (widget.onDeleteForMe != null && canAct)
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded,
+                    color: BookNestColors.cyan),
+                title: const Text('Delete for me',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  widget.onDeleteForMe?.call();
+                },
+              ),
+            if (widget.onDeleteForEveryone != null &&
+                canAct &&
+                _isMine &&
+                !_deletedForEveryone)
+              ListTile(
+                leading: const Icon(Icons.delete_forever_rounded,
+                    color: Color(0xFFFF8A8A)),
+                title: const Text('Delete for everyone',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, color: Color(0xFFFF8A8A))),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  widget.onDeleteForEveryone?.call();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _ticks(Color base, Color readColor) {
+    if (!_isMine) return const SizedBox.shrink();
+    if (_pending) {
+      return Icon(Icons.schedule_rounded, size: 13, color: base);
+    }
+    if (_failed) {
+      return const Icon(Icons.error_outline_rounded,
+          size: 13, color: Color(0xFFFF8A8A));
+    }
+    if (_readBySomeone) {
+      return Icon(Icons.done_all_rounded, size: 13, color: readColor);
+    }
+    return Icon(Icons.done_rounded, size: 13, color: base);
+  }
 
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final pending = message['pending'] == true;
-    final failed = message['failed'] == true;
-    final type = message['type']?.toString() ?? 'text';
-    final text = message['text']?.toString() ?? '';
-    final mediaUrl = message['mediaUrl']?.toString();
+    final mine = widget.mine;
 
     final Widget content;
-    if (type == 'image' && mediaUrl != null && mediaUrl.startsWith('http')) {
-      content = _ImageContent(url: mediaUrl, onTap: onOpenImage);
-    } else if (type == 'file' && mediaUrl != null && mediaUrl.startsWith('http')) {
-      content = _FileContent(
-        url: mediaUrl,
-        dark: dark,
-        name: (message['fileName']?.toString().isNotEmpty == true)
-            ? message['fileName'].toString()
-            : text,
-        fileSize: (message['fileSize'] as num?)?.toInt(),
-        onTap: onOpenFile,
+    if (_type == 'deleted') {
+      content = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.block_rounded,
+              size: 13,
+              color: mine
+                  ? Colors.white54
+                  : (dark ? Colors.white38 : BookNestColors.navyDeep.withOpacity(.45))),
+          const SizedBox(width: 6),
+          Text(
+            'This message was deleted',
+            style: TextStyle(
+              fontStyle: FontStyle.italic,
+              fontSize: 13.5,
+              color: mine
+                  ? Colors.white54
+                  : (dark ? Colors.white38 : BookNestColors.navyDeep.withOpacity(.45)),
+            ),
+          ),
+        ],
       );
-    } else if (type == 'book_share') {
+    } else if (_type == 'emoji' && _text.isNotEmpty) {
+      content = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        child: BookNestEmojiView(_text, size: 72, animate: true),
+      );
+    } else if (_type == 'image' &&
+        _mediaUrl.startsWith('http') &&
+        !_deletedForEveryone) {
+      content = _ImageContent(url: _mediaUrl, onTap: widget.onOpenImage);
+    } else if (_type == 'file' &&
+        _mediaUrl.startsWith('http') &&
+        !_deletedForEveryone) {
+      content = _FileContent(
+        url: _mediaUrl,
+        dark: dark,
+        name: (widget.message['fileName']?.toString().isNotEmpty == true)
+            ? widget.message['fileName'].toString()
+            : _text,
+        fileSize: (widget.message['fileSize'] as num?)?.toInt(),
+        onTap: widget.onOpenFile,
+      );
+    } else if (_type == 'book_share' && !_deletedForEveryone) {
       content = _BookShareContent(
-        title: text,
-        onOpen: onOpenBook,
+        title: _text,
+        onOpen: widget.onOpenBook,
         dark: dark,
       );
     } else {
       content = Text(
-        text,
+        _text,
         style: TextStyle(
-          color: mine ? Colors.white : (dark ? BookNestColors.darkTextPrimary : BookNestColors.navyDeep),
+          color: mine
+              ? Colors.white
+              : (dark ? BookNestColors.darkTextPrimary : BookNestColors.navyDeep),
           height: 1.35,
           fontSize: 15,
         ),
@@ -158,12 +365,13 @@ class ChatBubble extends StatelessWidget {
         left: mine ? 48 : 0,
         right: mine ? 0 : 48,
       ),
-      padding: (type == 'book_share' || type == 'file')
+      padding: (_type == 'book_share' || _type == 'file')
           ? const EdgeInsets.all(10)
-          : (type == 'image'
-              ? const EdgeInsets.fromLTRB(4, 4, 4, 4)
+          : (_type == 'image'
+              ? const EdgeInsets.all(4)
               : const EdgeInsets.fromLTRB(13, 8, 13, 6)),
-      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * .78),
+      constraints:
+          BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * .78),
       decoration: BoxDecoration(
         gradient: mine
             ? const LinearGradient(
@@ -172,7 +380,9 @@ class ChatBubble extends StatelessWidget {
                 end: Alignment.bottomRight,
               )
             : null,
-        color: mine ? null : (dark ? BookNestColors.darkReceivedMessage : Colors.white),
+        color: mine
+            ? null
+            : (dark ? BookNestColors.darkReceivedMessage : Colors.white),
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(18),
           topRight: const Radius.circular(18),
@@ -193,54 +403,80 @@ class ChatBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!mine && senderName != null && senderName!.isNotEmpty && type != 'book_share') ...[
+          if (!mine &&
+              !_deletedForEveryone &&
+              widget.senderName != null &&
+              widget.senderName!.isNotEmpty &&
+              _type != 'book_share') ...[
             GestureDetector(
               onTap: () {
-                final id = senderId;
+                final id = widget.senderId;
                 if (id != null && id.isNotEmpty) context.push('/user/$id');
               },
               child: Text(
-                senderName!,
+                widget.senderName!,
                 style: TextStyle(
                   color: BookNestColors.cyan,
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  decoration: senderId == null ? null : TextDecoration.underline,
+                  decoration:
+                      widget.senderId == null ? null : TextDecoration.underline,
                   decorationColor: BookNestColors.cyan.withOpacity(.5),
                 ),
               ),
             ),
             const SizedBox(height: 2),
           ],
+          if (widget.message['forwarded'] == true && !_deletedForEveryone) ...[
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.shortcut_rounded,
+                    size: 12,
+                    color: mine
+                        ? Colors.white.withOpacity(.65)
+                        : BookNestColors.cyan),
+                const SizedBox(width: 4),
+                Text(
+                  'Forwarded',
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      fontStyle: FontStyle.italic,
+                      fontWeight: FontWeight.w600,
+                      color: mine
+                          ? Colors.white.withOpacity(.65)
+                          : BookNestColors.cyan),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+          ],
           content,
-          if (type != 'image') ...[
+          if (_type != 'image') ...[
             const SizedBox(height: 2),
             Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                if (failed)
+                if (_failed)
                   const Icon(Icons.error_outline_rounded,
                       size: 11, color: Color(0xFFFF8A8A)),
                 Text(
-                  chatTimeLabel(message['createdAt']),
+                  chatTimeLabel(widget.message['createdAt']),
                   style: TextStyle(
                     fontSize: 10,
                     color: mine
                         ? Colors.white.withOpacity(.65)
-                        : (dark ? Colors.white.withOpacity(.45) : BookNestColors.navyDeep.withOpacity(.5)),
+                        : (dark
+                            ? Colors.white.withOpacity(.45)
+                            : BookNestColors.navyDeep.withOpacity(.5)),
                   ),
                 ),
                 if (mine) ...[
                   const SizedBox(width: 4),
-                  Icon(
-                    pending
-                        ? Icons.schedule_rounded
-                        : (failed ? Icons.error_outline_rounded : Icons.done_all_rounded),
-                    size: 13,
-                    color: pending
-                        ? Colors.white.withOpacity(.55)
-                        : (failed ? const Color(0xFFFF8A8A) : BookNestColors.cyan),
+                  _ticks(
+                    Colors.white.withOpacity(.55),
+                    BookNestColors.cyan,
                   ),
                 ],
               ],
@@ -250,49 +486,135 @@ class ChatBubble extends StatelessWidget {
       ),
     );
 
-    if (type == 'image') {
-      // Overlay the time/ticks on the photo, WhatsApp-style but glassy.
-      return Align(
-        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+    final bubbleStack = _type == 'image' && !_deletedForEveryone
+        ? Stack(
+            children: [
+              bubble,
+              Positioned(
+                right: 10,
+                bottom: 10,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(.45),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(chatTimeLabel(widget.message['createdAt']),
+                          style:
+                              const TextStyle(fontSize: 10, color: Colors.white)),
+                      if (mine) ...[
+                        const SizedBox(width: 4),
+                        _ticks(Colors.white.withOpacity(.6), BookNestColors.cyan),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          )
+        : bubble;
+
+    final reactions = _reactionCounts;
+    final hasReactions = reactions.isNotEmpty && !_deletedForEveryone;
+
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: GestureDetector(
+        onLongPress: _showToolkit,
+        onDoubleTap:
+            (widget.onReact != null && !_pending && !_deletedForEveryone)
+                ? _fireBurst
+                : null,
         child: Stack(
           children: [
-            bubble,
-            Positioned(
-              right: 10,
-              bottom: 10,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(.45),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      chatTimeLabel(message['createdAt']),
-                      style: const TextStyle(fontSize: 10, color: Colors.white),
+            Column(
+              crossAxisAlignment:
+                  mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                bubbleStack,
+                if (hasReactions)
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(top: 2, bottom: 3, left: 4, right: 4),
+                    child: Wrap(
+                      spacing: 5,
+                      children: [
+                        for (final entry in reactions.entries)
+                          InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: widget.onReact == null
+                                ? null
+                                : () => widget.onReact!(entry.key),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _reactedByMe(entry.key)
+                                    ? BookNestColors.cyan.withOpacity(.18)
+                                    : (dark
+                                        ? Colors.white.withOpacity(.07)
+                                        : BookNestColors.navyDeep.withOpacity(.06)),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: _reactedByMe(entry.key)
+                                      ? BookNestColors.cyan
+                                      : (dark
+                                          ? Colors.white.withOpacity(.12)
+                                          : BookNestColors.navyDeep
+                                              .withOpacity(.12)),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  BookNestEmojiView(entry.key,
+                                      size: 15, animate: true),
+                                  if (entry.value > 1) ...[
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${entry.value}',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          color: dark
+                                              ? Colors.white70
+                                              : BookNestColors.navyDeep),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                    if (mine) ...[
-                      const SizedBox(width: 4),
-                      Icon(
-                        pending ? Icons.schedule_rounded : Icons.done_all_rounded,
-                        size: 13,
-                        color: pending ? Colors.white.withOpacity(.6) : BookNestColors.cyan,
-                      ),
-                    ],
-                  ],
+                  ),
+              ],
+            ),
+            // Double-tap love burst.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Center(
+                  child: FadeTransition(
+                    opacity: Tween<double>(begin: 1, end: 0).animate(
+                        CurvedAnimation(
+                            parent: _burst, curve: const Interval(.35, 1))),
+                    child: ScaleTransition(
+                      scale: Tween<double>(begin: .5, end: 1.7).animate(
+                          CurvedAnimation(parent: _burst, curve: Curves.easeOut)),
+                      child: const BookNestEmojiView('heart',
+                          size: 46, animate: false),
+                    ),
+                  ),
                 ),
               ),
             ),
           ],
         ),
-      );
-    }
-
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: bubble,
+      ),
     );
   }
 }
@@ -561,6 +883,327 @@ class ChatDayChip extends StatelessWidget {
   }
 }
 
+// ── Forward picker + message info (shared by DM and club chats) ─────────────
+
+class ForwardTarget {
+  final String conversationId;
+  final String title;
+  final bool isClub;
+  const ForwardTarget({
+    required this.conversationId,
+    required this.title,
+    required this.isClub,
+  });
+}
+
+/// The forward picker: every DM and every group room the reader is in.
+Future<void> showForwardPicker(
+  BuildContext context, {
+  required Future<void> Function(ForwardTarget target) onDeliver,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (sheetContext) {
+      final dark = Theme.of(sheetContext).brightness == Brightness.dark;
+      return SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * .68,
+          child: FutureBuilder<List<ForwardTarget>>(
+            future: _loadForwardTargets(),
+            builder: (context, snap) {
+              final targets = snap.data;
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+                    child: Row(
+                      children: [
+                        Text('Forward to',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: dark ? Colors.white : BookNestColors.navyDeep)),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () => Navigator.pop(sheetContext),
+                          child: const Text('Cancel'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: Theme.of(sheetContext).dividerColor),
+                  Expanded(
+                    child: snap.connectionState != ConnectionState.done
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                                color: BookNestColors.cyan))
+                        : (targets == null || targets.isEmpty)
+                            ? Center(
+                                child: Text(
+                                  'No chats to forward to yet.',
+                                  style: TextStyle(
+                                      color: dark ? Colors.white54 : null),
+                                ),
+                              )
+                            : ListView.builder(
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                                itemCount: targets.length,
+                                itemBuilder: (context, i) {
+                                  final t = targets[i];
+                                  return ListTile(
+                                    leading: CircleAvatar(
+                                      backgroundColor: BookNestColors.cyan
+                                          .withOpacity(.15),
+                                      child: Icon(
+                                        t.isClub
+                                            ? Icons.groups_rounded
+                                            : Icons.person_rounded,
+                                        color: BookNestColors.cyan,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    title: Text(t.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: dark
+                                                ? Colors.white
+                                                : BookNestColors.navyDeep)),
+                                    subtitle: Text(
+                                        t.isClub ? 'Group chat' : 'Direct message',
+                                        style: const TextStyle(fontSize: 11.5)),
+                                    trailing: const Icon(Icons.shortcut_rounded,
+                                        color: BookNestColors.cyan),
+                                    onTap: () {
+                                      Navigator.pop(sheetContext);
+                                      onDeliver(t);
+                                    },
+                                  );
+                                },
+                              ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Future<List<ForwardTarget>> _loadForwardTargets() async {
+  final targets = <ForwardTarget>[];
+  final dmRes = await BackendApi.instance.listConversations();
+  final dmIds = <String>[];
+  if (dmRes is Map && dmRes['conversations'] is List) {
+    for (final c in (dmRes['conversations'] as List)) {
+      if (c is Map && c['id'] != null) {
+        dmIds.add(c['id'].toString());
+        targets.add(ForwardTarget(
+          conversationId: c['id'].toString(),
+          title: 'Direct message',
+          isClub: false,
+        ));
+      }
+    }
+  }
+  // Resolve the person behind each DM from the profiles table.
+  try {
+    if (dmIds.isNotEmpty) {
+      final rows = await SupabaseService().client
+          .from('profiles')
+          .select('id, username, display_name')
+          .inFilter('id', dmIds);
+      final names = <String, String>{};
+      for (final r in (rows as List)) {
+        if (r is Map) {
+          final id = r['id']?.toString() ?? '';
+          final name = (r['display_name'] ?? r['username'])?.toString() ?? '';
+          if (id.isNotEmpty && name.trim().isNotEmpty) names[id] = name.trim();
+        }
+      }
+      for (var i = 0; i < targets.length; i++) {
+        final conv = (dmRes?['conversations'] as List?)?[i];
+        if (conv is Map) {
+          final peer = conv['peerId']?.toString() ?? '';
+          if (names[peer] != null) {
+            targets[i] = ForwardTarget(
+              conversationId: targets[i].conversationId,
+              title: names[peer]!,
+              isClub: false,
+            );
+          }
+        }
+      }
+    }
+  } catch (_) {
+    // Names stay generic if profiles hiccup — forwarding still works.
+  }
+  final roomsRes = await BackendApi.instance.listClubChatRooms();
+  if (roomsRes is Map && roomsRes['rooms'] is List) {
+    for (final r in (roomsRes['rooms'] as List)) {
+      if (r is Map && r['conversationId'] != null) {
+        targets.add(ForwardTarget(
+          conversationId: r['conversationId'].toString(),
+          title: (r['title']?.toString().isNotEmpty == true)
+              ? r['title'].toString()
+              : 'Group chat',
+          isClub: true,
+        ));
+      }
+    }
+  }
+  return targets;
+}
+
+/// The message info sheet: status, timestamps, receipts, reactions.
+void showMessageInfo(
+  BuildContext context,
+  Map<String, dynamic> message, {
+  String? viewerId,
+  String? Function(String userId)? nameOf,
+}) {
+  final dark = Theme.of(context).brightness == Brightness.dark;
+  final readBy = (message['readBy'] is List)
+      ? (message['readBy'] as List)
+          .whereType<String>()
+          .where((r) => r != (viewerId ?? ''))
+          .toList()
+      : <String>[];
+  final mine = message['senderId']?.toString() == (viewerId ?? '');
+  final reactions = <String, List<String>>{};
+  final raw = message['reactions'];
+  if (raw is Map) {
+    for (final entry in raw.entries) {
+      reactions
+          .putIfAbsent(entry.value?.toString() ?? '', () => [])
+          .add(entry.key?.toString() ?? '');
+    }
+  }
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) {
+      String labelOf(String uid) => nameOf?.call(uid) ?? 'Reader';
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Message info',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: dark ? Colors.white : BookNestColors.navyDeep)),
+              const SizedBox(height: 14),
+              if (mine)
+                Row(children: [
+                  Icon(
+                    readBy.isEmpty
+                        ? Icons.done_rounded
+                        : Icons.done_all_rounded,
+                    size: 18,
+                    color: readBy.isEmpty
+                        ? BookNestColors.navyDeep.withOpacity(.5)
+                        : BookNestColors.cyan,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    readBy.isEmpty
+                        ? 'Sent — not read yet'
+                        : 'Read${readBy.length > 1 ? ' by ${readBy.length} readers' : ''}',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: dark ? Colors.white : BookNestColors.navyDeep),
+                  ),
+                ])
+              else ...[
+                Text('Delivered to you',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: dark ? Colors.white : BookNestColors.navyDeep)),
+              ],
+              const SizedBox(height: 10),
+              Text(
+                'Sent ${chatTimeLabel(message['createdAt'])}',
+                style: TextStyle(
+                    fontSize: 12.5,
+                    color: dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.6)),
+              ),
+              if ((message['type']?.toString() == 'file') &&
+                  message['fileSize'] != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'File: ${message['fileName'] ?? 'attachment'} · '
+                  '${((message['fileSize'] as num?)?.toInt() ?? 0) < 1024 * 1024 ? '${((message['fileSize'] as num?)!.toInt() / 1024).toStringAsFixed(0)} KB' : '${((message['fileSize'] as num?)!.toInt() / (1024 * 1024)).toStringAsFixed(1)} MB'}',
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      color: dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.6)),
+                ),
+              ],
+              if (readBy.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Text('READ BY',
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        letterSpacing: .8,
+                        fontWeight: FontWeight.w800,
+                        color: Theme.of(context).hintColor)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final uid in readBy)
+                      Text(labelOf(uid),
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: dark ? Colors.white70 : BookNestColors.navyDeep)),
+                  ],
+                ),
+              ],
+              if (reactions.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Text('REACTIONS',
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        letterSpacing: .8,
+                        fontWeight: FontWeight.w800,
+                        color: Theme.of(context).hintColor)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 6,
+                  children: [
+                    for (final entry in reactions.entries)
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        BookNestEmojiView(entry.key, size: 20, animate: true),
+                        const SizedBox(width: 5),
+                        Text(
+                          entry.value.map(labelOf).join(', '),
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: dark ? Colors.white70 : BookNestColors.navyDeep),
+                        ),
+                      ]),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 // ── Composer ─────────────────────────────────────────────────────────────────
 
 class ChatComposer extends StatefulWidget {
@@ -570,6 +1213,10 @@ class ChatComposer extends StatefulWidget {
 
   /// Any file format — invoked from the paperclip's "File" option.
   final Future<void> Function(String filename, Uint8List bytes)? onSendFile;
+
+  /// BookNest emote tapped on our own keyboard — sends instantly,
+  /// Snapchat-style.
+  final Future<void> Function(EmojiDef emote)? onSendEmote;
   final bool enabled;
 
   const ChatComposer({
@@ -577,6 +1224,7 @@ class ChatComposer extends StatefulWidget {
     required this.onSendText,
     required this.onSendImage,
     this.onSendFile,
+    this.onSendEmote,
     this.hint = 'Message…',
     this.enabled = true,
   });
@@ -589,7 +1237,18 @@ class _ChatComposerState extends State<ChatComposer> {
   final TextEditingController _input = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   bool _uploading = false;
+  bool _emotesOpen = false;
   String? _photoName;
+
+  Future<void> _sendEmote(EmojiDef emote) async {
+    if (_uploading || widget.onSendEmote == null) return;
+    setState(() => _uploading = true);
+    try {
+      await widget.onSendEmote!(emote);
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -764,32 +1423,54 @@ class _ChatComposerState extends State<ChatComposer> {
       ),
       child: SafeArea(
         top: false,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _uploading
-                ? const Padding(
-                    padding: EdgeInsets.all(10),
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          color: BookNestColors.cyan, strokeWidth: 2.2),
-                    ),
-                  )
-                : IconButton(
-                    onPressed: widget.enabled ? _openAttachSheet : null,
-                    icon: const Icon(Icons.attach_file_rounded),
-                    color: BookNestColors.cyan,
-                    tooltip: 'Attach',
-                  ),
-            if (!_uploading)
-              IconButton(
-                onPressed: widget.enabled ? _snap : null,
-                icon: const Icon(Icons.photo_camera_outlined),
-                color: BookNestColors.cyan,
-                tooltip: 'Camera',
+            if (_emotesOpen)
+              BookNestKeyboard(
+                onEmote: (e) {
+                  FocusScope.of(context).unfocus();
+                  _sendEmote(e);
+                },
               ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _uploading
+                    ? const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              color: BookNestColors.cyan, strokeWidth: 2.2),
+                        ),
+                      )
+                    : IconButton(
+                        onPressed: widget.enabled ? _openAttachSheet : null,
+                        icon: const Icon(Icons.attach_file_rounded),
+                        color: BookNestColors.cyan,
+                        tooltip: 'Attach',
+                      ),
+                if (!_uploading)
+                  IconButton(
+                    onPressed: widget.enabled ? _snap : null,
+                    icon: const Icon(Icons.photo_camera_outlined),
+                    color: BookNestColors.cyan,
+                    tooltip: 'Camera',
+                  ),
+                if (!_uploading && widget.onSendEmote != null)
+                  IconButton(
+                    onPressed: () {
+                      FocusScope.of(context).unfocus();
+                      setState(() => _emotesOpen = !_emotesOpen);
+                    },
+                    icon: Icon(_emotesOpen
+                        ? Icons.keyboard_alt_outlined
+                        : Icons.emoji_emotions_outlined),
+                    color: _emotesOpen ? BookNestColors.cyan : BookNestColors.cyan,
+                    tooltip: 'BookNest Emotes',
+                  ),
             Expanded(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 120),
@@ -818,15 +1499,17 @@ class _ChatComposerState extends State<ChatComposer> {
                 ),
               ),
             ),
-            const SizedBox(width: 6),
-            IconButton.filled(
-              onPressed: widget.enabled ? _send : null,
-              icon: const Icon(Icons.send_rounded, size: 20),
-              style: IconButton.styleFrom(
-                backgroundColor: BookNestColors.cyan,
-                foregroundColor: Colors.black,
-              ),
-              tooltip: 'Send',
+                const SizedBox(width: 6),
+                IconButton.filled(
+                  onPressed: widget.enabled ? _send : null,
+                  icon: const Icon(Icons.send_rounded, size: 20),
+                  style: IconButton.styleFrom(
+                    backgroundColor: BookNestColors.cyan,
+                    foregroundColor: Colors.black,
+                  ),
+                  tooltip: 'Send',
+                ),
+              ],
             ),
           ],
         ),

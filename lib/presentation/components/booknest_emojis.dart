@@ -1,0 +1,795 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+
+/// ─────────────────────────────────────────────────────────────────────────────
+/// BookNest Emotes — our own emoji set, drawn entirely in code in the
+/// BookNest visual language (navy / cyan / white / mint / lavender).
+/// 36 static + 12 animated emotes. Nothing here is a system glyph:
+/// every face and object is painted by [BookNestEmojiPainter], and the
+/// animated ones are driven live in the chat.
+/// ─────────────────────────────────────────────────────────────────────────────
+
+enum EmojiEyes { dot, happy, closed, wink, star, heart, sunglasses, glasses, sleepy }
+
+enum EmojiMouth { smile, grin, smallO, tongue, flat, frown, catSmile }
+
+enum EmojiAccessory { none, halo, wizardHat, headphones }
+
+enum EmojiObject {
+  openBook,
+  bookStack,
+  quill,
+  bookmark,
+  owl,
+  bookHeart,
+  lamp,
+  coffee,
+  moon,
+  star,
+  heart,
+  sparkles,
+  bookworm,
+  shelf,
+  scroll,
+  medal,
+  comet,
+}
+
+enum EmojiEffect {
+  none,
+  bounce,
+  winkLoop,
+  spin,
+  pulse,
+  shake,
+  heartbeat,
+  orbit,
+  floatUp,
+  drip,
+  shine,
+  twinkle,
+  floatZ,
+}
+
+class EmojiDef {
+  final String code;
+  final String label;
+  final EmojiEyes? eyes;
+  final EmojiMouth? mouth;
+  final EmojiAccessory accessory;
+  final Color face;
+  final EmojiObject? object;
+  final EmojiEffect effect;
+
+  const EmojiDef({
+    required this.code,
+    required this.label,
+    this.eyes,
+    this.mouth,
+    this.accessory = EmojiAccessory.none,
+    this.face = BookNestEmojiPalette.cyan,
+    this.object,
+    this.effect = EmojiEffect.none,
+  });
+
+  bool get isAnimated => effect != EmojiEffect.none;
+}
+
+abstract class BookNestEmojiPalette {
+  static const cyan = Color(0xFF00E5FF);
+  static const navy = Color(0xFF102A56);
+  static const navyDeep = Color(0xFF071A3D);
+  static const white = Color(0xFFF7FAFF);
+  static const mint = Color(0xFF7BF1D9);
+  static const lavender = Color(0xFFC3B7FF);
+  static const skyBlue = Color(0xFF8FC6FF);
+  static const blushPink = Color(0xFFFF9EC0);
+}
+
+const List<EmojiDef> bookNestEmotes = [
+  // ── faces ──
+  EmojiDef(code: 'bookjoy', label: 'Book joy', eyes: EmojiEyes.happy, mouth: EmojiMouth.smile),
+  EmojiDef(code: 'booklaugh', label: 'Laughing', eyes: EmojiEyes.happy, mouth: EmojiMouth.grin, face: BookNestEmojiPalette.navy),
+  EmojiDef(code: 'booklove', label: 'Book love', eyes: EmojiEyes.heart, mouth: EmojiMouth.smile, face: BookNestEmojiPalette.lavender),
+  EmojiDef(code: 'bookwink', label: 'Wink', eyes: EmojiEyes.wink, mouth: EmojiMouth.catSmile),
+  EmojiDef(code: 'bookcool', label: 'Cool reader', eyes: EmojiEyes.sunglasses, mouth: EmojiMouth.smile, face: BookNestEmojiPalette.navy),
+  EmojiDef(code: 'booksleepy', label: 'Sleepy', eyes: EmojiEyes.sleepy, mouth: EmojiMouth.flat, face: BookNestEmojiPalette.lavender),
+  EmojiDef(code: 'bookcry', label: 'Crying', eyes: EmojiEyes.closed, mouth: EmojiMouth.frown, face: BookNestEmojiPalette.skyBlue),
+  EmojiDef(code: 'bookshock', label: 'Shocked', eyes: EmojiEyes.dot, mouth: EmojiMouth.smallO, face: BookNestEmojiPalette.white),
+  EmojiDef(code: 'booktongue', label: 'Cheeky', eyes: EmojiEyes.happy, mouth: EmojiMouth.tongue, face: BookNestEmojiPalette.mint),
+  EmojiDef(code: 'booknerd', label: 'Nerd', eyes: EmojiEyes.glasses, mouth: EmojiMouth.smile, face: BookNestEmojiPalette.white),
+  EmojiDef(code: 'booksmile', label: 'Smile', eyes: EmojiEyes.dot, mouth: EmojiMouth.smile, face: BookNestEmojiPalette.white),
+  EmojiDef(code: 'bookthink', label: 'Thinking', eyes: EmojiEyes.dot, mouth: EmojiMouth.flat, face: BookNestEmojiPalette.mint),
+  EmojiDef(code: 'bookangry', label: 'Grumpy', eyes: EmojiEyes.dot, mouth: EmojiMouth.frown, face: BookNestEmojiPalette.navyDeep),
+  EmojiDef(code: 'bookhalo', label: 'Angel', eyes: EmojiEyes.happy, mouth: EmojiMouth.smile, accessory: EmojiAccessory.halo, face: BookNestEmojiPalette.white),
+  EmojiDef(code: 'bookwizard', label: 'Story wizard', eyes: EmojiEyes.happy, mouth: EmojiMouth.smile, accessory: EmojiAccessory.wizardHat, face: BookNestEmojiPalette.navy),
+  EmojiDef(code: 'bookphones', label: 'Audiobook time', eyes: EmojiEyes.closed, mouth: EmojiMouth.smile, accessory: EmojiAccessory.headphones),
+  EmojiDef(code: 'bookstarry', label: 'Starstruck', eyes: EmojiEyes.star, mouth: EmojiMouth.smallO),
+  EmojiDef(code: 'bookzzz', label: 'Asleep', eyes: EmojiEyes.closed, mouth: EmojiMouth.flat, face: BookNestEmojiPalette.navy),
+  // ── objects ──
+  EmojiDef(code: 'openbook', label: 'Open book', object: EmojiObject.openBook),
+  EmojiDef(code: 'bookstack', label: 'Book stack', object: EmojiObject.bookStack),
+  EmojiDef(code: 'quill', label: 'Quill', object: EmojiObject.quill),
+  EmojiDef(code: 'bookmark', label: 'Bookmark', object: EmojiObject.bookmark),
+  EmojiDef(code: 'owl', label: 'BookNest owl', object: EmojiObject.owl),
+  EmojiDef(code: 'bookheart', label: 'Book heart', object: EmojiObject.bookHeart),
+  EmojiDef(code: 'lamp', label: 'Reading lamp', object: EmojiObject.lamp),
+  EmojiDef(code: 'coffee', label: 'Coffee break', object: EmojiObject.coffee),
+  EmojiDef(code: 'moon', label: 'Late-night read', object: EmojiObject.moon),
+  EmojiDef(code: 'star', label: 'Star', object: EmojiObject.star),
+  EmojiDef(code: 'heart', label: 'Heart', object: EmojiObject.heart),
+  EmojiDef(code: 'sparkles', label: 'Sparkles', object: EmojiObject.sparkles),
+  EmojiDef(code: 'bookworm', label: 'Bookworm', object: EmojiObject.bookworm),
+  EmojiDef(code: 'shelf', label: 'Library shelf', object: EmojiObject.shelf),
+  EmojiDef(code: 'scroll', label: 'Scroll', object: EmojiObject.scroll),
+  EmojiDef(code: 'medal', label: 'Reading medal', object: EmojiObject.medal),
+  EmojiDef(code: 'comet', label: 'Comet', object: EmojiObject.comet),
+  EmojiDef(code: 'nest', label: 'The Nest', object: EmojiObject.bookStack, face: BookNestEmojiPalette.cyan),
+  // ── animated ──
+  EmojiDef(code: 'bounce-heart', label: 'Bouncing heart', object: EmojiObject.heart, effect: EmojiEffect.bounce),
+  EmojiDef(code: 'wink-loop', label: 'Winking', eyes: EmojiEyes.wink, mouth: EmojiMouth.catSmile, effect: EmojiEffect.winkLoop),
+  EmojiDef(code: 'spin-star', label: 'Spinning star', object: EmojiObject.star, effect: EmojiEffect.spin),
+  EmojiDef(code: 'pulse-moon', label: 'Glowing moon', object: EmojiObject.moon, effect: EmojiEffect.pulse),
+  EmojiDef(code: 'shake-laugh', label: 'Cracking up', eyes: EmojiEyes.happy, mouth: EmojiMouth.grin, face: BookNestEmojiPalette.navy, effect: EmojiEffect.shake),
+  EmojiDef(code: 'heartbeat', label: 'Heartbeat', object: EmojiObject.heart, effect: EmojiEffect.heartbeat),
+  EmojiDef(code: 'party-book', label: 'Party book', object: EmojiObject.openBook, effect: EmojiEffect.orbit),
+  EmojiDef(code: 'rocket-quill', label: 'Quill taking off', object: EmojiObject.quill, effect: EmojiEffect.floatUp),
+  EmojiDef(code: 'cry-loop', label: 'Tears', eyes: EmojiEyes.closed, mouth: EmojiMouth.frown, face: BookNestEmojiPalette.skyBlue, effect: EmojiEffect.drip),
+  EmojiDef(code: 'cool-shine', label: 'Shine', eyes: EmojiEyes.sunglasses, mouth: EmojiMouth.smile, face: BookNestEmojiPalette.navy, effect: EmojiEffect.shine),
+  EmojiDef(code: 'magic-sparkle', label: 'Magic', object: EmojiObject.sparkles, effect: EmojiEffect.twinkle),
+  EmojiDef(code: 'dream-z', label: 'Dreaming', eyes: EmojiEyes.sleepy, mouth: EmojiMouth.flat, face: BookNestEmojiPalette.lavender, effect: EmojiEffect.floatZ),
+];
+
+EmojiDef? emojiByCode(String code) {
+  for (final e in bookNestEmotes) {
+    if (e.code == code) return e;
+  }
+  return null;
+}
+
+/// The quick-reaction row (long-press a message).
+const List<String> quickReactionCodes = [
+  'heart',
+  'bookjoy',
+  'booklaugh',
+  'booklove',
+  'bookshock',
+  'booksleepy',
+  'bookcry',
+  'bounce-heart',
+];
+
+/// The heart used by the double-tap instant reaction.
+const String doubleTapReactionCode = 'heart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The widget
+// ─────────────────────────────────────────────────────────────────────────────
+
+class BookNestEmojiView extends StatefulWidget {
+  final String code;
+  final double size;
+
+  /// Animated emotes only move when this is true (grids can stay calm,
+  /// chat bubbles play them live).
+  final bool animate;
+
+  const BookNestEmojiView(
+    this.code, {
+    super.key,
+    this.size = 34,
+    this.animate = true,
+  });
+
+  @override
+  State<BookNestEmojiView> createState() => _BookNestEmojiViewState();
+}
+
+class _BookNestEmojiViewState extends State<BookNestEmojiView>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _controller;
+
+  EmojiDef get _def => emojiByCode(widget.code) ?? bookNestEmotes.firstWhere((e) => e.code == 'heart');
+
+  @override
+  void initState() {
+    super.initState();
+    _maybeAnimate();
+  }
+
+  @override
+  void didUpdateWidget(covariant BookNestEmojiView old) {
+    super.didUpdateWidget(old);
+    _maybeAnimate();
+  }
+
+  void _maybeAnimate() {
+    final def = _def;
+    if (def.isAnimated && widget.animate) {
+      _controller ??= AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 1400),
+      )..repeat();
+    } else {
+      _controller?.dispose();
+      _controller = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final def = _def;
+    return SizedBox(
+      width: widget.size,
+      height: widget.size,
+      child: AnimatedBuilder(
+        animation: _controller ?? kAlwaysDismissedAnimation,
+        builder: (context, _) => CustomPaint(
+          painter: BookNestEmojiPainter(def, t: _controller?.value ?? 0),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The painter — every emote drawn from primitives
+// ─────────────────────────────────────────────────────────────────────────────
+
+class BookNestEmojiPainter extends CustomPainter {
+  final EmojiDef def;
+
+  /// Animation phase in [0,1). 0 for static emotes.
+  final double t;
+
+  BookNestEmojiPainter(this.def, {this.t = 0});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    _applyEffect(canvas, size);
+    if (def.object != null) {
+      _paintObject(canvas, size, def.object!);
+    } else {
+      _paintFace(canvas, size);
+    }
+    canvas.restore();
+  }
+
+  void _applyEffect(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height / 2);
+    switch (def.effect) {
+      case EmojiEffect.none:
+        break;
+      case EmojiEffect.bounce:
+        final bounce = (1 - (2 * t - 1).abs()); // 0→1→0
+        canvas.translate(0, -size.height * .14 * bounce);
+      case EmojiEffect.spin:
+        canvas.translate(c.dx, c.dy);
+        canvas.rotate(t * 6.2832);
+        canvas.translate(-c.dx, -c.dy);
+      case EmojiEffect.pulse:
+        final glow = .5 + .5 * (1 - (2 * t - 1).abs());
+        canvas.drawCircle(
+          c,
+          size.width * .46,
+          Paint()
+            ..color = BookNestEmojiPalette.cyan.withOpacity(.25 * glow)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+        );
+      case EmojiEffect.shake:
+        canvas.translate(size.width * .05 * (t < .5 ? 1 : -1), 0);
+      case EmojiEffect.heartbeat:
+        final beat = t < .3
+            ? 1 + .22 * (1 - (t / .3 * 2 - 1).abs())
+            : (t > .45 && t < .75
+                ? 1 + .16 * (1 - ((t - .45) / .3 * 2 - 1).abs())
+                : 1);
+        canvas.translate(c.dx, c.dy);
+        canvas.scale(beat);
+        canvas.translate(-c.dx, -c.dy);
+      case EmojiEffect.floatUp:
+        final float = (1 - (2 * t - 1).abs());
+        canvas.translate(0, -size.height * .18 * float);
+      case EmojiEffect.drip || EmojiEffect.orbit || EmojiEffect.shine ||
+            EmojiEffect.twinkle || EmojiEffect.floatZ || EmojiEffect.winkLoop:
+        break; // handled while drawing details
+    }
+  }
+
+  // ── faces ──
+
+  void _paintFace(Canvas canvas, Size size) {
+    final rect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height * .54),
+      width: size.width * .8,
+      height: size.height * .8,
+    );
+    final facePaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color.lerp(def.face, Colors.white, .25)!, def.face],
+      ).createShader(rect);
+    canvas.drawCircle(rect.center, rect.width / 2, facePaint);
+    canvas.drawCircle(
+      rect.center,
+      rect.width / 2,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * .03
+        ..color = BookNestEmojiPalette.navyDeep.withOpacity(.55),
+    );
+
+    final dark = def.face == BookNestEmojiPalette.navy ||
+        def.face == BookNestEmojiPalette.navyDeep;
+    final ink = dark ? Colors.white : BookNestEmojiPalette.navyDeep;
+    final eyeY = rect.center.dy - rect.height * .1;
+    final eyeDx = rect.width * .19;
+    final eyeR = rect.width * .075;
+    final winkPhase = def.effect == EmojiEffect.winkLoop
+        ? (t < .15 || (t > .5 && t < .65))
+        : false;
+
+    void eye(double dx) {
+      final x = rect.center.dx + dx;
+      switch (def.eyes!) {
+        case EmojiEyes.dot:
+          canvas.drawCircle(Offset(x, eyeY), eyeR, Paint()..color = ink);
+        case EmojiEyes.happy:
+          canvas.drawArc(
+            Rect.fromCircle(center: Offset(x, eyeY + eyeR * .8), radius: eyeR * 1.4),
+            3.5,
+            2.4,
+            false,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = eyeR * .9
+              ..strokeCap = StrokeCap.round
+              ..color = ink,
+          );
+        case EmojiEyes.closed || EmojiEyes.sleepy:
+          canvas.drawLine(
+            Offset(x - eyeR, eyeY),
+            Offset(x + eyeR, eyeY),
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = eyeR * .9
+              ..strokeCap = StrokeCap.round
+              ..color = ink,
+          );
+        case EmojiEyes.wink:
+          if (dx < 0 || winkPhase) {
+            canvas.drawLine(
+              Offset(x - eyeR, eyeY),
+              Offset(x + eyeR, eyeY),
+              Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = eyeR * .9
+                ..strokeCap = StrokeCap.round
+                ..color = ink,
+            );
+          } else {
+            canvas.drawCircle(Offset(x, eyeY), eyeR, Paint()..color = ink);
+          }
+        case EmojiEyes.star:
+          _drawStar(canvas, Offset(x, eyeY), eyeR * 2.2, ink);
+        case EmojiEyes.heart:
+          _drawHeart(canvas, Offset(x, eyeY), eyeR * 2.4, BookNestEmojiPalette.blushPink);
+        case EmojiEyes.sunglasses:
+          break; // drawn as the accessory band below
+        case EmojiEyes.glasses:
+          _circleOutline(canvas, Offset(x, eyeY), eyeR * 1.9, ink, eyeR * .55);
+      }
+    }
+
+    eye(-eyeDx);
+    eye(eyeDx);
+
+    if (def.eyes == EmojiEyes.sunglasses) {
+      final band = RRect.fromRectAndCorners(
+        Rect.fromLTRB(rect.center.dx - eyeDx - eyeR * 1.7, eyeY - eyeR * 1.5,
+            rect.center.dx + eyeDx + eyeR * 1.7, eyeY + eyeR * 1.5),
+        topLeft: const Radius.circular(4),
+        topRight: const Radius.circular(4),
+        bottomLeft: const Radius.circular(4),
+        bottomRight: const Radius.circular(4),
+      );
+      canvas.drawRRect(band, Paint()..color = BookNestEmojiPalette.navyDeep);
+      if (def.effect == EmojiEffect.shine) {
+        final glint = (1 - (2 * t - 1).abs());
+        canvas.drawLine(
+          Offset(rect.center.dx - eyeDx + eyeR, eyeY - eyeR),
+          Offset(rect.center.dx - eyeDx + eyeR * 2, eyeY + eyeR),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = eyeR * .7
+            ..strokeCap = StrokeCap.round
+            ..color = Colors.white.withOpacity(.9 * glint),
+        );
+      }
+    }
+
+    // blush
+    if (def.face == BookNestEmojiPalette.lavender ||
+        def.face == BookNestEmojiPalette.white) {
+      final blush = Paint()..color = BookNestEmojiPalette.blushPink.withOpacity(.5);
+      canvas.drawCircle(
+          Offset(rect.center.dx - eyeDx * 1.7, eyeY + eyeR * 2.6), eyeR * .8, blush);
+      canvas.drawCircle(
+          Offset(rect.center.dx + eyeDx * 1.7, eyeY + eyeR * 2.6), eyeR * .8, blush);
+    }
+
+    // mouth
+    final mouthY = rect.center.dy + rect.height * .18;
+    final mw = rect.width * .3;
+    final mp = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = rect.width * .045
+      ..strokeCap = StrokeCap.round
+      ..color = ink;
+    switch (def.mouth!) {
+      case EmojiMouth.smile:
+        canvas.drawArc(Rect.fromCenter(center: Offset(rect.center.dx, mouthY - mw * .3), width: mw, height: mw), .35, 2.45, false, mp);
+      case EmojiMouth.catSmile:
+        canvas.drawArc(Rect.fromCenter(center: Offset(rect.center.dx, mouthY - mw * .45), width: mw * .8, height: mw * .8), .5, 2.15, false, mp);
+      case EmojiMouth.grin:
+        final path = Path()
+          ..moveTo(rect.center.dx - mw / 2, mouthY - mw * .2)
+          ..quadraticBezierTo(rect.center.dx, mouthY + mw * .75, rect.center.dx + mw / 2, mouthY - mw * .2)
+          ..close();
+        canvas.drawPath(path, Paint()..color = ink);
+        canvas.save();
+        canvas.clipPath(path);
+        canvas.drawOval(
+          Rect.fromCenter(center: Offset(rect.center.dx, mouthY + mw * .38), width: mw * .6, height: mw * .5),
+          Paint()..color = BookNestEmojiPalette.blushPink,
+        );
+        canvas.restore();
+      case EmojiMouth.smallO:
+        canvas.drawCircle(Offset(rect.center.dx, mouthY), mw * .28, Paint()..color = ink);
+      case EmojiMouth.tongue:
+        canvas.drawArc(Rect.fromCenter(center: Offset(rect.center.dx, mouthY - mw * .3), width: mw, height: mw), .35, 2.45, false, mp);
+        canvas.drawOval(
+          Rect.fromCenter(center: Offset(rect.center.dx + mw * .1, mouthY + mw * .18), width: mw * .5, height: mw * .55),
+          Paint()..color = BookNestEmojiPalette.blushPink,
+        );
+      case EmojiMouth.flat:
+        canvas.drawLine(Offset(rect.center.dx - mw * .4, mouthY), Offset(rect.center.dx + mw * .4, mouthY), mp);
+      case EmojiMouth.frown:
+        canvas.drawArc(Rect.fromCenter(center: Offset(rect.center.dx, mouthY + mw * .45), width: mw, height: mw), 3.55, 2.3, false, mp);
+    }
+
+    // accessories
+    switch (def.accessory) {
+      case EmojiAccessory.none:
+        break;
+      case EmojiAccessory.halo:
+        canvas.drawOval(
+          Rect.fromCenter(center: Offset(rect.center.dx, rect.top - size.height * .06), width: rect.width * .55, height: rect.height * .12),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = rect.width * .05
+            ..color = BookNestEmojiPalette.cyan,
+        );
+      case EmojiAccessory.wizardHat:
+        final brim = Rect.fromCenter(center: Offset(rect.center.dx, rect.top + rect.height * .06), width: rect.width * 1.05, height: rect.height * .1);
+        canvas.drawOval(brim, Paint()..color = BookNestEmojiPalette.navyDeep);
+        final hat = Path()
+          ..moveTo(rect.center.dx - rect.width * .18, brim.top + rect.height * .02)
+          ..lineTo(rect.center.dx + rect.width * .05, rect.top - rect.height * .38)
+          ..lineTo(rect.center.dx + rect.width * .2, brim.top + rect.height * .02)
+          ..close();
+        canvas.drawPath(hat, Paint()..color = BookNestEmojiPalette.navyDeep);
+        canvas.drawCircle(Offset(rect.center.dx + rect.width * .05, rect.top - rect.height * .38), rect.width * .04, Paint()..color = BookNestEmojiPalette.cyan);
+      case EmojiAccessory.headphones:
+        canvas.drawArc(
+          Rect.fromCenter(center: rect.center, width: rect.width * .95, height: rect.height * .95),
+          3.5,
+          2.2,
+          false,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = rect.width * .06
+            ..color = BookNestEmojiPalette.navyDeep,
+        );
+        for (final dx in [-1.0, 1.0]) {
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              Rect.fromCenter(center: Offset(rect.center.dx + dx * rect.width * .46, rect.center.dy), width: rect.width * .12, height: rect.height * .22),
+              const Radius.circular(4),
+            ),
+            Paint()..color = BookNestEmojiPalette.cyan,
+          );
+        }
+    }
+
+    // animated details
+    if (def.effect == EmojiEffect.drip) {
+      final dropY = (t * 2) % 1;
+      canvas.drawCircle(
+        Offset(rect.center.dx + eyeDx, eyeY + eyeR * 2 + rect.height * .3 * dropY),
+        rect.width * .035,
+        Paint()..color = BookNestEmojiPalette.cyan.withOpacity(1 - dropY * .4),
+      );
+    }
+    if (def.effect == EmojiEffect.floatZ) {
+      final zz = ['z', 'Z', 'Z'];
+      for (var i = 0; i < 3; i++) {
+        final phase = (t + i * .33) % 1;
+        _drawLetter(
+          canvas,
+          zz[i],
+          Offset(rect.center.dx + rect.width * (.3 + .08 * i), rect.top - rect.height * (.04 + .16 * phase)),
+          rect.width * (.09 + .03 * i),
+          BookNestEmojiPalette.white.withOpacity(1 - phase * .7),
+        );
+      }
+    }
+  }
+
+  // ── objects ──
+
+  void _paintObject(Canvas canvas, Size size, EmojiObject object) {
+    final c = Offset(size.width / 2, size.height / 2);
+    final w = size.width;
+    switch (object) {
+      case EmojiObject.openBook:
+        final path = Path()
+          ..moveTo(c.dx, c.dy - w * .18)
+          ..quadraticBezierTo(c.dx - w * .3, c.dy - w * .3, c.dx - w * .42, c.dy - w * .2)
+          ..lineTo(c.dx - w * .42, c.dy + w * .26)
+          ..quadraticBezierTo(c.dx - w * .3, c.dy + w * .17, c.dx, c.dy + w * .3)
+          ..quadraticBezierTo(c.dx + w * .3, c.dy + w * .17, c.dx + w * .42, c.dy + w * .26)
+          ..lineTo(c.dx + w * .42, c.dy - w * .2)
+          ..quadraticBezierTo(c.dx + w * .3, c.dy - w * .3, c.dx, c.dy - w * .18)
+          ..close();
+        canvas.drawPath(path, Paint()..color = BookNestEmojiPalette.white);
+        canvas.drawPath(path, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * .03
+          ..color = BookNestEmojiPalette.navyDeep);
+        canvas.drawLine(Offset(c.dx, c.dy - w * .18), Offset(c.dx, c.dy + w * .3), Paint()
+          ..color = BookNestEmojiPalette.navyDeep.withOpacity(.6)
+          ..strokeWidth = w * .025);
+        for (final sx in [-1.0, 1.0]) {
+          for (var i = 0; i < 3; i++) {
+            canvas.drawLine(
+              Offset(c.dx + sx * w * (.1 + i * .09), c.dy - w * (.1 - i * .01)),
+              Offset(c.dx + sx * w * (.1 + i * .09), c.dy + w * (.12 - i * .01)),
+              Paint()
+                ..color = BookNestEmojiPalette.cyan.withOpacity(.75)
+                ..strokeWidth = w * .022
+                ..strokeCap = StrokeCap.round,
+            );
+          }
+        }
+      case EmojiObject.bookStack:
+        final colors = [BookNestEmojiPalette.cyan, BookNestEmojiPalette.lavender, BookNestEmojiPalette.mint];
+        for (var i = 0; i < 3; i++) {
+          final r = RRect.fromRectAndRadius(
+            Rect.fromCenter(center: Offset(c.dx + (i == 1 ? w * .04 : 0), c.dy + w * (.22 - i * .17)), width: w * (.72 - i * .06), height: w * .13),
+            const Radius.circular(3),
+          );
+          canvas.drawRRect(r, Paint()..color = colors[i]);
+          canvas.drawRRect(r, Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = w * .025
+            ..color = BookNestEmojiPalette.navyDeep);
+        }
+      case EmojiObject.quill:
+        final path = Path()
+          ..moveTo(c.dx - w * .26, c.dy + w * .32)
+          ..quadraticBezierTo(c.dx - w * .05, c.dy, c.dx + w * .22, c.dy - w * .34)
+          ..quadraticBezierTo(c.dx + w * .18, c.dy - w * .02, c.dx - w * .12, c.dy + w * .26)
+          ..close();
+        canvas.drawPath(path, Paint()..color = BookNestEmojiPalette.white);
+        canvas.drawPath(path, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * .028
+          ..color = BookNestEmojiPalette.navyDeep);
+        canvas.drawLine(Offset(c.dx - w * .26, c.dy + w * .32), Offset(c.dx - w * .18, c.dy + w * .18), Paint()
+          ..color = BookNestEmojiPalette.navyDeep
+          ..strokeWidth = w * .03
+          ..strokeCap = StrokeCap.round);
+        if (def.effect == EmojiEffect.floatUp) {
+          for (var i = 0; i < 3; i++) {
+            final phase = (t + i * .33) % 1;
+            canvas.drawCircle(
+              Offset(c.dx - w * .28 + i * w * .05, c.dy + w * .4 - phase * w * .1),
+              w * .03,
+              Paint()..color = BookNestEmojiPalette.cyan.withOpacity(1 - phase),
+            );
+          }
+        }
+      case EmojiObject.bookmark:
+        final path = Path()
+          ..moveTo(c.dx - w * .2, c.dy - w * .34)
+          ..lineTo(c.dx + w * .2, c.dy - w * .34)
+          ..lineTo(c.dx + w * .2, c.dy + w * .34)
+          ..lineTo(c.dx, c.dy + w * .16)
+          ..lineTo(c.dx - w * .2, c.dy + w * .34)
+          ..close();
+        canvas.drawPath(path, Paint()..color = BookNestEmojiPalette.cyan);
+        canvas.drawPath(path, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * .028
+          ..color = BookNestEmojiPalette.navyDeep);
+      case EmojiObject.owl:
+        canvas.drawOval(
+          Rect.fromCenter(center: c, width: w * .62, height: w * .72),
+          Paint()..color = BookNestEmojiPalette.navy,
+        );
+        canvas.drawCircle(Offset(c.dx - w * .14, c.dy - w * .1), w * .13, Paint()..color = Colors.white);
+        canvas.drawCircle(Offset(c.dx + w * .14, c.dy - w * .1), w * .13, Paint()..color = Colors.white);
+        canvas.drawCircle(Offset(c.dx - w * .14, c.dy - w * .1), w * .055, Paint()..color = BookNestEmojiPalette.navyDeep);
+        canvas.drawCircle(Offset(c.dx + w * .14, c.dy - w * .1), w * .055, Paint()..color = BookNestEmojiPalette.navyDeep);
+        canvas.drawOval(
+          Rect.fromCenter(center: Offset(c.dx, c.dy - w * .27), width: w * .14, height: w * .18),
+          Paint()..color = BookNestEmojiPalette.cyan,
+        );
+        canvas.drawOval(
+          Rect.fromCenter(center: Offset(c.dx, c.dy + w * .2), width: w * .4, height: w * .3),
+          Paint()..color = BookNestEmojiPalette.cyan.withOpacity(.35),
+        );
+      case EmojiObject.bookHeart:
+        _drawHeart(canvas, Offset(c.dx, c.dy), w * .72, BookNestEmojiPalette.blushPink);
+        final r = RRect.fromRectAndRadius(
+          Rect.fromCenter(center: Offset(c.dx, c.dy + w * .02), width: w * .3, height: w * .2),
+          const Radius.circular(2),
+        );
+        canvas.drawRRect(r, Paint()..color = BookNestEmojiPalette.white);
+      case EmojiObject.lamp:
+        canvas.drawLine(Offset(c.dx, c.dy - w * .02), Offset(c.dx, c.dy + w * .3), Paint()
+          ..color = BookNestEmojiPalette.navyDeep
+          ..strokeWidth = w * .045);
+        canvas.drawLine(Offset(c.dx - w * .12, c.dy + w * .3), Offset(c.dx + w * .12, c.dy + w * .3), Paint()
+          ..color = BookNestEmojiPalette.navyDeep
+          ..strokeWidth = w * .045
+          ..strokeCap = StrokeCap.round);
+        final path = Path()
+          ..moveTo(c.dx - w * .26, c.dy - w * .04)
+          ..lineTo(c.dx + w * .26, c.dy - w * .04)
+          ..lineTo(c.dx + w * .14, c.dy - w * .3)
+          ..lineTo(c.dx - w * .14, c.dy - w * .3)
+          ..close();
+        canvas.drawPath(path, Paint()..color = BookNestEmojiPalette.cyan);
+      case EmojiObject.coffee:
+        final r = RRect.fromRectAndCorners(
+          Rect.fromLTWH(c.dx - w * .24, c.dy - w * .16, w * .48, w * .44),
+          bottomLeft: const Radius.circular(6),
+          bottomRight: const Radius.circular(6),
+        );
+        canvas.drawRRect(r, Paint()..color = BookNestEmojiPalette.white);
+        canvas.drawRRect(r, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * .028
+          ..color = BookNestEmojiPalette.navyDeep);
+        final handle = Rect.fromCenter(center: Offset(c.dx + w * .28, c.dy + w * .05), width: w * .16, height: w * .18);
+        canvas.drawArc(handle, -1.4, 2.8, false, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * .04
+          ..color = BookNestEmojiPalette.navyDeep);
+        canvas.drawLine(Offset(c.dx - w * .18, c.dy - w * .04), Offset(c.dx + w * .18, c.dy - w * .04), Paint()
+          ..color = BookNestEmojiPalette.lavender
+          ..strokeWidth = w * .05);
+      case EmojiObject.moon:
+        final glow = def.effect == EmojiEffect.pulse ? .5 + .5 * (1 - (2 * t - 1).abs()) : .8;
+        canvas.drawCircle(c, w * .34, Paint()..color = BookNestEmojiPalette.cyan.withOpacity(.3 * glow));
+        final outer = Path()..addOval(Rect.fromCircle(center: c, radius: w * .3));
+        final bite = Path()
+          ..addOval(Rect.fromCircle(center: Offset(c.dx + w * .14, c.dy - w * .08), radius: w * .26));
+        canvas.drawPath(
+            Path.combine(PathOperation.difference, outer, bite),
+            Paint()..color = BookNestEmojiPalette.cyan);
+        _drawStar(canvas, Offset(c.dx + w * .3, c.dy - w * .28), w * .12, Colors.white);
+      case EmojiObject.star:
+        _drawStar(canvas, c, w * .62, BookNestEmojiPalette.cyan);
+      case EmojiObject.heart:
+        _drawHeart(canvas, c, w * .72, BookNestEmojiPalette.blushPink);
+      case EmojiObject.sparkles:
+        final tw = def.effect == EmojiEffect.twinkle
+            ? [t, (t + .33) % 1, (t + .66) % 1].map((p) => .35 + .65 * (1 - (2 * p - 1).abs())).toList()
+            : [1.0, .7, .85];
+        _drawStar(canvas, Offset(c.dx - w * .18, c.dy - w * .14), w * .3, BookNestEmojiPalette.cyan.withOpacity(tw[0]));
+        _drawStar(canvas, Offset(c.dx + w * .2, c.dy + w * .05), w * .22, Colors.white.withOpacity(tw[1]));
+        _drawStar(canvas, Offset(c.dx - w * .02, c.dy + w * .28), w * .16, BookNestEmojiPalette.lavender.withOpacity(tw[2]));
+      case EmojiObject.bookworm:
+        canvas.drawOval(
+          Rect.fromCenter(center: Offset(c.dx, c.dy + w * .05), width: w * .7, height: w * .5),
+          Paint()..color = BookNestEmojiPalette.mint,
+        );
+        canvas.drawCircle(Offset(c.dx - w * .16, c.dy - w * .12), w * .16, Paint()..color = BookNestEmojiPalette.mint);
+        _circleOutline(canvas, Offset(c.dx - w * .2, c.dy - w * .14), w * .07, BookNestEmojiPalette.navyDeep, w * .02);
+        _circleOutline(canvas, Offset(c.dx - w * .11, c.dy - w * .14), w * .07, BookNestEmojiPalette.navyDeep, w * .02);
+        canvas.drawCircle(Offset(c.dx - w * .2, c.dy - w * .14), w * .02, Paint()..color = BookNestEmojiPalette.navyDeep);
+        canvas.drawCircle(Offset(c.dx - w * .11, c.dy - w * .14), w * .02, Paint()..color = BookNestEmojiPalette.navyDeep);
+      case EmojiObject.shelf:
+        canvas.drawRect(
+          Rect.fromLTWH(c.dx - w * .34, c.dy - w * .32, w * .68, w * .64),
+          Paint()..color = BookNestEmojiPalette.navy,
+        );
+        for (var i = 0; i < 3; i++) {
+          canvas.drawRect(
+            Rect.fromLTWH(c.dx - w * .26 + i * w * .2, c.dy - w * .24, w * .07, w * .28),
+            Paint()..color = [BookNestEmojiPalette.cyan, BookNestEmojiPalette.lavender, BookNestEmojiPalette.mint][i],
+          );
+        }
+        canvas.drawLine(Offset(c.dx - w * .34, c.dy + w * .06), Offset(c.dx + w * .34, c.dy + w * .06), Paint()
+          ..color = BookNestEmojiPalette.white
+          ..strokeWidth = w * .03);
+      case EmojiObject.scroll:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(Rect.fromLTWH(c.dx - w * .26, c.dy - w * .3, w * .52, w * .6), const Radius.circular(4)),
+          Paint()..color = BookNestEmojiPalette.white,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(Rect.fromLTWH(c.dx - w * .26, c.dy - w * .3, w * .52, w * .6), const Radius.circular(4)),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = w * .028
+            ..color = BookNestEmojiPalette.navyDeep,
+        );
+        for (var i = 0; i < 3; i++) {
+          canvas.drawLine(
+            Offset(c.dx - w * .16, c.dy - w * .14 + i * w * .14),
+            Offset(c.dx + w * .16, c.dy - w * .14 + i * w * .14),
+            Paint()
+              ..color = BookNestEmojiPalette.cyan
+              ..strokeWidth = w * .03
+              ..strokeCap = StrokeCap.round,
+          );
+        }
+      case EmojiObject.medal:
+        canvas.drawCircle(Offset(c.dx, c.dy - w * .05), w * .24, Paint()..color = BookNestEmojiPalette.cyan);
+        canvas.drawCircle(Offset(c.dx, c.dy - w * .05), w * .24, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * .03
+          ..color = BookNestEmojiPalette.navyDeep);
+        _drawStar(canvas, Offset(c.dx, c.dy - w * .05), w * .22, BookNestEmojiPalette.white);
+        for (final dx in [-1.0, 1.0]) {
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              Rect.fromCenter(center: Offset(c.dx + dx * w * .14, c.dy + w * .3), width: w * .12, height: w * .3),
+              const Radius.circular(2),
+            ),
+            Paint()..color = dx < 0 ? BookNestEmojiPalette.navy : BookNestEmojiPalette.lavender,
+          );
+        }
+      case EmojiObject.comet:
+        canvas.drawLine(
+          Offset(c.dx + w * .3, c.dy - w * .3),
+          Offset(c.dx - w * .18, c.dy + w * .18),
+          Paint()
+            ..color = BookNestEmojiPalette.cyan.withOpacity(.6)
+            ..strokeWidth = w * .06
+            ..strokeCap = StrokeCap.round,
+        );
+        canvas.drawCircle(Offset(c.dx - w * .24, c.dy + w * .24), w * .15, Paint()..color = Colors.white);
+    }
+
+    if (def.effect == EmojiEffect.orbit) {
+      for (var i = 0; i < 4; i++) {
+        final angle = t * 6.2832 + i * 1.5708;
+        canvas.drawCircle(
+          Offset(c.dx + w * .42 * _cos(angle), c.dy + w * .42 * _sin(angle)),
+          w * .035,
+          Paint()..color = [BookNestEmojiPalette.cyan, Colors.white, BookNestEmojiPalette.lavender, BookNestEmojiPalette.mint][i],
+        );
+      }
+    }
+  }
+
+  // ── shared shapes ──
+
+  @override
+  bool shouldRepaint(covariant BookNestEmojiPainter old) =>
+      old.def.code != def.code || old.t != t;
+}

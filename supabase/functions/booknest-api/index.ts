@@ -473,6 +473,96 @@ async function isClubMember(kind: string, clubId: string, uid: string): Promise<
   return (await members.countDocuments({ groupId: clubId, userId: uid })) > 0;
 }
 
+// ── chat message toolkit: reactions, deletes, read receipts ────────────────
+type MsgRow = Record<string, unknown> & { _id: ObjectId };
+
+function messageView(m: MsgRow) {
+  return {
+    id: String(m._id),
+    senderId: m.senderId,
+    type: m.type,
+    text: m.text ?? '',
+    bookId: m.bookId ?? null,
+    bookTitle: m.bookTitle ?? null,
+    mediaUrl: m.mediaUrl ?? null,
+    fileName: m.fileName ?? null,
+    fileSize: m.fileSize ?? null,
+    forwarded: m.forwarded === true,
+    animated: m.animated === true,
+    reactions: (m.reactions ?? {}) as Record<string, string>,
+    deletedFor: (m.deletedFor ?? []) as string[],
+    deletedForEveryone: m.deletedForEveryone === true,
+    readBy: (m.readBy ?? []) as string[],
+    createdAt: m.createdAt,
+  };
+}
+
+async function loadMessage(messageId: string): Promise<MsgRow | null> {
+  if (!isHexId(messageId)) return null;
+  return (await dbFor('chats')).collection('messages')
+    .findOne({ _id: new ObjectId(messageId) }) as Promise<MsgRow | null>;
+}
+
+async function applyReaction(uid: string, messageId: string, emoji: string, isMember: () => Promise<boolean>) {
+  const d = await dbFor('chats');
+  const m = await loadMessage(messageId);
+  if (!m) return fail('Message not found', 404);
+  const conversation = await d.collection('conversations')
+    .findOne({ _id: m.conversationId as unknown as ObjectId });
+  if (!conversation) return fail('Conversation not found', 404);
+  if (!(await isMember())) return fail('Join this conversation first', 403);
+  const reactions = (m.reactions ?? {}) as Record<string, string>;
+  if (reactions[uid] === emoji) {
+    await d.collection('messages').updateOne(
+      { _id: m._id },
+      { $unset: { [`reactions.${uid}`]: '' } as unknown as Record<string, unknown> },
+    );
+    return ok({ reacted: false });
+  }
+  await d.collection('messages').updateOne(
+    { _id: m._id },
+    { $set: { reactions: { ...reactions, [uid]: emoji } } },
+  );
+  return ok({ reacted: true });
+}
+
+async function applyDelete(uid: string, messageId: string, forEveryone: boolean, isMember: () => Promise<boolean>) {
+  const d = await dbFor('chats');
+  const m = await loadMessage(messageId);
+  if (!m) return fail('Message not found', 404);
+  const conversation = await d.collection('conversations')
+    .findOne({ _id: m.conversationId as unknown as ObjectId });
+  if (!conversation) return fail('Conversation not found', 404);
+  if (!(await isMember())) return fail('Join this conversation first', 403);
+  if (forEveryone) {
+    if (String(m.senderId) !== uid) return fail('Only your own messages can be deleted for everyone', 403);
+    await d.collection('messages').updateOne(
+      { _id: m._id },
+      { $set: {
+        deletedForEveryone: true, text: '', mediaUrl: null,
+        bookId: null, bookTitle: null, fileName: null, fileSize: null,
+        reactions: {},
+      } },
+    );
+    return ok({ deleted: 'everyone' });
+  }
+  await d.collection('messages').updateOne(
+    { _id: m._id },
+    { $addToSet: { deletedFor: uid } },
+  );
+  return ok({ deleted: 'me' });
+}
+
+async function applyRead(uid: string, conversationId: string, isMember: () => Promise<boolean>) {
+  if (!(await isMember())) return fail('Join this conversation first', 403);
+  const d = await dbFor('chats');
+  const res = await d.collection('messages').updateMany(
+    { conversationId, senderId: { $ne: uid }, readBy: { $ne: uid } },
+    { $addToSet: { readBy: uid } },
+  );
+  return ok({ marked: res.modifiedCount ?? 0 });
+}
+
 async function userStats(userId: string) {
   const d = await dbFor('social');
   const doc = await d.collection('user_stats').findOne({ userId });
@@ -1617,7 +1707,7 @@ Deno.serve(async (req: Request) => {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         const d = await dbFor('chats');
-        const type = ['text', 'book_share', 'image', 'file', 'voice']
+        const type = ['text', 'book_share', 'image', 'file', 'voice', 'emoji']
           .includes(String(p.type)) ? String(p.type) : 'text';
         const text = String(p.text ?? '').trim().slice(0, 4000);
         if (type === 'text' && !text) return fail('Message text is empty');
@@ -1656,6 +1746,12 @@ Deno.serve(async (req: Request) => {
           mediaUrl,
           fileName,
           fileSize,
+          forwarded: p.forwarded === true,
+          animated: type === 'emoji' && p.animated === true,
+          reactions: {},
+          deletedFor: [],
+          deletedForEveryone: false,
+          readBy: [uid],
           createdAt: now,
         };
         const inserted = await d.collection('messages').insertOne({ ...message });
@@ -1718,17 +1814,11 @@ Deno.serve(async (req: Request) => {
         const rows = await d.collection('messages')
           .find(query).sort({ _id: -1 }).limit(limit + 1).toArray();
         const hasMore = rows.length > limit;
+        const uid2 = uid;
         return ok({
-          messages: rows.slice(0, limit).reverse().map((m) => ({
-            id: String(m._id),
-            senderId: m.senderId,
-            type: m.type,
-            text: m.text ?? '',
-            bookId: m.bookId ?? null,
-            bookTitle: m.bookTitle ?? null,
-            mediaUrl: m.mediaUrl ?? null,
-            createdAt: m.createdAt,
-          })),
+          messages: rows.slice(0, limit).reverse()
+            .filter((m) => !((m.deletedFor as string[]) ?? []).includes(uid2))
+            .map(messageView),
           nextCursor: hasMore ? String(rows[limit - 1]._id) : null,
         });
       }
@@ -1765,7 +1855,8 @@ Deno.serve(async (req: Request) => {
         if (!(await isClubMember(String(room.kind), String(room.clubId), uid))) {
           return fail('Join this group to chat', 403);
         }
-        const type = ['text', 'image', 'file', 'voice'].includes(String(p.type))
+        const type = ['text', 'image', 'file', 'voice', 'emoji']
+          .includes(String(p.type))
           ? String(p.type)
           : 'text';
         const text = String(p.text ?? '').trim().slice(0, 4000);
@@ -1780,7 +1871,22 @@ Deno.serve(async (req: Request) => {
           ? Math.max(0, Math.round(Number(p.fileSize)))
           : null;
         const now = new Date();
-        const message = { conversationId, senderId: uid, type, text, mediaUrl, fileName, fileSize, createdAt: now };
+        const message = {
+          conversationId,
+          senderId: uid,
+          type,
+          text,
+          mediaUrl,
+          fileName,
+          fileSize,
+          forwarded: p.forwarded === true,
+          animated: type === 'emoji' && p.animated === true,
+          reactions: {},
+          deletedFor: [],
+          deletedForEveryone: false,
+          readBy: [uid],
+          createdAt: now,
+        };
         const inserted = await d.collection('messages').insertOne({ ...message });
         await d.collection('conversations').updateOne(
           { _id: room._id as unknown as ObjectId },
@@ -1817,15 +1923,120 @@ Deno.serve(async (req: Request) => {
           .find(query).sort({ _id: -1 }).limit(limit + 1).toArray();
         const hasMore = rows.length > limit;
         return ok({
-          messages: rows.slice(0, limit).reverse().map((m) => ({
-            id: String(m._id),
-            senderId: m.senderId,
-            type: m.type,
-            text: m.text ?? '',
-            mediaUrl: m.mediaUrl ?? null,
-            createdAt: m.createdAt,
-          })),
+          messages: rows.slice(0, limit).reverse()
+            .filter((m) => !((m.deletedFor as string[]) ?? []).includes(uid))
+            .map(messageView),
           nextCursor: hasMore ? String(rows[limit - 1]._id) : null,
+        });
+      }
+
+      // ── message toolkit: react / delete / read receipts ──────────────────
+      case 'chats.list': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const d = await dbFor('chats');
+        const rows = await d.collection('conversations')
+          .find({ memberIds: uid, clubKey: { $exists: true } })
+          .sort({ updatedAt: -1 })
+          .limit(50)
+          .toArray();
+        const names = new Map<string, string>();
+        const clubIds = rows.map((r) => String(r.clubId));
+        for (const kind of GROUP_KINDS) {
+          const ids = rows.filter((r) => r.kind === kind).map((r) => String(r.clubId));
+          if (ids.length === 0) continue;
+          const docs = await (await dbFor('groups')).collection(kind)
+            .find({ _id: { $in: ids.map((i) => new ObjectId(i)) } })
+            .project({ name: 1 })
+            .toArray();
+          for (const doc of docs) names.set(String(doc._id), String(doc.name ?? 'Group'));
+        }
+        return ok({
+          rooms: rows.map((r) => ({
+            conversationId: String(r._id),
+            kind: String(r.kind ?? 'clubs'),
+            clubId: String(r.clubId ?? ''),
+            title: names.get(String(r.clubId ?? '')) ?? 'Group chat',
+          })),
+        });
+      }
+
+      case 'dm.react': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const emoji = String(p.emoji ?? '').trim().slice(0, 24);
+        if (!emoji) return fail('An emoji is required');
+        return applyReaction(uid, String(p.messageId ?? ''), emoji, async () => {
+          const m = await loadMessage(String(p.messageId ?? ''));
+          if (!m) return false;
+          const conversation = await (await dbFor('chats')).collection('conversations')
+            .findOne({ _id: m.conversationId as unknown as ObjectId });
+          return !!conversation && !!(conversation.memberIds as string[]).includes(uid);
+        });
+      }
+
+      case 'chat.react': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const emoji = String(p.emoji ?? '').trim().slice(0, 24);
+        if (!emoji) return fail('An emoji is required');
+        return applyReaction(uid, String(p.messageId ?? ''), emoji, async () => {
+          const m = await loadMessage(String(p.messageId ?? ''));
+          if (!m) return false;
+          const room = await (await dbFor('chats')).collection('conversations')
+            .findOne({ _id: m.conversationId as unknown as ObjectId });
+          if (!room || room.type !== 'club') return false;
+          return isClubMember(String(room.kind), String(room.clubId), uid);
+        });
+      }
+
+      case 'dm.deleteMessage': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        return applyDelete(uid, String(p.messageId ?? ''), p.forEveryone === true, async () => {
+          const m = await loadMessage(String(p.messageId ?? ''));
+          if (!m) return false;
+          const conversation = await (await dbFor('chats')).collection('conversations')
+            .findOne({ _id: m.conversationId as unknown as ObjectId });
+          return !!conversation && !!(conversation.memberIds as string[]).includes(uid);
+        });
+      }
+
+      case 'chat.deleteMessage': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        return applyDelete(uid, String(p.messageId ?? ''), p.forEveryone === true, async () => {
+          const m = await loadMessage(String(p.messageId ?? ''));
+          if (!m) return false;
+          const room = await (await dbFor('chats')).collection('conversations')
+            .findOne({ _id: m.conversationId as unknown as ObjectId });
+          if (!room || room.type !== 'club') return false;
+          return isClubMember(String(room.kind), String(room.clubId), uid);
+        });
+      }
+
+      case 'dm.read': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const conversationId = typeof p.conversationId === 'string' ? p.conversationId : '';
+        if (!isHexId(conversationId)) return fail('A valid conversationId is required');
+        return applyRead(uid, conversationId, async () => {
+          const conversation = await (await dbFor('chats')).collection('conversations')
+            .findOne({ _id: new ObjectId(conversationId) });
+          return !!conversation && !!(conversation.memberIds as string[]).includes(uid);
+        });
+      }
+
+      case 'chat.read': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const conversationId = typeof p.conversationId === 'string' ? p.conversationId : '';
+        if (!isHexId(conversationId)) return fail('A valid conversationId is required');
+        return applyRead(uid, conversationId, async () => {
+          const room = await (await dbFor('chats')).collection('conversations')
+            .findOne({ _id: new ObjectId(conversationId) });
+          if (!room || room.type !== 'club') return false;
+          return isClubMember(String(room.kind), String(room.clubId), uid);
         });
       }
 

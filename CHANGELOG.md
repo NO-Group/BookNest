@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.2.0+14 — 2026-09-06
+
+- **Blue ticks are real now.** The double tick turns cyan only when
+  the other side has actually read your message — messages you send
+  show a single grey tick until then, and a clock while sending.
+  Chats mark everything read while they are open, live.
+- **The message toolkit** — long-press any message:
+  - React with the BookNest emote set (tap again to un-react)
+  - Double-tap a message for an instant heart with a burst
+  - Forward to any DM or group chat, marked "Forwarded"
+  - Message info: sent time, read status, read-by names, reactions
+  - Delete for me, or Delete for everyone (tombstone for the chat)
+- **BookNest Emotes + our own keyboard.** 48 hand-drawn emotes in the
+  BookNest visual language — 36 static and 12 that animate right in
+  the chat (bouncing heart, heartbeat, spinning star, glowing moon,
+  flying quill, tears, dreams…). The new in-app keyboard (Snapchat
+  style) slides up over the system keyboard: Emotes / Animated /
+  Recent tabs, tap once to send. Emotes travel as their own message
+  type and play live on both sides.
+- Backend delta shipped: reactions, deletes, read receipts, forwarded
+  and emote messages, and the club-room list (chats.list) across
+  dm.* and chat.* actions.
+
 ## 2.1.0+13 — 2026-09-06
 
 - **Every piece of media now opens inside BookNest — never in another

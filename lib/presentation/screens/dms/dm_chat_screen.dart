@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../config/theme.dart';
 import '../../components/chat_kit.dart';
 import '../chat/media_viewer_screen.dart';
+import '../../components/booknest_emojis.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
@@ -109,6 +110,9 @@ class _DMChatScreenState extends State<DMChatScreen> {
         .toList();
     final grew = messages.length > _lastCount && _lastCount >= 0;
     _lastCount = messages.length;
+    // Real read receipts: everything from the peer is marked read while
+    // this chat is open.
+    if (conversationId != null) BackendApi.instance.markDmRead(conversationId);
     setState(() {
       _messages = messages;
       _loading = false;
@@ -254,6 +258,66 @@ class _DMChatScreenState extends State<DMChatScreen> {
     return photos;
   }
 
+  Future<void> _reactToMessage(String messageId, String code) async {
+    if (messageId.isEmpty || messageId.startsWith('local-')) return;
+    final res = await BackendApi.instance.reactDmMessage(messageId, code);
+    if (res != null) _load();
+  }
+
+  Future<void> _deleteMessage(String messageId, {required bool forEveryone}) async {
+    if (messageId.isEmpty || messageId.startsWith('local-')) return;
+    final res = await BackendApi.instance
+        .deleteDmMessage(messageId, forEveryone: forEveryone);
+    if (!mounted) return;
+    if (res == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('The message could not be deleted — please try again.')));
+      return;
+    }
+    _load();
+  }
+
+  void _forwardMessage(Map<String, dynamic> message) {
+    showForwardPicker(context, onDeliver: (target) async {
+      final res = await BackendApi.instance.sendMessage(
+        conversationId: target.conversationId,
+        type: message['type']?.toString() ?? 'text',
+        text: message['text']?.toString() ?? '',
+        mediaUrl: message['mediaUrl']?.toString(),
+        fileName: message['fileName']?.toString(),
+        fileSize: (message['fileSize'] as num?)?.toInt(),
+        forwarded: true,
+        animated: message['animated'] == true,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(res == null
+              ? 'Could not forward — please try again.'
+              : 'Forwarded to ${target.title}')));
+    });
+  }
+
+  Future<void> _sendEmote(EmojiDef emote) async {
+    final res = await BackendApi.instance.sendMessage(
+      conversationId: _conversationId,
+      peerId: widget.peerId,
+      type: 'emoji',
+      text: emote.code,
+      animated: emote.isAnimated,
+    );
+    if (!mounted) return;
+    if (res == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('The emote could not be sent — please try again.')));
+      return;
+    }
+    _conversationId ??= res['conversationId']?.toString() ?? widget.conversationId;
+    await _load();
+  }
+
+  String _nameOfReader(String uid) =>
+      uid == widget.peerId ? widget.title : 'You';
+
   void _markLocal(String localId, {required bool failed}) {
     final index = _messages.indexWhere((m) => m['id'] == localId);
     if (index == -1) return;
@@ -373,6 +437,18 @@ class _DMChatScreenState extends State<DMChatScreen> {
                                           : (message['text']?.toString() ?? ''),
                                   fileSize: (message['fileSize'] as num?)?.toInt(),
                                 ),
+                                viewerId: _viewerId,
+                                onReact: (code) => _reactToMessage(
+                                    message['id']?.toString() ?? '', code),
+                                onForward: () => _forwardMessage(message),
+                                onInfo: () => showMessageInfo(context, message,
+                                    viewerId: _viewerId, nameOf: _nameOfReader),
+                                onDeleteForMe: () => _deleteMessage(
+                                    message['id']?.toString() ?? '',
+                                    forEveryone: false),
+                                onDeleteForEveryone: () => _deleteMessage(
+                                    message['id']?.toString() ?? '',
+                                    forEveryone: true),
                               );
                             },
                           ),
@@ -382,6 +458,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
               onSendText: _sendText,
               onSendImage: _sendImage,
               onSendFile: _sendFile,
+              onSendEmote: _sendEmote,
             ),
           ],
         ),
