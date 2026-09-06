@@ -57,7 +57,10 @@ jobs:
       # If the build fails, the last part of the build log is written
       # into the run's summary page, so the cause is always visible at
       # the top of the run (and readable via the checks API) without
-      # digging through raw logs.
+      # digging through raw logs. The full log is also uploaded as an
+      # artifact ("ci-build-log") so it can be pulled with
+      # `gh run download <run-id> -n ci-build-log` even when the
+      # raw-log blob host is unreachable.
       - name: Publish build diagnostics
         if: failure()
         run: |
@@ -65,3 +68,13 @@ jobs:
           echo '```text' >> "$GITHUB_STEP_SUMMARY"
           tail -n 200 build.log 2>/dev/null | cut -c1-200 >> "$GITHUB_STEP_SUMMARY" || echo "(build.log missing — failure happened before the build step)" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p diag && cp build.log diag/ 2>/dev/null || true
+          tail -n 400 build.log > diag/build-error-tail.txt 2>/dev/null || true
+
+      - name: Upload build log artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-build-log
+          path: diag/
+          if-no-files-found: ignore

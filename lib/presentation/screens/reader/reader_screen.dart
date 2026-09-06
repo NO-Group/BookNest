@@ -617,8 +617,8 @@ class _ReaderScreenState extends State<ReaderScreen>
                                     child: _richController != null
                                         ? quill.QuillEditor.basic(
                                             controller: _richController!,
+                                            scrollController: _scroll,
                                             config: quill.QuillEditorConfig(
-                                              scrollController: _scroll,
                                               customStyles:
                                                   _manuscriptStyles(dark),
                                               embedBuilders:
