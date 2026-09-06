@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../components/chat_kit.dart';
+import '../chat/media_viewer_screen.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
@@ -224,6 +225,8 @@ class _DMChatScreenState extends State<DMChatScreen> {
       type: 'file',
       text: filename,
       mediaUrl: url,
+      fileName: filename,
+      fileSize: bytes.length,
     );
     if (!mounted) return;
     if (res == null) {
@@ -234,6 +237,21 @@ class _DMChatScreenState extends State<DMChatScreen> {
     _conversationId ??=
         res['conversationId']?.toString() ?? widget.conversationId;
     await _load();
+  }
+
+  /// Every photo in this conversation, in order — the media viewer's
+  /// album so readers can swipe through the whole gallery in-app.
+  List<MediaItem> _photoAlbum() {
+    final photos = <MediaItem>[];
+    for (final m in _messages) {
+      final url = m['mediaUrl']?.toString() ?? '';
+      if ((m['type']?.toString() ?? '') == 'image' && url.startsWith('http')) {
+        photos.add(MediaItem(url: url,
+            name: m['fileName']?.toString() ?? 'Photo',
+            fileSize: (m['fileSize'] as num?)?.toInt()));
+      }
+    }
+    return photos;
   }
 
   void _markLocal(String localId, {required bool failed}) {
@@ -338,9 +356,22 @@ class _DMChatScreenState extends State<DMChatScreen> {
                                 mine: _isMine(message),
                                 onOpenBook: () =>
                                     _openBook(message['bookId']?.toString()),
-                                onOpenImage: () => showChatPhoto(
+                                onOpenImage: () {
+                                  final album = _photoAlbum();
+                                  final tapped = message['mediaUrl']?.toString() ?? '';
+                                  var at = album.indexWhere((m) => m.url == tapped);
+                                  if (at == -1) at = 0;
+                                  openChatPhoto(context, tapped,
+                                      album: album, initialIndex: at);
+                                },
+                                onOpenFile: () => openChatFile(
                                   context,
                                   message['mediaUrl']?.toString() ?? '',
+                                  name:
+                                      (message['fileName']?.toString().isNotEmpty == true)
+                                          ? message['fileName'].toString()
+                                          : (message['text']?.toString() ?? ''),
+                                  fileSize: (message['fileSize'] as num?)?.toInt(),
                                 ),
                               );
                             },

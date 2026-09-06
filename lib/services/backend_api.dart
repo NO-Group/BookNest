@@ -205,6 +205,8 @@ class BackendApi {
     String? bookId,
     String? bookTitle,
     String? mediaUrl,
+    String? fileName,
+    int? fileSize,
   }) =>
       call('dm.send', <String, dynamic>{
         if (conversationId != null) 'conversationId': conversationId,
@@ -214,6 +216,8 @@ class BackendApi {
         if (bookId != null) 'bookId': bookId,
         if (bookTitle != null) 'bookTitle': bookTitle,
         if (mediaUrl != null) 'mediaUrl': mediaUrl,
+        if (fileName != null) 'fileName': fileName,
+        if (fileSize != null) 'fileSize': fileSize,
       });
 
   Future<Map<String, dynamic>?> listConversations() => call('dm.list');
@@ -235,12 +239,16 @@ class BackendApi {
     String type = 'text',
     String text = '',
     String? mediaUrl,
+    String? fileName,
+    int? fileSize,
   }) =>
       call('chat.send', <String, dynamic>{
         'conversationId': conversationId,
         'type': type,
         'text': text,
         if (mediaUrl != null) 'mediaUrl': mediaUrl,
+        if (fileName != null) 'fileName': fileName,
+        if (fileSize != null) 'fileSize': fileSize,
       });
 
   Future<Map<String, dynamic>?> listClubMessages(String conversationId) =>

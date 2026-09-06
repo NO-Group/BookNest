@@ -1626,6 +1626,12 @@ Deno.serve(async (req: Request) => {
         const mediaUrl = typeof p.mediaUrl === 'string' && p.mediaUrl.startsWith('http')
           ? p.mediaUrl
           : null; // Cloudinary/R2 URLs only — never raw media in the database.
+        const fileName = typeof p.fileName === 'string' && p.fileName.trim()
+          ? p.fileName.trim().slice(0, 200)
+          : null;
+        const fileSize = Number.isFinite(Number(p.fileSize))
+          ? Math.max(0, Math.round(Number(p.fileSize)))
+          : null;
 
         let conversationId = typeof p.conversationId === 'string' ? p.conversationId : '';
         if (!isHexId(conversationId)) {
@@ -1648,6 +1654,8 @@ Deno.serve(async (req: Request) => {
           bookId,
           bookTitle,
           mediaUrl,
+          fileName,
+          fileSize,
           createdAt: now,
         };
         const inserted = await d.collection('messages').insertOne({ ...message });
@@ -1765,8 +1773,14 @@ Deno.serve(async (req: Request) => {
         const mediaUrl = typeof p.mediaUrl === 'string' && p.mediaUrl.startsWith('http')
           ? p.mediaUrl
           : null; // Cloudinary/R2 URLs only — never raw media in the database.
+        const fileName = typeof p.fileName === 'string' && p.fileName.trim()
+          ? p.fileName.trim().slice(0, 200)
+          : null;
+        const fileSize = Number.isFinite(Number(p.fileSize))
+          ? Math.max(0, Math.round(Number(p.fileSize)))
+          : null;
         const now = new Date();
-        const message = { conversationId, senderId: uid, type, text, mediaUrl, createdAt: now };
+        const message = { conversationId, senderId: uid, type, text, mediaUrl, fileName, fileSize, createdAt: now };
         const inserted = await d.collection('messages').insertOne({ ...message });
         await d.collection('conversations').updateOne(
           { _id: room._id as unknown as ObjectId },

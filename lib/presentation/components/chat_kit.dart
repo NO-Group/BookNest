@@ -1,14 +1,15 @@
+import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/theme.dart';
-import '../screens/chat/photo_edit_screen.dart';
+import '../screens/chat/camera_screen.dart';
+import '../screens/chat/file_picker_screen.dart';
+import '../screens/chat/media_viewer_screen.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/supabase_service.dart';
 import 'booknest_ui.dart';
@@ -98,6 +99,7 @@ class ChatBubble extends StatelessWidget {
   final String? senderId;
   final VoidCallback? onOpenBook;
   final VoidCallback? onOpenImage;
+  final VoidCallback? onOpenFile;
 
   const ChatBubble({
     super.key,
@@ -107,6 +109,7 @@ class ChatBubble extends StatelessWidget {
     this.senderId,
     this.onOpenBook,
     this.onOpenImage,
+    this.onOpenFile,
   });
 
   @override
@@ -122,7 +125,15 @@ class ChatBubble extends StatelessWidget {
     if (type == 'image' && mediaUrl != null && mediaUrl.startsWith('http')) {
       content = _ImageContent(url: mediaUrl, onTap: onOpenImage);
     } else if (type == 'file' && mediaUrl != null && mediaUrl.startsWith('http')) {
-      content = _FileContent(url: mediaUrl, dark: dark);
+      content = _FileContent(
+        url: mediaUrl,
+        dark: dark,
+        name: (message['fileName']?.toString().isNotEmpty == true)
+            ? message['fileName'].toString()
+            : text,
+        fileSize: (message['fileSize'] as num?)?.toInt(),
+        onTap: onOpenFile,
+      );
     } else if (type == 'book_share') {
       content = _BookShareContent(
         title: text,
@@ -335,9 +346,20 @@ class _ImageContent extends StatelessWidget {
 class _FileContent extends StatelessWidget {
   final String url;
   final bool dark;
-  const _FileContent({required this.url, required this.dark});
+  final VoidCallback? onTap;
+  final String? name;
+  final int? fileSize;
+  const _FileContent({
+    required this.url,
+    required this.dark,
+    this.onTap,
+    this.name,
+    this.fileSize,
+  });
 
   String get _name {
+    final given = name?.trim() ?? '';
+    if (given.isNotEmpty) return given;
     try {
       final uri = Uri.parse(url);
       final segments = uri.pathSegments;
@@ -362,8 +384,7 @@ class _FileContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () =>
-          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
@@ -411,11 +432,11 @@ class _FileContent extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.open_in_new_rounded,
+                      const Icon(Icons.open_in_full_rounded,
                           size: 11, color: BookNestColors.cyan),
                       const SizedBox(width: 4),
                       Text(
-                        'Tap to open',
+                        'View in BookNest',
                         style: TextStyle(
                           fontSize: 11,
                           color: BookNestColors.cyan,
@@ -540,44 +561,6 @@ class ChatDayChip extends StatelessWidget {
   }
 }
 
-// ── Fullscreen photo viewer ──────────────────────────────────────────────────
-
-void showChatPhoto(BuildContext context, String url) {
-  showDialog<void>(
-    context: context,
-    barrierColor: Colors.black.withOpacity(.92),
-    builder: (_) => Dialog.fullscreen(
-      backgroundColor: Colors.black,
-      child: Stack(
-        children: [
-          Center(
-            child: InteractiveViewer(
-              maxScale: 4,
-              child: Image.network(url, fit: BoxFit.contain),
-            ),
-          ),
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: IconButton.filled(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white.withOpacity(.12),
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
 // ── Composer ─────────────────────────────────────────────────────────────────
 
 class ChatComposer extends StatefulWidget {
@@ -635,6 +618,8 @@ class _ChatComposerState extends State<ChatComposer> {
         _photoName = picked.name;
       });
       final bytes = await picked.readAsBytes();
+      await _rememberInRecents(
+          picked.name.isNotEmpty ? picked.name : 'photo.jpg', bytes);
       final extension =
           picked.name.contains('.') ? picked.name.split('.').last.toLowerCase() : 'jpg';
       await widget.onSendImage(
@@ -655,27 +640,18 @@ class _ChatComposerState extends State<ChatComposer> {
     }
   }
 
-  /// Snap → edit with filters → send.
+  /// Snap in the BookNest camera → polish in the studio → send.
+  /// No hand-off to the phone's camera app, ever.
   Future<void> _snap() async {
     if (_uploading) return;
     try {
-      final picked = await _picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 88,
-        maxWidth: 1800,
-      );
-      if (picked == null || !mounted) return;
-      final edited = await Navigator.of(context).push<Uint8List>(
-        MaterialPageRoute(
-          builder: (_) => PhotoEditScreen(photo: picked),
-          fullscreenDialog: true,
-        ),
-      );
+      final edited = await openBookNestCamera(context);
       if (!mounted || edited == null) return;
       setState(() {
         _uploading = true;
         _photoName = 'camera shot';
       });
+      await _rememberInRecents('shot-${DateTime.now().millisecondsSinceEpoch}.png', edited);
       await widget.onSendImage(edited, 'png');
     } catch (_) {
       if (mounted) {
@@ -688,24 +664,31 @@ class _ChatComposerState extends State<ChatComposer> {
     }
   }
 
-  /// Any file format, via the system document picker.
+  /// Keeps a copy of outgoing media in the app cache so the custom file
+  /// picker can offer it as a recent file next time.
+  Future<void> _rememberInRecents(String name, Uint8List bytes) async {
+    try {
+      final dir = Directory(
+          '${Directory.systemTemp.path}/booknest_files');
+      await dir.create(recursive: true);
+      await File('${dir.path}/$name').writeAsBytes(bytes, flush: true);
+    } catch (_) {
+      // Recents are a convenience — never block a send on them.
+    }
+  }
+
+  /// Any file format, through the BookNest picker.
   Future<void> _attachFile() async {
     if (_uploading || widget.onSendFile == null) return;
     try {
-      final result = await FilePicker.platform.pickFiles(withData: true);
-      final file = result?.files.single;
-      if (file == null || file.bytes == null || !mounted) return;
-      if ((file.size ?? 0) > 25 * 1024 * 1024) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('That file is larger than 25 MB — please send a smaller one.'),
-        ));
-        return;
-      }
+      final choice = await pickBookNestFile(context);
+      if (choice == null || !mounted) return;
       setState(() {
         _uploading = true;
-        _photoName = file.name;
+        _photoName = choice.name;
       });
-      await widget.onSendFile!(file.name, file.bytes!);
+      await _rememberInRecents(choice.name, choice.bytes);
+      await widget.onSendFile!(choice.name, choice.bytes);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -726,6 +709,18 @@ class _ChatComposerState extends State<ChatComposer> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: const Icon(Icons.camera_alt_outlined,
+                  color: BookNestColors.cyan),
+              title: const Text('Camera',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Shoot inside BookNest, add filters',
+                  style: TextStyle(fontSize: 12)),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _snap();
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.photo_library_outlined,
                   color: BookNestColors.cyan),
               title: const Text('Photo library',
@@ -738,9 +733,9 @@ class _ChatComposerState extends State<ChatComposer> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.attach_file_rounded,
+              leading: const Icon(Icons.folder_open_rounded,
                   color: BookNestColors.cyan),
-              title: const Text('Any file',
+              title: const Text('Files',
                   style: TextStyle(fontWeight: FontWeight.w700)),
               subtitle: const Text('Documents, PDFs, audio — up to 25 MB',
                   style: TextStyle(fontSize: 12)),

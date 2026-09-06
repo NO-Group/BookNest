@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.1.0+13 — 2026-09-06
+
+- **Every piece of media now opens inside BookNest — never in another
+  app.** Tap any photo, PDF, audio clip or document in a chat and it
+  opens in the new in-app media viewer:
+  - Photos: pinch-zoom, double-tap magnify, and swipe through every
+    photo in the conversation as one album
+  - PDFs: real pages rendered in-app with pinch-zoom and a page counter
+  - Audio: a full player — play/pause, seek, and playback speed
+  - Text documents: readable monospace preview
+  - Everything else: a clean document card with type, size and state
+    — downloaded and stored inside BookNest
+- **The camera is now BookNest's own.** Chats shoot with the in-app
+  viewfinder (flash, lens zoom, front/back flip) and land straight in
+  the studio with the designed filter and lens presets. The phone's
+  camera app is no longer used anywhere.
+- **The BookNest file picker.** A designed, in-app picker replaces the
+  raw system sheet: recent files front and center, on-device Downloads
+  & Documents browsing where Android allows it, and a clearly labelled
+  Android browser fallback only where the OS demands it. Everything is
+  previewed before it is attached, and picked files are remembered.
+- File messages now carry their real name and size end to end
+  (edge function updated: `chat.send` and `dm.send`).
+
 ## 2.0.0+12 — 2026-09-06
 
 - **The Manuscript Studio is now a true word processor — Google
