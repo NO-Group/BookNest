@@ -50,6 +50,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  String _profileSubtitle() {
+    final country = ReaderProfile.instance.country ?? '';
+    final pref = ReaderProfile.instance.preferredLanguage;
+    final prefName = pref == null ? '' : (languageNameFor(pref) ?? pref);
+    final parts = <String>[
+      if (country.isNotEmpty) country,
+      if (prefName.isNotEmpty) 'Preferred: $prefName',
+    ];
+    return parts.isEmpty ? 'Not set yet' : parts.join(' · ');
+  }
+
   void _toast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -476,16 +487,6 @@ class ValueListenableBuilder3 extends StatelessWidget {
     );
   }
 
-  String _profileSubtitle() {
-    final country = ReaderProfile.instance.country ?? '';
-    final pref = ReaderProfile.instance.preferredLanguage;
-    final prefName = pref == null ? '' : (languageNameFor(pref) ?? pref);
-    final parts = <String>[
-      if (country.isNotEmpty) country,
-      if (prefName.isNotEmpty) 'Preferred: $prefName',
-    ];
-    return parts.isEmpty ? 'Not set yet' : parts.join(' · ');
-  }
 }
 
 class _SectionLabel extends StatelessWidget {
