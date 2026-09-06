@@ -8,6 +8,8 @@ import 'config/router.dart';
 import 'config/theme.dart';
 import 'services/home_widgets_service.dart';
 import 'services/notification_service.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/supabase_service.dart';
 
@@ -88,6 +90,13 @@ class BookNestApp extends StatelessWidget {
         theme: BookNestTheme.lightTheme,
         darkTheme: BookNestTheme.darkTheme,
         themeMode: mode,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          FlutterQuillLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('en')],
         routerConfig: appRouter,
       ),
     );

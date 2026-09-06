@@ -731,7 +731,7 @@ Deno.serve(async (req: Request) => {
           genre: typeof p.genre === 'string' && p.genre.trim() ? p.genre.trim() : null,
           coverUrl: typeof p.coverUrl === 'string' && p.coverUrl.startsWith('http') ? p.coverUrl : null,
           bannerUrl: typeof p.bannerUrl === 'string' && p.bannerUrl.startsWith('http') ? p.bannerUrl : null,
-          contentFormat: 'markdown',
+          contentFormat: 'quill',
           moderationStatus: 'approved',
           clubId: typeof p.clubId === 'string' && p.clubId ? p.clubId : null,
           chaptersCount: 0,

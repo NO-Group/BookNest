@@ -1,10 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:go_router/go_router.dart';
 import '../../../config/theme.dart';
+import '../../components/manuscript_embeds.dart';
 import '../../../services/backend_api.dart';
 
-/// Fullscreen markdown chapter editor. Saves through the edge API
-/// (chapters.save). Pre-deploy it warns honestly that saving needs the cloud.
+/// Fullscreen rich-text chapter editor — the same word processor as the
+/// Manuscript Studio: formatted text, lists, headings, pictures and
+/// dividers, no markdown syntax anywhere. Saves the document as a Quill
+/// Delta through the edge API.
 class ChapterEditorScreen extends StatefulWidget {
   final String bookId;
   final int chapterNumber;
@@ -24,7 +30,7 @@ class ChapterEditorScreen extends StatefulWidget {
 class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
   late final TextEditingController _title =
       TextEditingController(text: widget.initialTitle);
-  final TextEditingController _body = TextEditingController();
+  final quill.QuillController _body = quill.QuillController.basic();
   bool _saving = false;
   bool _loadedExisting = false;
 
@@ -40,6 +46,7 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
     _body.dispose();
     super.dispose();
   }
+
 
   Future<void> _maybeLoadExisting() async {
     // Editing an existing chapter: pull its current content for pre-fill.
@@ -58,8 +65,17 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
         'chapterNumber': widget.chapterNumber,
       });
       if (!mounted || chapter == null) return;
+      final content = chapter['content']?.toString() ?? '';
+      if (isQuillDelta(content)) {
+        _body.document = quill.Document.fromJson(
+            jsonDecode(content) as List<dynamic>);
+      } else if (content.trim().isNotEmpty) {
+        // Legacy chapter written before the word processor: keep every
+        // word — it loads as plain text ready to be styled.
+        _body.document = quill.Document()..insert(0, content);
+      }
+      if (!mounted) return;
       setState(() {
-        _body.text = chapter['content']?.toString() ?? '';
         if (chapter['title']?.toString().isNotEmpty == true &&
             _title.text.isEmpty) {
           _title.text = chapter['title'].toString();
@@ -69,35 +85,11 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
     } catch (_) {}
   }
 
-  void _wrapSelection(String marker) {
-    final selection = _body.selection;
-    final text = _body.text;
-    if (!selection.isValid || selection.isCollapsed) {
-      final index = _body.selection.baseOffset;
-      final safeIndex = index < 0 ? text.length : index;
-      _body.value = TextEditingValue(
-        text: '$text$marker$marker',
-        selection:
-            TextSelection.collapsed(offset: safeIndex + marker.length),
-      );
-      return;
-    }
-    final start = selection.start;
-    final end = selection.end;
-    final selected = text.substring(start, end);
-    final newText = text.replaceRange(start, end, '$marker$selected$marker');
-    _body.value = TextEditingValue(
-      text: newText,
-      selection: TextSelection.collapsed(
-          offset: start + marker.length + selected.length + marker.length),
-    );
-  }
-
   Future<void> _save() async {
     final title = _title.text.trim().isEmpty
         ? 'Chapter ${widget.chapterNumber}'
         : _title.text.trim();
-    if (_body.text.trim().isEmpty) {
+    if (_body.document.isEmpty()) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('The chapter is still empty.')));
       return;
@@ -107,7 +99,7 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
       bookId: widget.bookId,
       chapterNumber: widget.chapterNumber,
       title: title,
-      content: _body.text,
+      content: jsonEncode(_body.document.toDelta().toJson()),
     );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -171,74 +163,54 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
                   ?.copyWith(fontWeight: FontWeight.w800),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Row(
-              children: [
-                _MarkdownButton(label: 'H1', onTap: () => _wrapSelection('# ')),
-                _MarkdownButton(label: 'B', onTap: () => _wrapSelection('**')),
-                _MarkdownButton(label: 'I', onTap: () => _wrapSelection('*')),
-                _MarkdownButton(label: '❝', onTap: () => _wrapSelection('> ')),
-                _MarkdownButton(label: '•', onTap: () => _wrapSelection('- ')),
-                const Spacer(),
-                Text('Markdown',
-                    style:
-                        TextStyle(color: theme.hintColor, fontSize: 11.5)),
-              ],
+          Container(
+            constraints: const BoxConstraints(maxHeight: 132),
+            child: SingleChildScrollView(
+              child: quill.QuillSimpleToolbar(
+                controller: _body,
+                config: quill.QuillSimpleToolbarConfig(
+                  multiRowsDisplay: true,
+                  showDividers: true,
+                  showFontFamily: true,
+                  showFontSize: true,
+                  showBoldButton: true,
+                  showItalicButton: true,
+                  showSmallButton: true,
+                  showUnderLineButton: true,
+                  showStrikeThrough: true,
+                  showInlineCode: true,
+                  showColorButton: true,
+                  showBackgroundColorButton: true,
+                  showClearFormat: true,
+                  showAlignmentButtons: true,
+                  showHeaderStyle: true,
+                  showListNumbers: true,
+                  showListBullets: true,
+                  showListCheck: true,
+                  showCodeBlock: true,
+                  showQuote: true,
+                  showIndent: true,
+                  showLink: true,
+                  showUndo: true,
+                  showRedo: true,
+                  showSearchButton: true,
+                  showSubscript: true,
+                  showSuperscript: true,
+                  showLineHeightButton: true,
+                ),
+              ),
             ),
           ),
           Expanded(
-            child: TextField(
+            child: quill.QuillEditor.basic(
               controller: _body,
-              maxLines: null,
-              expands: true,
-              textAlignVertical: TextAlignVertical.top,
-              keyboardType: TextInputType.multiline,
-              decoration: InputDecoration(
-                hintText: 'Once upon a chapter…',
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                hintStyle: TextStyle(color: theme.hintColor),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(0),
-                  borderSide: BorderSide.none,
-                ),
+              config: const quill.QuillEditorConfig(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                placeholder: 'Once upon a chapter…',
               ),
-              style: theme.textTheme.bodyLarge?.copyWith(height: 1.6),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _MarkdownButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-
-  const _MarkdownButton({required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: BookNestColors.cyan.withOpacity(.12),
-            border: Border.all(color: BookNestColors.cyan.withOpacity(.3)),
-          ),
-          child: Text(label,
-              style: const TextStyle(
-                  color: BookNestColors.cyan,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12.5)),
-        ),
       ),
     );
   }

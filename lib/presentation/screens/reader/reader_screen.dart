@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:convert' show jsonDecode;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../components/booknest_ui.dart';
+import '../../components/manuscript_embeds.dart';
 import '../../components/watermark_background.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
@@ -34,6 +37,10 @@ class _ReaderScreenState extends State<ReaderScreen>
   int _chapterNumber = 1;
   String _chapterTitle = '';
   String _content = '';
+
+  /// Non-null when the chapter is a rich document (the word-processor
+  /// format). Legacy markdown chapters render through the fallback path.
+  quill.QuillController? _richController;
   String _bookTitle = '';
   String _author = '';
   bool _loading = true;
@@ -65,6 +72,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     _logStreak();
     _saveDebounce?.cancel();
     _streakTimer?.cancel();
+    _richController?.dispose();
     _scroll.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -147,9 +155,26 @@ class _ReaderScreenState extends State<ReaderScreen>
       return;
     }
     _chapterNumber = (res['chapterNumber'] as num?)?.toInt() ?? chapterNumber;
+    final content = res['content']?.toString() ?? '';
+    quill.QuillController? rich;
+    if (isQuillDelta(content)) {
+      try {
+        final deltaList = jsonDecode(content);
+        rich = deltaList is List && deltaList.isNotEmpty
+            ? quill.QuillController(
+                document: quill.Document.fromJson(deltaList),
+                selection: const TextSelection.collapsed(offset: 0),
+              )..readOnly = true
+            : null;
+      } catch (_) {
+        rich = null;
+      }
+    }
     setState(() {
       _chapterTitle = res['title']?.toString() ?? 'Chapter $_chapterNumber';
-      _content = res['content']?.toString() ?? '';
+      _content = content;
+      _richController?.dispose();
+      _richController = rich;
       _loading = false;
     });
     if (resumeScroll > 0) _restoreScroll(resumeScroll);
@@ -214,6 +239,65 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _toggleChrome() => setState(() => _chromeVisible = !_chromeVisible);
+
+  /// The manuscript's reading typography, themed for light and dark and
+  /// scaled by the reader's comfort settings.
+  quill.DefaultStyles _manuscriptStyles(bool dark) {
+    final color =
+        dark ? BookNestColors.darkTextPrimary : BookNestColors.navyDeep;
+    final base = TextStyle(
+      color: color,
+      fontSize: 16 * _fontScale,
+      height: _lineHeight,
+    );
+    quill.DefaultTextBlockStyle block(TextStyle style,
+            {BoxDecoration? deco}) =>
+        quill.DefaultTextBlockStyle(
+          style,
+          const quill.HorizontalSpacing(0, 0),
+          const quill.VerticalSpacing(6, 0),
+          const quill.VerticalSpacing(0, 0),
+          deco,
+        );
+    return quill.DefaultStyles(
+      color: color,
+      paragraph: block(base),
+      h1: block(base.copyWith(
+          fontSize: 26 * _fontScale, fontWeight: FontWeight.w800)),
+      h2: block(base.copyWith(
+          fontSize: 21 * _fontScale, fontWeight: FontWeight.w800)),
+      h3: block(base.copyWith(
+          fontSize: 18 * _fontScale, fontWeight: FontWeight.w700)),
+      bold: base.copyWith(fontWeight: FontWeight.w700),
+      italic: base.copyWith(fontStyle: FontStyle.italic),
+      underline: base.copyWith(decoration: TextDecoration.underline),
+      strikeThrough: base.copyWith(decoration: TextDecoration.lineThrough),
+      link: base.copyWith(
+          color: BookNestColors.cyan,
+          decoration: TextDecoration.underline),
+      quote: block(
+        base.copyWith(
+            fontStyle: FontStyle.italic, color: color.withOpacity(.85)),
+        deco: BoxDecoration(
+          border: Border(
+            left: BorderSide(
+                color: BookNestColors.cyan.withOpacity(.6), width: 3),
+          ),
+        ),
+      ),
+      lists: quill.DefaultListBlockStyle(
+        base,
+        const quill.HorizontalSpacing(0, 0),
+        const quill.VerticalSpacing(6, 0),
+        const quill.VerticalSpacing(0, 0),
+        null,
+        null,
+      ),
+      sizeSmall: base.copyWith(fontSize: 13 * _fontScale),
+      sizeLarge: base.copyWith(fontSize: 18 * _fontScale),
+      sizeHuge: base.copyWith(fontSize: 24 * _fontScale),
+    );
+  }
 
   void _openToc() {
     showModalBottomSheet<void>(
@@ -530,7 +614,21 @@ class _ReaderScreenState extends State<ReaderScreen>
                                   },
                                   child: GestureDetector(
                                     onTap: _toggleChrome,
-                                    child: ListView(
+                                    child: _richController != null
+                                        ? quill.QuillEditor.basic(
+                                            controller: _richController!,
+                                            config: quill.QuillEditorConfig(
+                                              scrollController: _scroll,
+                                              customStyles:
+                                                  _manuscriptStyles(dark),
+                                              embedBuilders:
+                                                  manuscriptEmbedBuilders,
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                      24, 20, 24, 120),
+                                            ),
+                                          )
+                                        : ListView(
                                       controller: _scroll,
                                       padding: const EdgeInsets.fromLTRB(
                                           24, 20, 24, 120),

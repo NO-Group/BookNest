@@ -1,21 +1,27 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../config/theme.dart';
+import '../../components/manuscript_embeds.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/supabase_service.dart';
 
-/// The BookNest Manuscript Studio — a word-processor for authors.
+/// The BookNest Manuscript Studio — a true word processor.
 ///
-/// Two views: **Book details** (title, pen name, description, genre, cover
-/// art and banner picture — everything the book profile page will show)
-/// and **Write** (chapters with a full formatting toolbar, undo/redo,
-/// live word count and reading time). Publishing creates the book and
-/// every chapter in order, and can resume safely if the network drops
-/// halfway. Chapters are explicit — the reader never has to guess.
+/// What you see is what readers get: select text and press Bold and the
+/// text is bold — no `**`, no `#`, no markdown anywhere. Everything a
+/// Google Docs manuscript needs: title/heading styles, font family and
+/// size, bold, italic, underline, strikethrough, sub/superscript, small,
+/// text color, highlight color, inline code, four alignments, line
+/// height, bulleted/numbered/check lists, indent, quotes, code blocks,
+/// links, clear formatting, undo & redo, find & replace, plus pictures
+/// and dividers inserted right into the page. Chapters save as rich
+/// documents; the reader renders exactly this.
 class BookEditorScreen extends StatefulWidget {
   final String? clubId;
 
@@ -27,12 +33,21 @@ class BookEditorScreen extends StatefulWidget {
 
 /// One chapter of the manuscript, held in memory until publish.
 class _Chapter {
+  quill.QuillController controller = quill.QuillController.basic();
   final TextEditingController title = TextEditingController();
-  final TextEditingController content = TextEditingController();
+  bool listening = false;
+
+  bool get isEmpty => controller.document.isEmpty();
+
+  int get wordCount {
+    final text = controller.document.toPlainText().trim();
+    if (text.isEmpty) return 0;
+    return text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+  }
 
   void dispose() {
+    controller.dispose();
     title.dispose();
-    content.dispose();
   }
 }
 
@@ -51,15 +66,11 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   final List<_Chapter> _chapters = [_Chapter()];
   int _currentChapter = 0;
 
-  // ── Undo / redo ──────────────────────────────────────────────────────
-  final List<TextEditingValue> _undoStack = [];
-  final List<TextEditingValue> _redoStack = [];
-  String? _lastSnapshot;
-
   // ── Publish ──────────────────────────────────────────────────────────
   bool _publishing = false;
   String? _publishedBookId;
   int _publishedChapters = 0;
+  bool _insertingPicture = false;
 
   static const List<String> genres = [
     'Romance',
@@ -87,13 +98,24 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   ];
 
   _Chapter get chapter => _chapters[_currentChapter];
-  TextEditingController get _contentController => chapter.content;
 
   @override
   void initState() {
     super.initState();
     _loadPenName();
-    chapter.content.addListener(_snapshotForUndo);
+    _listenForCounts();
+  }
+
+  void _listenForCounts() {
+    for (final c in _chapters) {
+      if (c.listening) continue;
+      c.listening = true;
+      c.controller.addListener(_onDocumentChanged);
+    }
+  }
+
+  void _onDocumentChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -127,131 +149,14 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
     }
   }
 
-  // ── Undo / redo ──────────────────────────────────────────────────────
-
-  void _snapshotForUndo() {
-    final value = _contentController.value;
-    if (_lastSnapshot == value.text) return;
-    _lastSnapshot = value.text;
-    _undoStack.add(value);
-    if (_undoStack.length > 80) _undoStack.removeAt(0);
-    _redoStack.clear();
-  }
-
-  void _undo() {
-    if (_undoStack.length < 2) return;
-    final current = _undoStack.removeLast();
-    _redoStack.add(current);
-    final target = _undoStack.last;
-    _lastSnapshot = target.text;
-    _contentController.value = target;
-  }
-
-  void _redo() {
-    if (_redoStack.isEmpty) return;
-    final value = _redoStack.removeLast();
-    _undoStack.add(value);
-    _lastSnapshot = value.text;
-    _contentController.value = value;
-  }
-
-  // ── Formatting ───────────────────────────────────────────────────────
-
-  /// Wraps the selected text with an inline [marker] (e.g. `**` or `*`).
-  void _applyInlineStyle(String marker) {
-    final text = _contentController.text;
-    final selection = _contentController.selection;
-    final start = selection.start;
-    final end = selection.end;
-
-    if (!selection.isValid || start > end) return;
-
-    if (end == start) {
-      // No selection: insert empty markers and place the cursor between them.
-      final value = '$marker$marker';
-      final newText = text.replaceRange(start, end, value);
-      _contentController.value = TextEditingValue(
-        text: newText,
-        selection: TextSelection.collapsed(offset: start + marker.length),
-      );
-      return;
-    }
-
-    final selected = text.substring(start, end);
-    final replacement = '$marker$selected$marker';
-    final newText = text.replaceRange(start, end, replacement);
-    _contentController.value = TextEditingValue(
-      text: newText,
-      selection: TextSelection(
-        baseOffset: start,
-        extentOffset: start + replacement.length,
-      ),
-    );
-    _contentFocus.requestFocus();
-  }
-
-  /// Prepends a line-level [prefix] (e.g. `# `, `> ` or `- `) to the
-  /// line(s) covered by the current selection. Toggles the prefix off when
-  /// every selected line already has it.
-  void _applyLinePrefix(String prefix) {
-    final text = _contentController.text;
-    final selection = _contentController.selection;
-    final start = selection.start;
-    final end = selection.end;
-
-    if (!selection.isValid || start > end) return;
-
-    final lineStart = start == 0 ? 0 : (text.lastIndexOf('\n', start - 1) + 1);
-    final rawLineEnd = text.indexOf('\n', end);
-    final lineEnd = rawLineEnd == -1 ? text.length : rawLineEnd;
-
-    final block = text.substring(lineStart, lineEnd);
-    final lines = block.split('\n');
-    final allHave = lines.every((l) => l.startsWith(prefix));
-    final transformed = lines
-        .map((l) => allHave ? l.substring(prefix.length) : '$prefix$l')
-        .join('\n');
-    final newText = text.replaceRange(lineStart, lineEnd, transformed);
-    _contentController.value = TextEditingValue(
-      text: newText,
-      selection: TextSelection(
-        baseOffset: lineStart,
-        extentOffset: lineStart + transformed.length,
-      ),
-    );
-    _contentFocus.requestFocus();
-  }
-
-  /// Inserts an inline link template (or wraps the selection as the label)
-  /// and parks the cursor on the URL slot.
-  void _insertLink() {
-    final selection = _contentController.selection;
-    final start = selection.start;
-    final end = selection.end;
-    if (!selection.isValid || start > end) return;
-    final selected =
-        start == end ? '' : _contentController.text.substring(start, end);
-    final snippet = '[$selected](https://)';
-    final newText = _contentController.text.replaceRange(start, end, snippet);
-    _contentController.value = TextEditingValue(
-      text: newText,
-      selection: TextSelection.collapsed(
-        offset: start + snippet.length - 1, // just before the closing )
-      ),
-    );
-    _contentFocus.requestFocus();
-  }
-
-  final FocusNode _contentFocus = FocusNode();
-
   // ── Chapter management ───────────────────────────────────────────────
 
   void _addChapter() {
     setState(() {
       _chapters.add(_Chapter());
       _currentChapter = _chapters.length - 1;
-      _chapters.last.content.addListener(_snapshotForUndo);
     });
+    _listenForCounts();
   }
 
   void _removeChapter(int index) {
@@ -283,15 +188,85 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                 if (_currentChapter >= _chapters.length) {
                   _currentChapter = _chapters.length - 1;
                 }
-                _undoStack.clear();
-                _redoStack.clear();
-                _lastSnapshot = null;
               });
             },
             child: const Text('Remove'),
           ),
         ],
       ),
+    );
+  }
+
+  // ── Inserts (real content, not syntax) ───────────────────────────────
+
+  Future<void> _insertPicture() async {
+    if (_insertingPicture) return;
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 88,
+        maxWidth: 1800,
+      );
+      if (picked == null || !mounted) return;
+      setState(() => _insertingPicture = true);
+      final bytes = await picked.readAsBytes();
+      final extension = picked.name.contains('.')
+          ? picked.name.split('.').last.toLowerCase()
+          : 'jpg';
+      final url = await CloudinaryService.uploadImage(
+        bytes: bytes,
+        folder: 'manuscripts',
+        extension:
+            (extension == 'jpg' || extension == 'jpeg' || extension == 'png' || extension == 'webp')
+                ? extension
+                : 'jpg',
+      );
+      if (!mounted) return;
+      if (url == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:
+              Text('That picture could not be uploaded — please try again.'),
+        ));
+        return;
+      }
+      final controller = chapter.controller;
+      final index = controller.selection.baseOffset;
+      final safeIndex = index < 0 ? 0 : index;
+      controller.replaceText(
+        safeIndex,
+        0,
+        quill.BlockEmbed.custom(ImageBlockEmbed(url)),
+        TextSelection.collapsed(offset: safeIndex),
+      );
+      // Move the caret to a fresh line after the picture.
+      final after = controller.selection.baseOffset + 1;
+      controller.replaceText(
+        after,
+        0,
+        '\n',
+        TextSelection.collapsed(offset: after + 1),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:
+              Text('That picture could not be inserted — please try again.'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _insertingPicture = false);
+    }
+  }
+
+  void _insertDivider() {
+    final controller = chapter.controller;
+    final index = controller.selection.baseOffset;
+    final safeIndex = index < 0 ? 0 : index;
+    controller.replaceText(
+      safeIndex,
+      0,
+      quill.BlockEmbed.custom(const DividerBlockEmbed()),
+      TextSelection.collapsed(offset: safeIndex + 1),
     );
   }
 
@@ -359,16 +334,10 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   int get _totalWords {
     var words = 0;
     for (final c in _chapters) {
-      words += _wordCount(c.content.text);
+      words += c.wordCount;
     }
     return words;
   }
-
-  int _wordCount(String text) => text
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((w) => w.isNotEmpty)
-      .length;
 
   Future<void> _publish() async {
     if (_publishing) return;
@@ -378,8 +347,8 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
       return;
     }
     final readyChapters = <_Chapter>[];
-    for (var i = 0; i < _chapters.length; i++) {
-      if (_chapters[i].content.text.trim().isNotEmpty) readyChapters.add(_chapters[i]);
+    for (final c in _chapters) {
+      if (!c.isEmpty) readyChapters.add(c);
     }
     if (readyChapters.isEmpty) {
       _notice('Write at least one chapter before publishing.');
@@ -387,7 +356,8 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
     }
     final penName = _penNameController.text.trim();
     if (penName.contains('@')) {
-      _notice('Pen names can\'t be email addresses — how will readers know you?');
+      _notice(
+          'Pen names can\'t be email addresses — how will readers know you?');
       return;
     }
 
@@ -406,7 +376,8 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
         });
         final id = created?['id']?.toString();
         if (id == null || id.isEmpty) {
-          throw Exception('The book could not be created — please try again.');
+          throw Exception(
+              'The book could not be created — please try again.');
         }
         _publishedBookId = id;
       } else {
@@ -421,7 +392,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
         });
       }
 
-      // 2. Every remaining chapter, in order.
+      // 2. Every remaining chapter, in order, as a rich document.
       while (_publishedChapters < readyChapters.length) {
         final c = readyChapters[_publishedChapters];
         final res = await SupabaseService().writeRow('book_chapters', {
@@ -430,7 +401,8 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
           'title': c.title.text.trim().isNotEmpty
               ? c.title.text.trim()
               : 'Chapter ${_publishedChapters + 1}',
-          'content': c.content.text,
+          'content':
+              jsonEncode(c.controller.document.toDelta().toJson()),
         });
         if (res == null) {
           throw Exception(
@@ -441,7 +413,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(
-                'Published chapter ${_publishedChapters} of ${readyChapters.length}…'),
+                'Published chapter $_publishedChapters of ${readyChapters.length}…'),
             duration: const Duration(seconds: 1),
           ));
         }
@@ -499,24 +471,6 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
 
   // ── UI ───────────────────────────────────────────────────────────────
 
-  Widget _toolbarButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onPressed,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: IconButton(
-        icon: Icon(icon,
-            size: 20,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(.78)),
-        tooltip: tooltip,
-        onPressed: onPressed,
-        visualDensity: VisualDensity.compact,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -537,8 +491,12 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
             unselectedLabelColor: theme.hintColor,
             dividerColor: Colors.transparent,
             tabs: const [
-              Tab(icon: Icon(Icons.menu_book_rounded, size: 18), text: 'Book details'),
-              Tab(icon: Icon(Icons.edit_note_rounded, size: 18), text: 'Write'),
+              Tab(
+                  icon: Icon(Icons.menu_book_rounded, size: 18),
+                  text: 'Book details'),
+              Tab(
+                  icon: Icon(Icons.edit_note_rounded, size: 18),
+                  text: 'Write'),
             ],
           ),
           actions: [
@@ -669,7 +627,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   // ── Write view ───────────────────────────────────────────────────────
 
   Widget _buildWriteView(ThemeData theme) {
-    final words = _wordCount(_contentController.text);
+    final words = chapter.wordCount;
     final minutes = (words / 220).ceil();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -730,95 +688,106 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
           ),
         ),
         Divider(color: theme.dividerColor, height: 1),
-        // Word toolbar
+        // Insert row — real content, zero syntax.
         Container(
           color: theme.colorScheme.surface,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          child: Row(
+            children: [
+              TextButton.icon(
+                onPressed: _insertingPicture ? null : _insertPicture,
+                icon: _insertingPicture
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: BookNestColors.cyan))
+                    : const Icon(Icons.image_outlined, size: 18),
+                label: const Text('Picture',
+                    style:
+                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                style: TextButton.styleFrom(
+                    foregroundColor: BookNestColors.cyan,
+                    visualDensity: VisualDensity.compact),
+              ),
+              TextButton.icon(
+                onPressed: _insertDivider,
+                icon: const Icon(Icons.horizontal_rule_rounded, size: 18),
+                label: const Text('Divider',
+                    style:
+                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                style: TextButton.styleFrom(
+                    foregroundColor: BookNestColors.cyan,
+                    visualDensity: VisualDensity.compact),
+              ),
+              const Spacer(),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  '$words words · ${minutes <= 0 ? '<1' : minutes} min',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: theme.hintColor,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // The Google-Docs toolbar — every tool, zero syntax.
+        Container(
+          color: theme.colorScheme.surface,
+          constraints: const BoxConstraints(maxHeight: 148),
           child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            child: Row(
-              children: [
-                _toolbarButton(
-                    icon: Icons.undo_rounded,
-                    tooltip: 'Undo',
-                    onPressed: _undo),
-                _toolbarButton(
-                    icon: Icons.redo_rounded,
-                    tooltip: 'Redo',
-                    onPressed: _redo),
-                const VerticalDivider(width: 10),
-                _toolbarButton(
-                    icon: Icons.format_bold_rounded,
-                    tooltip: 'Bold',
-                    onPressed: () => _applyInlineStyle('**')),
-                _toolbarButton(
-                    icon: Icons.format_italic_rounded,
-                    tooltip: 'Italic',
-                    onPressed: () => _applyInlineStyle('*')),
-                _toolbarButton(
-                    icon: Icons.strikethrough_s_rounded,
-                    tooltip: 'Strikethrough',
-                    onPressed: () => _applyInlineStyle('~~')),
-                _toolbarButton(
-                    icon: Icons.format_quote_rounded,
-                    tooltip: 'Quote',
-                    onPressed: () => _applyLinePrefix('> ')),
-                const VerticalDivider(width: 10),
-                _toolbarButton(
-                    icon: Icons.title_rounded,
-                    tooltip: 'Heading 1',
-                    onPressed: () => _applyLinePrefix('# ')),
-                _toolbarButton(
-                    icon: Icons.subtitles_rounded,
-                    tooltip: 'Heading 2',
-                    onPressed: () => _applyLinePrefix('## ')),
-                _toolbarButton(
-                    icon: Icons.subdirectory_arrow_right_rounded,
-                    tooltip: 'Heading 3',
-                    onPressed: () => _applyLinePrefix('### ')),
-                const VerticalDivider(width: 10),
-                _toolbarButton(
-                    icon: Icons.format_list_bulleted_rounded,
-                    tooltip: 'Bullet list',
-                    onPressed: () => _applyLinePrefix('- ')),
-                _toolbarButton(
-                    icon: Icons.format_list_numbered_rounded,
-                    tooltip: 'Numbered list',
-                    onPressed: () => _applyLinePrefix('${_currentLineNumber(_contentController)}. ')),
-                _toolbarButton(
-                    icon: Icons.link_rounded,
-                    tooltip: 'Insert link',
-                    onPressed: _insertLink),
-                _toolbarButton(
-                    icon: Icons.horizontal_rule_rounded,
-                    tooltip: 'Divider',
-                    onPressed: () => _applyLinePrefix('---')),
-                _toolbarButton(
-                    icon: Icons.code_rounded,
-                    tooltip: 'Code',
-                    onPressed: () => _applyInlineStyle('`')),
-              ],
+            child: quill.QuillSimpleToolbar(
+              controller: chapter.controller,
+              config: quill.QuillSimpleToolbarConfig(
+                multiRowsDisplay: true,
+                showDividers: true,
+                showFontFamily: true,
+                showFontSize: true,
+                showBoldButton: true,
+                showItalicButton: true,
+                showSmallButton: true,
+                showUnderLineButton: true,
+                showStrikeThrough: true,
+                showInlineCode: true,
+                showColorButton: true,
+                showBackgroundColorButton: true,
+                showClearFormat: true,
+                showAlignmentButtons: true,
+                showLeftAlignment: true,
+                showCenterAlignment: true,
+                showRightAlignment: true,
+                showJustifyAlignment: true,
+                showHeaderStyle: true,
+                showListNumbers: true,
+                showListBullets: true,
+                showListCheck: true,
+                showCodeBlock: true,
+                showQuote: true,
+                showIndent: true,
+                showLink: true,
+                showUndo: true,
+                showRedo: true,
+                showSearchButton: true,
+                showSubscript: true,
+                showSuperscript: true,
+                showLineHeightButton: true,
+                showDirection: false,
+              ),
             ),
           ),
         ),
         Divider(color: theme.dividerColor, height: 1),
         Expanded(
-          child: TextField(
-            controller: _contentController,
-            focusNode: _contentFocus,
-            maxLines: null,
-            keyboardType: TextInputType.multiline,
-            textInputAction: TextInputAction.newline,
-            style: const TextStyle(fontSize: 16.5, height: 1.75),
-            decoration: InputDecoration(
-              contentPadding:
-                  const EdgeInsets.fromLTRB(20, 14, 20, 20),
-              hintText:
-                  'Once upon a time…\n\nSelect text and use the toolbar to style it — bold, italics, headings, quotes, lists and links.',
-              hintStyle: TextStyle(color: theme.hintColor, height: 1.6),
-              border: InputBorder.none,
+          child: quill.QuillEditor.basic(
+            key: ValueKey('chapter-editor-$_currentChapter'),
+            controller: chapter.controller,
+            config: quill.QuillEditorConfig(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 40),
+              placeholder: 'Once upon a time…',
             ),
-            onTapOutside: (_) => _contentFocus.unfocus(),
           ),
         ),
         // Status strip
@@ -832,11 +801,11 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
           ),
           child: Row(
             children: [
-              Icon(Icons.notes_rounded,
+              const Icon(Icons.notes_rounded,
                   size: 15, color: BookNestColors.cyan),
               const SizedBox(width: 6),
               Text(
-                '$words words · ${minutes <= 0 ? '<1' : minutes} min read',
+                'Chapter ${_currentChapter + 1} of ${_chapters.length}',
                 style: TextStyle(
                     fontSize: 12,
                     color: theme.hintColor,
@@ -844,7 +813,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
               ),
               const Spacer(),
               Text(
-                '${_chapters.length} chapter${_chapters.length == 1 ? '' : 's'}',
+                '${_totalWords} words in the book',
                 style: TextStyle(
                     fontSize: 12,
                     color: BookNestColors.cyan,
@@ -855,12 +824,6 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
         ),
       ],
     );
-  }
-
-  int _currentLineNumber(TextEditingController controller) {
-    final text = controller.text;
-    final offset = controller.selection.end <= 0 ? 0 : controller.selection.end;
-    return '\n'.allMatches(text.substring(0, offset.clamp(0, text.length))).length + 1;
   }
 }
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.0.0+12 — 2026-09-06
+
+- **The Manuscript Studio is now a true word processor — Google
+  Docs–grade, zero markdown.** Select text, press Bold: it's bold. No
+  more `**`, `#`, `-` or `<>` anywhere in your books.
+  - Styles dropdown (title, headings, quote…), font family and size
+  - Bold, italic, underline, strikethrough, sub/superscript, small
+  - Text color and highlight color pickers, inline code
+  - Left/center/right/justify alignment and line height
+  - Bulleted, numbered and check lists, indent, code blocks
+  - Links, clear formatting, undo & redo, find & replace
+  - Insert pictures and dividers directly into the page
+- Chapters are stored as rich documents; the Reader renders them
+  beautifully in both themes with your text-size and line-spacing
+  choices respected. Legacy chapters still read perfectly and stay
+  editable — they open as plain text ready to be styled.
+- The standalone chapter editor (add/edit a chapter on an existing
+  book) got the same word processor.
+
 ## 1.9.0+11 — 2026-09-05
 
 - **The Manuscript Studio** — writing a book is now a word-processor
