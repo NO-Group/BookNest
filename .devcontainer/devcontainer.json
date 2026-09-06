@@ -1,14 +1,32 @@
 {
-  "name": "Codespace with Flutter + Android Emulator",
-  "build": { "dockerfile": "Dockerfile" },
-  "postCreateCommand": "flutter doctor -v && yes | flutter doctor --android-licenses",
+  "name": "BookNest (Flutter)",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteUser": "vscode",
+  "postCreateCommand": "git config --global --add safe.directory /opt/flutter && flutter --version && flutter pub get && echo '' && echo '✅ BookNest is ready — Flutter installed, packages fetched. Open the Command Palette → Tasks: Run Task → BookNest: run (web).' && echo ''",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": {
+      "label": "BookNest web preview",
+      "onAutoForward": "openPreview"
+    }
+  },
   "customizations": {
     "vscode": {
       "extensions": [
-        "Dart-Code.flutter",
-        "ms-vscode.cpptools"
-      ]
+        "Dart-Code.dart-code",
+        "Dart-Code.flutter"
+      ],
+      "settings": {
+        "dart.flutterHotReloadOnSave": "manual",
+        "files.watcherExclude": {
+          "**/.dart_tool/**": true
+        }
+      }
     }
-  },
-  "remoteUser": "vscode"
+  }
 }

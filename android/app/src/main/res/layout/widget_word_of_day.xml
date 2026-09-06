@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/wotd_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/bg_widget"
+    android:padding="14dp">
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="WORD OF THE DAY"
+        android:textColor="#00E5FF"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.12"/>
+    <TextView
+        android:id="@+id/wotd_word"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="serendipity"
+        android:textColor="#FFFFFF"
+        android:textSize="19sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end"/>
+    <TextView
+        android:id="@+id/wotd_def"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Tap to open Word Nest"
+        android:textColor="#B9C7E2"
+        android:textSize="12sp"
+        android:maxLines="3"
+        android:ellipsize="end"/>
+</LinearLayout>

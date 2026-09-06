@@ -1,0 +1,9 @@
+# Supabase CLI project config (minimal — functions only).
+# project_id is a local identifier for `supabase link`/`deploy`, NOT your project ref.
+project_id = "booknest"
+
+[functions.booknest-api]
+# JWT verification is done INSIDE the function (currentUserId) instead, so
+# anonymous users can browse books while every write still requires a valid
+# Supabase session.
+verify_jwt = false

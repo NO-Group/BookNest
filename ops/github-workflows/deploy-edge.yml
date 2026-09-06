@@ -1,0 +1,29 @@
+# OPTIONAL zero-terminal deploys: once you add SUPABASE_ACCESS_TOKEN to this
+# repo's Settings → Secrets and variables → Actions, every push that touches
+# supabase/functions/ redeploys booknest-api automatically.
+# No token yet? This workflow simply skips itself — it never fails.
+name: Deploy edge function
+
+on:
+  push:
+    branches: [main, arena/01a03a7f-booknest]
+    paths:
+      - "supabase/functions/**"
+  workflow_dispatch:
+
+env:
+  SUPA_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+jobs:
+  deploy:
+    if: env.SUPA_TOKEN != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy booknest-api
+        run: supabase functions deploy booknest-api --project-ref ekgbbbbjwgfixqarlnil
