@@ -1,5 +1,37 @@
 # Changelog
 
+## 2.3.0+15 — 2026-09-06
+
+- **The keyboard grows up (SwiftKey model).** A toolbar with translator
+  and voice typing; four pages — Emotes, Animated, System emojis, and
+  Recent. 24 emotes now animate (12 brand-new: Wow!, Big brain,
+  Casting stories, Wiggly worm…), 12 fresh custom emotes join the pack
+  (72 total), and **system emojis are built in** — a full Unicode
+  library (smileys, hearts, animals, food, activities) sendable as
+  normal messages.
+- **Translator on the keyboard.** Flip the translate toggle, pick a
+  language, type — outgoing messages send in that language.
+- **Voice typing.** The mic writes your words straight into the
+  message box, in your preferred language.
+- **Triple-tap any message to translate it** into your preferred
+  language — a clean sheet shows the translation with the detected
+  original. Double-tap is still the heart.
+- **Reader profile in the auth flow.** New readers choose their
+  country, gender and every language they speak — each with a fluency
+  level (basic → native). The strongest language becomes the preferred
+  language automatically, and everything is editable in Settings →
+  Language & keyboard.
+- **Flags and badges on profile pictures.** Your country flag sits on
+  top of the circle and your gender badge below (one up, one down) —
+  tap the flag for the country name, tap the picture for the
+  full-screen view.
+- **Voice messages — recorded, previewed, and R2-ready.** Hold to
+  record up to two minutes, preview, rerecord. Sending unlocks the
+  moment Cloudflare R2 credentials are connected (voice goes to R2 by
+  our media law — never into a database).
+- The BookNest keyboard can now be **switched off in Settings**.
+- Backend delta: users.profile get/save, translate.text, media.status.
+
 ## 2.2.0+14 — 2026-09-06
 
 - **Blue ticks are real now.** The double tick turns cyan only when

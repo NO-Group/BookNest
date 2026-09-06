@@ -40,6 +40,7 @@ import '../presentation/screens/books/book_discussion_screen.dart';
 import '../presentation/screens/books/genre_browse_screen.dart';
 import '../presentation/screens/search/global_search_screen.dart';
 import '../presentation/screens/onboarding/onboarding_screen.dart';
+import '../presentation/screens/auth/profile_setup_screen.dart';
 import '../presentation/screens/support/privacy_screen.dart';
 import '../presentation/screens/support/about_screen.dart';
 import '../presentation/screens/support/connection_status_screen.dart';
@@ -195,6 +196,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/onboarding',
       builder: (context, state) => const OnboardingScreen(),
+    ),
+    GoRoute(
+      path: '/profile-setup',
+      builder: (context, state) => const ProfileSetupScreen(),
     ),
     // ── Social ──
     GoRoute(

@@ -8,6 +8,9 @@ import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/supabase_service.dart';
+import '../../../services/reader_profile.dart';
+import '../../../config/locales.dart';
+import '../../components/booknest_keyboard.dart';
 
 /// The reader's own profile. Per the architecture: the profile row lives in
 /// Supabase (1:1 with the auth user, holds lightweight Cloudinary URLs),
@@ -31,6 +34,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    ReaderProfile.ensureLoaded();
     _load();
     _probeCloud();
   }
@@ -240,7 +244,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Stack(
               children: [
-                Container(
+                Column(
+                  children: [
+                    if ((ReaderProfile.instance.countryCode ?? '').isNotEmpty)
+                      Tooltip(
+                        message: countryNameFor(
+                                ReaderProfile.instance.countryCode!) ??
+                            'Country',
+                        triggerMode: TooltipTriggerMode.tap,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                              flagForCountry(ReaderProfile.instance.countryCode!) ??
+                                  '',
+                              style: const TextStyle(fontSize: 20)),
+                        ),
+                      ),
+                    GestureDetector(
+                      onTap: _avatarUrl == null
+                          ? null
+                          : () => openChatPhoto(context, _avatarUrl!,
+                              album: [
+                                MediaItem(
+                                    url: _avatarUrl!,
+                                    name: _displayName)
+                              ]),
+                      child: Container(
                   padding: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
@@ -268,6 +297,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         : null,
                   ),
                 ),
+                      ),
+                    ],
+                  ),
                 Positioned(
                   right: 0,
                   bottom: 0,

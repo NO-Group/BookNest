@@ -289,6 +289,36 @@ class BackendApi {
   /// The reader's club/group rooms (forward targets).
   Future<Map<String, dynamic>?> listClubChatRooms() => call('chats.list');
 
+  // ── reader profile: country, gender, languages ─────────────────────────────
+
+  Future<Map<String, dynamic>?> saveUserProfile({
+    String? country,
+    String? countryCode,
+    String? gender,
+    List<Map<String, String>>? languages,
+    String? preferredLanguage,
+  }) =>
+      call('users.profile.save', <String, dynamic>{
+        if (country != null) 'country': country,
+        if (countryCode != null) 'countryCode': countryCode,
+        if (gender != null) 'gender': gender,
+        if (languages != null)
+          'languages': [for (final l in languages) {'code': l['code'], 'level': l['level']}],
+        if (preferredLanguage != null) 'preferredLanguage': preferredLanguage,
+      });
+
+  /// Own profile when [userId] is null; otherwise the public part of
+  /// another reader's profile (country + gender).
+  Future<Map<String, dynamic>?> fetchUserProfile({String? userId}) =>
+      call('users.profile.get', <String, dynamic>{
+        if (userId != null) 'userId': userId,
+      });
+
+  Future<Map<String, dynamic>?> translateText(String text, String target) =>
+      call('translate.text', <String, dynamic>{'text': text, 'target': target});
+
+  Future<Map<String, dynamic>?> mediaStatus() => call('media.status');
+
   /// Shares a book profile card into the 1:1 conversation with [peerId]
   /// (creates or reuses the conversation server-side).
   Future<Map<String, dynamic>?> shareBook({

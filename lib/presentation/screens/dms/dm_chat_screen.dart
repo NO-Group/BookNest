@@ -7,6 +7,7 @@ import '../../../config/theme.dart';
 import '../../components/chat_kit.dart';
 import '../chat/media_viewer_screen.dart';
 import '../../components/booknest_emojis.dart';
+import '../../../services/reader_profile.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
@@ -60,6 +61,8 @@ class _DMChatScreenState extends State<DMChatScreen> {
   @override
   void initState() {
     super.initState();
+    ReaderProfile.ensureLoaded();
+    _loadPeerBadges();
     _conversationId = widget.conversationId;
     _loadPeer();
     _load();
@@ -297,6 +300,13 @@ class _DMChatScreenState extends State<DMChatScreen> {
     });
   }
 
+  Future<void> _translateMessage(Map<String, dynamic> message) async {
+    await ReaderProfile.ensureLoaded();
+    final target = ReaderProfile.instance.preferredLanguage ?? 'en';
+    if (!mounted) return;
+    await showMessageTranslation(context, message, target: target);
+  }
+
   Future<void> _sendEmote(EmojiDef emote) async {
     final res = await BackendApi.instance.sendMessage(
       conversationId: _conversationId,
@@ -313,6 +323,23 @@ class _DMChatScreenState extends State<DMChatScreen> {
     }
     _conversationId ??= res['conversationId']?.toString() ?? widget.conversationId;
     await _load();
+  }
+
+  String? _peerCountry;
+  String? _peerGender;
+
+  Future<void> _loadPeerBadges() async {
+    final peer = widget.peerId;
+    if (peer == null || peer.isEmpty) return;
+    final res = await BackendApi.instance.fetchUserProfile(userId: peer);
+    if (!mounted || res is! Map || res['profile'] is! Map) return;
+    final profile = res['profile'] as Map;
+    setState(() {
+      _peerCountry = profile['countryCode']?.toString();
+      if ((_peerCountry ?? '').isEmpty) _peerCountry = null;
+      _peerGender = profile['gender']?.toString();
+      if ((_peerGender ?? '').isEmpty) _peerGender = null;
+    });
   }
 
   String _nameOfReader(String uid) =>
@@ -350,7 +377,20 @@ class _DMChatScreenState extends State<DMChatScreen> {
               : () => context.push('/user/${widget.peerId}'),
           child: Row(
             children: [
-              ChatAvatar(name: _peerName, imageUrl: _avatarUrl),
+              BadgedAvatar(
+                name: _peerName,
+                imageUrl: _avatarUrl,
+                countryCode: _peerCountry,
+                gender: _peerGender,
+                onTap: () {
+                  if (_avatarUrl.isNotEmpty) {
+                    openChatPhoto(context, _avatarUrl,
+                        album: [
+                          MediaItem(url: _avatarUrl, name: _peerName)
+                        ]);
+                  }
+                },
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -449,6 +489,8 @@ class _DMChatScreenState extends State<DMChatScreen> {
                                 onDeleteForEveryone: () => _deleteMessage(
                                     message['id']?.toString() ?? '',
                                     forEveryone: true),
+                                onTranslate: () =>
+                                    _translateMessage(message),
                               );
                             },
                           ),

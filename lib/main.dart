@@ -12,10 +12,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/supabase_service.dart';
+import 'presentation/components/booknest_keyboard.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppSettings.load();
+  await loadKeyboardEnabled();
   await SupabaseService().initialize();
   // Self-heal: guarantee a profiles row exists for returning users whose
   // signup predated the auto-create trigger (fixes empty chat/search results).

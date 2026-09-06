@@ -2274,6 +2274,91 @@ Deno.serve(async (req: Request) => {
         return ok({ type, userIds });
       }
 
+      // ── reader profile: country, gender, languages (chats store: users) ──
+      case 'users.profile.get': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const target = typeof p.userId === 'string' && isHexId(p.userId) ? p.userId : uid;
+        const row = await (await dbFor('users')).collection('user_prefs')
+          .findOne({ userId: target });
+        const isSelf = target === uid;
+        return ok({
+          profile: {
+            country: row?.country ?? null,
+            countryCode: row?.countryCode ?? null,
+            gender: row?.gender ?? null,
+            languages: isSelf ? (row?.languages ?? []) : [],
+            preferredLanguage: isSelf ? (row?.preferredLanguage ?? null) : null,
+          },
+        });
+      }
+
+      case 'users.profile.save': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const updates: Record<string, unknown> = { updatedAt: new Date() };
+        if (typeof p.country === 'string' && p.country.trim()) updates.country = p.country.trim().slice(0, 80);
+        if (typeof p.countryCode === 'string' && /^[A-Za-z]{2}$/.test(p.countryCode)) updates.countryCode = p.countryCode.toUpperCase();
+        if (['female', 'male', 'nonbinary', 'prefer_not_to_say'].includes(String(p.gender))) {
+          updates.gender = String(p.gender);
+        }
+        if (Array.isArray(p.languages)) {
+          const langs = (p.languages as unknown[])
+            .filter((l): l is { code: string; level: string } =>
+              !!l && typeof l === 'object' &&
+              typeof (l as { code?: unknown }).code === 'string' &&
+              ['native', 'fluent', 'intermediate', 'basic'].includes(String((l as { level?: unknown }).level)))
+            .map((l) => ({ code: String(l.code).slice(0, 8), level: String(l.level) }))
+            .slice(0, 8);
+          updates.languages = langs;
+          const rank: Record<string, number> = { native: 3, fluent: 2, intermediate: 1, basic: 0 };
+          const best = [...langs].sort((a, b) => rank[b.level] - rank[a.level])[0];
+          if (best) updates.preferredLanguage = best.code;
+        }
+        if (typeof p.preferredLanguage === 'string' && /^[a-z]{2}(-[A-Za-z]{2,4})?$/.test(p.preferredLanguage)) {
+          updates.preferredLanguage = p.preferredLanguage; // explicit override wins
+        }
+        await (await dbFor('users')).collection('user_prefs').updateOne(
+          { userId: uid },
+          { $set: updates, $setOnInsert: { userId: uid } },
+          { upsert: true },
+        );
+        return ok({ saved: true, preferredLanguage: updates.preferredLanguage ?? null });
+      }
+
+      // ── translator: message + keyboard translation (no key, server side) ──
+      case 'translate.text': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const text = String(p.text ?? '').trim().slice(0, 2000);
+        if (!text) return fail('Nothing to translate');
+        const target = /^[a-zA-Z]{2}(-[A-Za-z]{2,4})?$/.test(String(p.target ?? ''))
+          ? String(p.target)
+          : 'en';
+        const url = 'https://translate.googleapis.com/translate_a/single'
+          + '?client=gtx&sl=auto&tl=' + encodeURIComponent(target) + '&dt=t&q='
+          + encodeURIComponent(text);
+        const res = await fetch(url);
+        if (!res.ok) return fail('Translation service unavailable', 502);
+        const data = await res.json();
+        const chunks = Array.isArray(data) && Array.isArray(data[0]) ? data[0] : [];
+        const translated = chunks
+          .map((c: unknown) => (Array.isArray(c) ? String(c[0] ?? '') : ''))
+          .join('');
+        const detected = Array.isArray(data) && typeof data[2] === 'string' ? data[2] : null;
+        if (!translated.trim()) return fail('Could not translate that message', 502);
+        return ok({ translated: translated.slice(0, 4000), detectedLanguage: detected, target });
+      }
+
+      // ── media: which storage backends are connected (voice gating) ──────
+      case 'media.status': {
+        const r2Configured = !!(Deno.env.get('R2_ACCOUNT_ID')
+          && Deno.env.get('R2_ACCESS_KEY_ID')
+          && Deno.env.get('R2_SECRET_ACCESS_KEY')
+          && Deno.env.get('R2_BUCKET'));
+        return ok({ r2Configured });
+      }
+
       case 'users.preferences': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);

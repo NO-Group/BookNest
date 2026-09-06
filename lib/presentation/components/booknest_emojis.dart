@@ -139,6 +139,32 @@ const List<EmojiDef> bookNestEmotes = [
   EmojiDef(code: 'cool-shine', label: 'Shine', eyes: EmojiEyes.sunglasses, mouth: EmojiMouth.smile, face: BookNestEmojiPalette.navy, effect: EmojiEffect.shine),
   EmojiDef(code: 'magic-sparkle', label: 'Magic', object: EmojiObject.sparkles, effect: EmojiEffect.twinkle),
   EmojiDef(code: 'dream-z', label: 'Dreaming', eyes: EmojiEyes.sleepy, mouth: EmojiMouth.flat, face: BookNestEmojiPalette.lavender, effect: EmojiEffect.floatZ),
+  // ── pack v2: new custom emotes ──
+  EmojiDef(code: 'bookfever', label: 'Page fever', eyes: EmojiEyes.star, mouth: EmojiMouth.grin, face: BookNestEmojiPalette.lavender),
+  EmojiDef(code: 'bookhug', label: 'Book hug', eyes: EmojiEyes.happy, mouth: EmojiMouth.catSmile, face: BookNestEmojiPalette.mint),
+  EmojiDef(code: 'booksip', label: 'Tea & chapters', eyes: EmojiEyes.happy, mouth: EmojiMouth.smallO, face: BookNestEmojiPalette.white),
+  EmojiDef(code: 'bookmystery', label: 'Mystery', eyes: EmojiEyes.glasses, mouth: EmojiMouth.flat, face: BookNestEmojiPalette.navy),
+  EmojiDef(code: 'bookfair', label: 'Book fair', eyes: EmojiEyes.dot, mouth: EmojiMouth.smile, accessory: EmojiAccessory.halo, face: BookNestEmojiPalette.mint),
+  EmojiDef(code: 'poet', label: 'Poet', eyes: EmojiEyes.closed, mouth: EmojiMouth.smile, face: BookNestEmojiPalette.skyBlue),
+  EmojiDef(code: 'bookpilot', label: 'Night flight reader', eyes: EmojiEyes.sunglasses, mouth: EmojiMouth.smallO, face: BookNestEmojiPalette.navyDeep),
+  EmojiDef(code: 'lantern', label: 'Lantern', object: EmojiObject.lamp, face: BookNestEmojiPalette.lavender),
+  EmojiDef(code: 'glasses', label: 'Reading glasses', object: EmojiObject.bookStack, face: BookNestEmojiPalette.skyBlue),
+  EmojiDef(code: 'bookmarklet', label: 'Little bookmark', object: EmojiObject.bookmark, face: BookNestEmojiPalette.mint),
+  EmojiDef(code: 'nightowl', label: 'Night owl', object: EmojiObject.owl, face: BookNestEmojiPalette.lavender),
+  EmojiDef(code: 'loveletter', label: 'Love letter', object: EmojiObject.scroll, face: BookNestEmojiPalette.blushPink),
+  // ── pack v2: twelve more animated ──
+  EmojiDef(code: 'wow-shock', label: 'Wow!', eyes: EmojiEyes.dot, mouth: EmojiMouth.smallO, face: BookNestEmojiPalette.white, effect: EmojiEffect.bounce),
+  EmojiDef(code: 'nerd-spin', label: 'Big brain', eyes: EmojiEyes.glasses, mouth: EmojiMouth.smile, face: BookNestEmojiPalette.white, effect: EmojiEffect.spin),
+  EmojiDef(code: 'halo-float', label: 'Floating angel', eyes: EmojiEyes.happy, mouth: EmojiMouth.smile, accessory: EmojiAccessory.halo, face: BookNestEmojiPalette.white, effect: EmojiEffect.floatUp),
+  EmojiDef(code: 'grumpy-shake', label: 'Grumpy', eyes: EmojiEyes.dot, mouth: EmojiMouth.frown, face: BookNestEmojiPalette.navyDeep, effect: EmojiEffect.shake),
+  EmojiDef(code: 'tongue-out', label: 'Cheeky', eyes: EmojiEyes.happy, mouth: EmojiMouth.tongue, face: BookNestEmojiPalette.mint, effect: EmojiEffect.winkLoop),
+  EmojiDef(code: 'starstruck-twinkle', label: 'Starstruck', eyes: EmojiEyes.star, mouth: EmojiMouth.smallO, effect: EmojiEffect.twinkle),
+  EmojiDef(code: 'wizard-orbit', label: 'Casting stories', eyes: EmojiEyes.happy, mouth: EmojiMouth.smile, accessory: EmojiAccessory.wizardHat, face: BookNestEmojiPalette.navy, effect: EmojiEffect.orbit),
+  EmojiDef(code: 'coffee-steam', label: 'Fresh coffee', object: EmojiObject.coffee, effect: EmojiEffect.pulse),
+  EmojiDef(code: 'owl-bounce', label: 'Owl bounce', object: EmojiObject.owl, effect: EmojiEffect.bounce),
+  EmojiDef(code: 'medal-shine', label: 'Shining medal', object: EmojiObject.medal, effect: EmojiEffect.shine),
+  EmojiDef(code: 'comet-fly', label: 'Comet', object: EmojiObject.comet, effect: EmojiEffect.floatUp),
+  EmojiDef(code: 'bookworm-wiggle', label: 'Wiggly worm', object: EmojiObject.bookworm, effect: EmojiEffect.shake),
 ];
 
 EmojiDef? emojiByCode(String code) {

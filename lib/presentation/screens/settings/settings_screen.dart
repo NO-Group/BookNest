@@ -1,4 +1,7 @@
 import 'dart:ui';
+import '../../../config/locales.dart';
+import '../../../services/reader_profile.dart';
+import '../../components/booknest_keyboard.dart';
 
 // lib/presentation/screens/settings/settings_screen.dart
 //
@@ -38,6 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    ReaderProfile.ensureLoaded();
     NotificationService.instance.dailyWordEnabled().then((v) {
       if (mounted) setState(() => _dailyWordOn = v);
     });
@@ -355,6 +359,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (v) async {
                 await NotificationService.instance.setStreakReminder(v);
                 if (mounted) setState(() => _streakReminderOn = v);
+              },
+            ),
+          ]),
+
+          const SizedBox(height: 24),
+
+          const _SectionLabel('LANGUAGE & KEYBOARD'),
+          const SizedBox(height: 10),
+          _SettingsGroup(children: [
+            ValueListenableBuilder<bool>(
+              valueListenable: booknestKeyboardEnabled,
+              builder: (context, on, _) => SwitchListTile.adaptive(
+                secondary: const Icon(Icons.keyboard_alt_outlined,
+                    size: 21, color: BookNestColors.cyan),
+                title: const Text('BookNest keyboard',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
+                subtitle: const Text(
+                    'Emotes, animated stickers, translator and voice typing in chats',
+                    style: TextStyle(fontSize: 12)),
+                value: on,
+                activeColor: BookNestColors.cyan,
+                onChanged: (v) => setKeyboardEnabled(v),
+              ),
+            ),
+            ValueListenableBuilder<bool>(
+              valueListenable: booknestKeyboardEnabled,
+              builder: (context, on, _) => SwitchListTile.adaptive(
+                secondary: const Icon(Icons.translate_rounded,
+                    size: 21, color: BookNestColors.cyan),
+                title: const Text('Translate outgoing messages',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
+                subtitle: Text(
+                    on
+                        ? 'Set on the keyboard — messages send in your preferred language'
+                        : 'Turn on the BookNest keyboard first',
+                    style: const TextStyle(fontSize: 12)),
+                value: on && (booknestTranslateTarget.value?.isNotEmpty ?? false),
+                activeColor: BookNestColors.cyan,
+                onChanged: on
+                    ? (v) => booknestTranslateTarget.value = v
+                        ? (ReaderProfile.instance.preferredLanguage ?? 'en')
+                        : null
+                    : null,
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.public_rounded,
+                  size: 21, color: BookNestColors.cyan),
+              title: const Text('Country & languages',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
+              subtitle: Text(
+                  _profileSubtitle(),
+                  style: const TextStyle(fontSize: 12)),
+              trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+              onTap: () async {
+                await context.push('/profile-setup');
+                if (mounted) setState(() {});
               },
             ),
           ]),
@@ -681,5 +744,15 @@ class _SignOutButton extends StatelessWidget {
             style: TextStyle(fontWeight: FontWeight.w700)),
       ),
     );
+  }
+  String _profileSubtitle() {
+    final country = ReaderProfile.instance.country ?? '';
+    final pref = ReaderProfile.instance.preferredLanguage;
+    final prefName = pref == null ? '' : (languageNameFor(pref) ?? pref);
+    final parts = <String>[
+      if (country.isNotEmpty) country,
+      if (prefName.isNotEmpty) 'Preferred: $prefName',
+    ];
+    return parts.isEmpty ? 'Not set yet' : parts.join(' · ');
   }
 }

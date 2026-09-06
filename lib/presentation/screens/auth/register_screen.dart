@@ -136,7 +136,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _finishProfile({required bool skipping}) async {
     if (skipping) {
-      if (mounted) context.go('/onboarding');
+      if (mounted) context.go('/profile-setup');
       return;
     }
     setState(() => _isLoading = true);
@@ -179,7 +179,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         } catch (_) {}
       }
     }
-    if (mounted) context.go('/onboarding');
+    if (mounted) context.go('/profile-setup');
   }
 
   @override

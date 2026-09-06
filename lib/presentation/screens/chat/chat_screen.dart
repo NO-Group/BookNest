@@ -7,6 +7,7 @@ import '../../../config/theme.dart';
 import '../../components/chat_kit.dart';
 import '../chat/media_viewer_screen.dart';
 import '../../components/booknest_emojis.dart';
+import '../../../services/reader_profile.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
@@ -54,6 +55,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    ReaderProfile.ensureLoaded();
     if (widget.isMember) {
       _openRoom();
     } else {
@@ -288,6 +290,13 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _translateMessage(Map<String, dynamic> message) async {
+    await ReaderProfile.ensureLoaded();
+    final target = ReaderProfile.instance.preferredLanguage ?? 'en';
+    if (!mounted) return;
+    await showMessageTranslation(context, message, target: target);
+  }
+
   Future<void> _sendEmote(EmojiDef emote) async {
     final conversationId = _conversationId;
     if (conversationId == null) return;
@@ -475,6 +484,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                               _deleteMessage(
                                                   message['id']?.toString() ?? '',
                                                   forEveryone: true),
+                                          onTranslate: () =>
+                                              _translateMessage(message),
                                         );
                                       },
                                     ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -7,6 +8,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../config/theme.dart';
+import '../../config/locales.dart';
+import '../../services/reader_profile.dart';
+import '../screens/chat/voice_recorder_sheet.dart';
 import '../screens/chat/camera_screen.dart';
 import '../screens/chat/file_picker_screen.dart';
 import '../screens/chat/media_viewer_screen.dart';
@@ -114,6 +118,10 @@ class ChatBubble extends StatefulWidget {
   final VoidCallback? onDeleteForMe;
   final VoidCallback? onDeleteForEveryone;
 
+  /// Triple-tap: translate the message into the reader's preferred
+  /// language.
+  final VoidCallback? onTranslate;
+
   const ChatBubble({
     super.key,
     required this.message,
@@ -129,6 +137,7 @@ class ChatBubble extends StatefulWidget {
     this.onInfo,
     this.onDeleteForMe,
     this.onDeleteForEveryone,
+    this.onTranslate,
   });
 
   @override
@@ -143,10 +152,36 @@ class _ChatBubbleState extends State<ChatBubble>
     value: 1,
   );
 
+  // Double-tap = heart, triple-tap = translate. Taps are counted and
+  // resolved when a short window closes, so a third tap converts a
+  // heart into a translation instead of firing both.
+  int _tapStreak = 0;
+  DateTime _lastTap = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _tapTimer;
+
   @override
   void dispose() {
+    _tapTimer?.cancel();
     _burst.dispose();
     super.dispose();
+  }
+
+  void _countTap() {
+    final now = DateTime.now();
+    _tapStreak =
+        now.difference(_lastTap).inMilliseconds < 450 ? _tapStreak + 1 : 1;
+    _lastTap = now;
+    if (_pending || _failed) return;
+    _tapTimer?.cancel();
+    _tapTimer = Timer(const Duration(milliseconds: 330), () {
+      final taps = _tapStreak;
+      _tapStreak = 0;
+      if (taps == 2) {
+        _fireBurst();
+      } else if (taps >= 3) {
+        widget.onTranslate?.call();
+      }
+    });
   }
 
   bool get _pending => widget.message['pending'] == true;
@@ -524,12 +559,10 @@ class _ChatBubbleState extends State<ChatBubble>
 
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
+      child: Listener(
+        onPointerUp: (_) => _countTap(),
+        child: GestureDetector(
         onLongPress: _showToolkit,
-        onDoubleTap:
-            (widget.onReact != null && !_pending && !_deletedForEveryone)
-                ? _fireBurst
-                : null,
         child: Stack(
           children: [
             Column(
@@ -615,6 +648,7 @@ class _ChatBubbleState extends State<ChatBubble>
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -880,6 +914,190 @@ class ChatDayChip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Triple-tap translation ───────────────────────────────────────────────────
+
+/// Translates [text] into [target] and shows the result in a sheet.
+Future<void> showMessageTranslation(
+  BuildContext context,
+  Map<String, dynamic> message, {
+  required String target,
+}) async {
+  final dark = Theme.of(context).brightness == Brightness.dark;
+  final text = message['text']?.toString() ?? '';
+  if (text.trim().isEmpty ||
+      (message['type']?.toString() == 'emoji' && message['animated'] == true)) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('There is nothing to translate in that message.')));
+    return;
+  }
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) {
+      return SafeArea(
+        child: FutureBuilder<Map<String, dynamic>?>(
+          future: BackendApi.instance.translateText(text, target),
+          builder: (context, snap) {
+            final res = snap.data;
+            final translated =
+                res is Map ? res['translated']?.toString() : null;
+            final detected =
+                res is Map ? res['detectedLanguage']?.toString() : null;
+            final targetName =
+                languageNameFor(target) ?? target.toUpperCase();
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Icon(Icons.translate_rounded,
+                        size: 18, color: BookNestColors.cyan),
+                    const SizedBox(width: 8),
+                    Text('Translated to $targetName',
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color:
+                                dark ? Colors.white : BookNestColors.navyDeep)),
+                  ]),
+                  const SizedBox(height: 14),
+                  if (snap.connectionState != ConnectionState.done)
+                    const Center(
+                        child: Padding(
+                      padding: EdgeInsets.all(18),
+                      child: CircularProgressIndicator(
+                          color: BookNestColors.cyan),
+                    ))
+                  else if (translated == null || translated.isEmpty)
+                    Text(
+                      'This could not be translated right now — please try again in a moment.',
+                      style: TextStyle(
+                          fontSize: 13.5,
+                          height: 1.45,
+                          color: dark ? Colors.white70 : BookNestColors.navyDeep),
+                    )
+                  else ...[
+                    if (detected != null && detected != target)
+                      Text(
+                        'Original (${languageNameFor(detected) ?? detected.toUpperCase()})',
+                        style: TextStyle(
+                            fontSize: 10.5,
+                            letterSpacing: .8,
+                            fontWeight: FontWeight.w800,
+                            color: Theme.of(sheetContext).hintColor),
+                      ),
+                    if (detected != null && detected != target) ...[
+                      const SizedBox(height: 4),
+                      Text(text,
+                          style: TextStyle(
+                              fontSize: 13.5,
+                              height: 1.45,
+                              color: dark
+                                  ? Colors.white54
+                                  : BookNestColors.navyDeep.withOpacity(.7))),
+                      const SizedBox(height: 12),
+                    ],
+                    Text(translated,
+                        style: TextStyle(
+                            fontSize: 15.5,
+                            height: 1.5,
+                            fontWeight: FontWeight.w600,
+                            color:
+                                dark ? Colors.white : BookNestColors.navyDeep)),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    },
+  );
+}
+
+// ── Badged avatar: country flag on top, gender underneath ────────────────────
+
+class BadgedAvatar extends StatelessWidget {
+  final String name;
+  final String? imageUrl;
+  final double radius;
+  final String? countryCode;
+  final String? gender;
+
+  /// Tapping the picture opens the full-screen view.
+  final VoidCallback? onTap;
+
+  const BadgedAvatar({
+    super.key,
+    required this.name,
+    this.imageUrl,
+    this.radius = 20,
+    this.countryCode,
+    this.gender,
+    this.onTap,
+  });
+
+  IconData? get _genderIcon {
+    switch (gender) {
+      case 'female':
+        return Icons.female_rounded;
+      case 'male':
+        return Icons.male_rounded;
+      case 'nonbinary':
+        return Icons.transgender_rounded;
+      default:
+        return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final flag = countryCode == null ? null : flagForCountry(countryCode!);
+    final countryName =
+        countryCode == null ? null : countryNameFor(countryCode!);
+    final icon = _genderIcon;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (flag != null)
+          Tooltip(
+            message: countryName ?? 'Country',
+            triggerMode: TooltipTriggerMode.tap,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(flag, style: const TextStyle(fontSize: 12)),
+            ),
+          )
+        else
+          const SizedBox(height: 14),
+        GestureDetector(
+          onTap: (onTap != null && (imageUrl?.isNotEmpty ?? false))
+              ? onTap
+              : null,
+          child: ChatAvatar(name: name, imageUrl: imageUrl, radius: radius),
+        ),
+        if (icon != null)
+          Container(
+            margin: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: dark ? Colors.white.withOpacity(.08) : Colors.white,
+              border: Border.all(
+                  color: BookNestColors.cyan.withOpacity(.5), width: .8),
+            ),
+            child: Icon(icon, size: 10, color: BookNestColors.cyan),
+          )
+        else
+          const SizedBox(height: 14),
+      ],
     );
   }
 }
@@ -1257,8 +1475,28 @@ class _ChatComposerState extends State<ChatComposer> {
   }
 
   Future<void> _send() async {
-    final text = _input.text.trim();
+    var text = _input.text.trim();
     if (text.isEmpty || _uploading) return;
+    // Keyboard translator: translate, then send the translation.
+    final target = booknestTranslateTarget.value;
+    if (target != null && target.isNotEmpty) {
+      setState(() => _uploading = true);
+      try {
+        final res = await BackendApi.instance.translateText(text, target);
+        if (res is Map && (res['translated']?.toString().isNotEmpty ?? false)) {
+          text = res['translated'].toString();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(
+                    'Sent in ${languageNameFor(target) ?? target.toUpperCase()}')));
+          }
+        }
+      } catch (_) {
+        // Translation hiccup: the original words still go out.
+      } finally {
+        if (mounted) setState(() => _uploading = false);
+      }
+    }
     _input.clear();
     await widget.onSendText(text);
   }
@@ -1392,6 +1630,18 @@ class _ChatComposerState extends State<ChatComposer> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.mic_rounded,
+                  color: BookNestColors.cyan),
+              title: const Text('Voice message',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Hold to record — up to 2 minutes',
+                  style: TextStyle(fontSize: 12)),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                showVoiceRecorder(context);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.folder_open_rounded,
                   color: BookNestColors.cyan),
               title: const Text('Files',
@@ -1413,6 +1663,13 @@ class _ChatComposerState extends State<ChatComposer> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: booknestKeyboardEnabled,
+      builder: (context, keyboardOn, _) => _buildComposer(context, keyboardOn),
+    );
+  }
+
+  Widget _buildComposer(BuildContext context, bool keyboardOn) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
     return Container(
@@ -1426,11 +1683,28 @@ class _ChatComposerState extends State<ChatComposer> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (_emotesOpen)
+            if (_emotesOpen && keyboardOn)
               BookNestKeyboard(
+                preferredLanguage:
+                    ReaderProfile.instance.preferredLanguage ?? 'en',
                 onEmote: (e) {
                   FocusScope.of(context).unfocus();
                   _sendEmote(e);
+                },
+                onSystemEmoji: (emoji) async {
+                  if (_uploading) return;
+                  setState(() => _uploading = true);
+                  try {
+                    await widget.onSendText(emoji);
+                  } finally {
+                    if (mounted) setState(() => _uploading = false);
+                  }
+                },
+                onVoiceText: (words) {
+                  final current = _input.text;
+                  _input.text = current.isEmpty ? words : '$current $words';
+                  _input.selection =
+                      TextSelection.collapsed(offset: _input.text.length);
                 },
               ),
             Row(
@@ -1459,7 +1733,7 @@ class _ChatComposerState extends State<ChatComposer> {
                     color: BookNestColors.cyan,
                     tooltip: 'Camera',
                   ),
-                if (!_uploading && widget.onSendEmote != null)
+                if (!_uploading && widget.onSendEmote != null && keyboardOn)
                   IconButton(
                     onPressed: () {
                       FocusScope.of(context).unfocus();
