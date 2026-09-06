@@ -594,6 +594,7 @@ class ChatComposer extends StatefulWidget {
     required this.onSendText,
     required this.onSendImage,
     this.onSendFile,
+    this.hint = 'Message…',
     this.enabled = true,
   });
 

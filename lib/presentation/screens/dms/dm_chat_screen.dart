@@ -200,7 +200,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
   }
 
   Future<void> _sendFile(String filename, bytes) async {
-    final localId = 'local-\${DateTime.now().microsecondsSinceEpoch}';
+    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
     setState(() => _messages.add({
           'id': localId,
           'senderId': _viewerId,

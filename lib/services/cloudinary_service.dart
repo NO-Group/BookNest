@@ -72,10 +72,10 @@ class CloudinaryService {
   }) async {
     final safeName = filename.trim().isEmpty ? 'attachment' : filename.trim();
     final uri =
-        Uri.parse('\$_base/\${AppConfig.cloudinaryCloudName}/auto/upload');
+        Uri.parse('$_base/${AppConfig.cloudinaryCloudName}/auto/upload');
     final request = http.MultipartRequest('POST', uri)
       ..fields['upload_preset'] = AppConfig.cloudinaryUploadPreset
-      ..fields['folder'] = '\${AppConfig.cloudinaryBaseFolder}/files';
+      ..fields['folder'] = '${AppConfig.cloudinaryBaseFolder}/files';
     request.files.add(http.MultipartFile.fromBytes('file', bytes,
         filename: safeName));
     try {
@@ -87,11 +87,11 @@ class CloudinaryService {
       }
       if (kDebugMode) {
         debugPrint('Cloudinary raw upload failed: '
-            '\${body['error'] is Map ? (body['error'] as Map)['message'] : 'HTTP \${streamed.statusCode}'}');
+            body['error'] is Map ? '\${(body['error'] as Map)['message']}' : 'HTTP \${streamed.statusCode}');
       }
       return null;
     } catch (error) {
-      if (kDebugMode) debugPrint('Cloudinary raw upload error: \$error');
+      if (kDebugMode) debugPrint('Cloudinary raw upload error: $error');
       return null;
     }
   }

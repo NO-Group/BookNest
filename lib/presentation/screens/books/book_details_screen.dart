@@ -251,7 +251,30 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                       ],
                     ]),
                   ), const SizedBox(height: 14),
-                  Row(children: [Icon(_book?['average_rating'] is num && (_book!['average_rating'] as num) > 0 ? Icons.star_rounded : Icons.star_outline_rounded, color: BookNestColors.cyan, size: 20), const SizedBox(width: 4), Text(_book?['average_rating'] is num && (_book!['average_rating'] as num) > 0 ? '${(_book!['average_rating'] as num).toStringAsFixed(1)}' : 'New', style: theme.textTheme.titleMedium), Text('  •  ${book['review_count'] is num && (book['review_count'] as num) > 0 ? '\${(book['review_count'] as num).toInt()} ratings' : 'No ratings yet'}', style: TextStyle(color: muted))]),
+                  Row(children: [
+                    Icon(
+                      book['average_rating'] is num &&
+                              (book['average_rating'] as num) > 0
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      color: BookNestColors.cyan,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      book['average_rating'] is num &&
+                              (book['average_rating'] as num) > 0
+                          ? (book['average_rating'] as num).toStringAsFixed(1)
+                          : 'New',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    Text(
+                      book['review_count'] is num && (book['review_count'] as num) > 0
+                          ? '  •  ${(book['review_count'] as num).toInt()} ratings'
+                          : '  •  No ratings yet',
+                      style: TextStyle(color: muted),
+                    ),
+                  ]),
                   const SizedBox(height: 12), Text('Ebook • Markdown', style: TextStyle(color: muted)),
                 ])),
               ]),
@@ -267,7 +290,10 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               _Reviews(
                 reviews: _reviews,
                 ratingText: book['average_rating'] is num && (book['average_rating'] as num) > 0 ? (book['average_rating'] as num).toStringAsFixed(1) : '—',
-                ratingsNote: book['review_count'] is num && (book['review_count'] as num) > 0 ? '\${(book['review_count'] as num).toInt()} community ratings' : 'Not rated yet',
+                    ratingsNote: book['review_count'] is num &&
+                            (book['review_count'] as num) > 0
+                        ? '${(book['review_count'] as num).toInt()} community ratings'
+                        : 'Not rated yet',
                 onReview: _writeReview,
               ),
               const SizedBox(height: 6),
