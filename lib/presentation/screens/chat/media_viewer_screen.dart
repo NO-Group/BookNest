@@ -447,10 +447,6 @@ class _PdfPaneState extends State<_PdfPane> {
             if (!mounted) return;
             setState(() => _error = error.toString());
           },
-          errorBuilder: (_, error) => Center(
-            child: Text('This PDF could not be previewed.',
-                style: TextStyle(color: widget.dark ? Colors.white60 : null)),
-          ),
         ),
         if (_pages > 0)
           SafeArea(
