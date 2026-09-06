@@ -53,10 +53,10 @@ class CloudinaryService {
         return body['secure_url'] as String;
       }
       if (kDebugMode) {
-        debugPrint('Cloudinary upload failed: '
-            body['error'] is Map
-                ? '\${(body['error'] as Map)['message']}'
-                : 'HTTP \${streamed.statusCode}');
+        final message = body['error'] is Map
+            ? ((body['error'] as Map)['message'] ?? 'rejected').toString()
+            : 'HTTP ' + streamed.statusCode.toString();
+        debugPrint('Cloudinary upload failed: ' + message);
       }
       return null;
     } catch (error) {
