@@ -779,7 +779,7 @@ class BookNestEmojiPainter extends CustomPainter {
       for (var i = 0; i < 4; i++) {
         final angle = t * 6.2832 + i * 1.5708;
         canvas.drawCircle(
-          Offset(c.dx + w * .42 * _cos(angle), c.dy + w * .42 * _sin(angle)),
+          Offset(c.dx + w * .42 * math.cos(angle), c.dy + w * .42 * math.sin(angle)),
           w * .035,
           Paint()..color = [BookNestEmojiPalette.cyan, Colors.white, BookNestEmojiPalette.lavender, BookNestEmojiPalette.mint][i],
         );

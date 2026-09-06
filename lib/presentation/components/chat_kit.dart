@@ -999,17 +999,17 @@ Future<void> showForwardPicker(
 Future<List<ForwardTarget>> _loadForwardTargets() async {
   final targets = <ForwardTarget>[];
   final dmRes = await BackendApi.instance.listConversations();
+  final conversations =
+      (dmRes?['conversations'] as List?) ?? const <Never>[];
   final dmIds = <String>[];
-  if (dmRes is Map && dmRes['conversations'] is List) {
-    for (final c in (dmRes['conversations'] as List)) {
-      if (c is Map && c['id'] != null) {
-        dmIds.add(c['id'].toString());
-        targets.add(ForwardTarget(
-          conversationId: c['id'].toString(),
-          title: 'Direct message',
-          isClub: false,
-        ));
-      }
+  for (final c in conversations) {
+    if (c is Map && c['id'] != null) {
+      dmIds.add(c['id'].toString());
+      targets.add(ForwardTarget(
+        conversationId: c['id'].toString(),
+        title: 'Direct message',
+        isClub: false,
+      ));
     }
   }
   // Resolve the person behind each DM from the profiles table.
@@ -1028,7 +1028,7 @@ Future<List<ForwardTarget>> _loadForwardTargets() async {
         }
       }
       for (var i = 0; i < targets.length; i++) {
-        final conv = (dmRes?['conversations'] as List?)?[i];
+        final conv = i < conversations.length ? conversations[i] : null;
         if (conv is Map) {
           final peer = conv['peerId']?.toString() ?? '';
           if (names[peer] != null) {
@@ -1045,17 +1045,16 @@ Future<List<ForwardTarget>> _loadForwardTargets() async {
     // Names stay generic if profiles hiccup — forwarding still works.
   }
   final roomsRes = await BackendApi.instance.listClubChatRooms();
-  if (roomsRes is Map && roomsRes['rooms'] is List) {
-    for (final r in (roomsRes['rooms'] as List)) {
-      if (r is Map && r['conversationId'] != null) {
-        targets.add(ForwardTarget(
-          conversationId: r['conversationId'].toString(),
-          title: (r['title']?.toString().isNotEmpty == true)
-              ? r['title'].toString()
-              : 'Group chat',
-          isClub: true,
-        ));
-      }
+  final rooms = (roomsRes?['rooms'] as List?) ?? const <Never>[];
+  for (final r in rooms) {
+    if (r is Map && r['conversationId'] != null) {
+      targets.add(ForwardTarget(
+        conversationId: r['conversationId'].toString(),
+        title: (r['title']?.toString().isNotEmpty == true)
+            ? r['title'].toString()
+            : 'Group chat',
+        isClub: true,
+      ));
     }
   }
   return targets;
