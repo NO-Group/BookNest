@@ -332,8 +332,8 @@ class _DMChatScreenState extends State<DMChatScreen> {
     final peer = widget.peerId;
     if (peer == null || peer.isEmpty) return;
     final res = await BackendApi.instance.fetchUserProfile(userId: peer);
-    if (!mounted || res is! Map || res['profile'] is! Map) return;
-    final profile = res['profile'] as Map;
+    final profile = res?['profile'];
+    if (!mounted || profile is! Map) return;
     setState(() {
       _peerCountry = profile['countryCode']?.toString();
       if ((_peerCountry ?? '').isEmpty) _peerCountry = null;
@@ -383,11 +383,11 @@ class _DMChatScreenState extends State<DMChatScreen> {
                 countryCode: _peerCountry,
                 gender: _peerGender,
                 onTap: () {
-                  if (_avatarUrl.isNotEmpty) {
-                    openChatPhoto(context, _avatarUrl,
-                        album: [
-                          MediaItem(url: _avatarUrl, name: _peerName)
-                        ]);
+                  final url = _avatarUrl;
+                  if (url != null && url.isNotEmpty) {
+                    openChatPhoto(context, url, album: [
+                      MediaItem(url: url, name: _peerName)
+                    ]);
                   }
                 },
               ),

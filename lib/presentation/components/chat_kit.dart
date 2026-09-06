@@ -942,11 +942,10 @@ Future<void> showMessageTranslation(
         child: FutureBuilder<Map<String, dynamic>?>(
           future: BackendApi.instance.translateText(text, target),
           builder: (context, snap) {
-            final res = snap.data;
             final translated =
-                res is Map ? res['translated']?.toString() : null;
+                snap.data?['translated']?.toString();
             final detected =
-                res is Map ? res['detectedLanguage']?.toString() : null;
+                snap.data?['detectedLanguage']?.toString();
             final targetName =
                 languageNameFor(target) ?? target.toUpperCase();
             return Padding(

@@ -11,6 +11,7 @@ import '../../../services/supabase_service.dart';
 import '../../../services/reader_profile.dart';
 import '../../../config/locales.dart';
 import '../../components/booknest_keyboard.dart';
+import '../chat/media_viewer_screen.dart';
 
 /// The reader's own profile. Per the architecture: the profile row lives in
 /// Supabase (1:1 with the auth user, holds lightweight Cloudinary URLs),

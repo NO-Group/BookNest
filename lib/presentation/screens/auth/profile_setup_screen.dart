@@ -24,7 +24,7 @@ class ProfileSetupScreen extends StatefulWidget {
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   CountryChoice? _country;
   String? _gender;
-  final List<Map<String, String>> _languages = [];
+  List<Map<String, String>> _languages = [];
   LanguageChoice _pickLanguage = bookNestLanguages.first;
   LanguageLevel _pickLevel = bookNestLanguageLevels[2]; // fluent
   String? _preferredOverride; // defaults to the strongest language
