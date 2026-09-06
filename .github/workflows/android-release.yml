@@ -13,6 +13,10 @@ on:
       - main
       - arena/01a03a7f-booknest
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   release-apk:
     runs-on: ubuntu-latest
@@ -54,20 +58,25 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
-      # If the build fails, the last part of the build log is written
-      # into the run's summary page, so the cause is always visible at
-      # the top of the run (and readable via the checks API) without
-      # digging through raw logs. The full log is also uploaded as an
-      # artifact ("ci-build-log") so it can be pulled with
-      # `gh run download <run-id> -n ci-build-log` even when the
-      # raw-log blob host is unreachable.
+      # If the build fails, the last part of the build log is posted as
+      # a comment on PR #4 (reachable via the GitHub API even when the
+      # raw-log blob host is not) and the full log is uploaded as an
+      # artifact ("ci-build-log").
       - name: Publish build diagnostics
         if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "## Build error — last 200 lines" >> "$GITHUB_STEP_SUMMARY"
-          echo '```text' >> "$GITHUB_STEP_SUMMARY"
-          tail -n 200 build.log 2>/dev/null | cut -c1-200 >> "$GITHUB_STEP_SUMMARY" || echo "(build.log missing — failure happened before the build step)" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Build error — last 200 lines (run ${GITHUB_RUN_ID})"
+            echo '```text'
+            tail -n 200 build.log 2>/dev/null | cut -c1-200 || echo "(build.log missing — failure happened before the build step)"
+            echo '```'
+          } > body.md
+          gh issue comment 4 --repo "${{ github.repository }}" \
+            --body-file body.md || \
+          gh issue create --repo "${{ github.repository }}" \
+            --title "CI build diagnostics" --body-file body.md || true
           mkdir -p diag && cp build.log diag/ 2>/dev/null || true
           tail -n 400 build.log > diag/build-error-tail.txt 2>/dev/null || true
 
