@@ -127,7 +127,10 @@ class _ChapterManagerScreenState extends State<ChapterManagerScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      // Lifted above the navigation bar so it is never covered.
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 68),
+        child: FloatingActionButton.extended(
         backgroundColor: BookNestColors.cyan,
         foregroundColor: BookNestColors.navyDeep,
         onPressed: () async {
@@ -138,6 +141,7 @@ class _ChapterManagerScreenState extends State<ChapterManagerScreen> {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Add chapter',
             style: TextStyle(fontWeight: FontWeight.w800)),
+      ),
       ),
       body: _loading
           ? const Center(

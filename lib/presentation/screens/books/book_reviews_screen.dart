@@ -79,13 +79,17 @@ class _BookReviewsScreenState extends State<BookReviewsScreen> {
         title: const Text('Ratings & reviews',
             style: TextStyle(fontWeight: FontWeight.w800)),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      // Lifted above the navigation bar so it is never covered.
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 68),
+        child: FloatingActionButton.extended(
         backgroundColor: BookNestColors.cyan,
         foregroundColor: BookNestColors.navyDeep,
         onPressed: () => context.pop(),
         icon: const Icon(Icons.rate_review_rounded),
         label: const Text('Write one',
             style: TextStyle(fontWeight: FontWeight.w800)),
+      ),
       ),
       body: _loading
           ? const Center(

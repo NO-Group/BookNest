@@ -168,13 +168,17 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
         : BookNestColors.lightTextSecondary;
 
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
+      // Lifted above the navigation bar so it is never covered.
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 68),
+        child: FloatingActionButton.extended(
         backgroundColor: BookNestColors.navy,
         foregroundColor: Colors.white,
         onPressed: () =>
             AuthGuard.run(context, () => context.push('/editor')),
         icon: const Icon(Icons.edit_outlined),
         label: const Text('Write'),
+      ),
       ),
       body: SafeArea(
         child: Column(
