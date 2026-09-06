@@ -21,8 +21,9 @@ class ReaderProfile {
   static Future<void> ensureLoaded({bool force = false}) async {
     if (_loaded && !force) return;
     final res = await BackendApi.instance.fetchUserProfile();
-    if (res is Map && res['profile'] is Map) {
-      final p = res['profile'] as Map;
+    final p = res?['profile'];
+    if (p is! Map) return;
+    {
       _instance.country = p['country']?.toString();
       _instance.countryCode = p['countryCode']?.toString();
       _instance.gender = p['gender']?.toString();

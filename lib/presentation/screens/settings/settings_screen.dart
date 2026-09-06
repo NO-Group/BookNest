@@ -756,3 +756,4 @@ class _SignOutButton extends StatelessWidget {
       ),
     );
   }
+}

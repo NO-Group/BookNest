@@ -119,7 +119,7 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
   Future<void> _send() async {
     setState(() => _stage = _VrStage.uploading);
     final status = await BackendApi.instance.mediaStatus();
-    final r2Ready = status is Map && status['r2Configured'] == true;
+    final r2Ready = status?['r2Configured'] == true;
     if (!r2Ready) {
       if (!mounted) return;
       setState(() {

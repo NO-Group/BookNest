@@ -1482,8 +1482,9 @@ class _ChatComposerState extends State<ChatComposer> {
       setState(() => _uploading = true);
       try {
         final res = await BackendApi.instance.translateText(text, target);
-        if (res is Map && (res['translated']?.toString().isNotEmpty ?? false)) {
-          text = res['translated'].toString();
+        final translated = res?['translated']?.toString();
+        if (translated != null && translated.isNotEmpty) {
+          text = translated;
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(
