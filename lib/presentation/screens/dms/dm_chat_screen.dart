@@ -316,7 +316,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
   }
 
   String _nameOfReader(String uid) =>
-      uid == widget.peerId ? widget.title : 'You';
+      uid == widget.peerId ? _peerName : 'You';
 
   void _markLocal(String localId, {required bool failed}) {
     final index = _messages.indexWhere((m) => m['id'] == localId);

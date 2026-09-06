@@ -293,7 +293,7 @@ class BookNestEmojiPainter extends CustomPainter {
                 ? 1 + .16 * (1 - ((t - .45) / .3 * 2 - 1).abs())
                 : 1);
         canvas.translate(c.dx, c.dy);
-        canvas.scale(beat);
+        canvas.scale(beat.toDouble());
         canvas.translate(-c.dx, -c.dy);
       case EmojiEffect.floatUp:
         final float = (1 - (2 * t - 1).abs());
@@ -788,6 +788,51 @@ class BookNestEmojiPainter extends CustomPainter {
   }
 
   // ── shared shapes ──
+
+  void _drawStar(Canvas canvas, Offset c, double r, Color color) {
+    final path = Path();
+    for (var i = 0; i < 10; i++) {
+      final angle = -1.5708 + i * 0.6283;
+      final rad = i.isEven ? r : r * .45;
+      final p = Offset(c.dx + rad * math.cos(angle), c.dy + rad * math.sin(angle));
+      if (i == 0) {
+        path.moveTo(p.dx, p.dy);
+      } else {
+        path.lineTo(p.dx, p.dy);
+      }
+    }
+    path.close();
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  void _drawHeart(Canvas canvas, Offset c, double size, Color color) {
+    final path = Path()
+      ..moveTo(c.dx, c.dy + size * .38)
+      ..cubicTo(c.dx - size * .62, c.dy - size * .06, c.dx - size * .3,
+          c.dy - size * .48, c.dx, c.dy - size * .18)
+      ..cubicTo(c.dx + size * .3, c.dy - size * .48, c.dx + size * .62,
+          c.dy - size * .06, c.dx, c.dy + size * .38)
+      ..close();
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  void _circleOutline(Canvas canvas, Offset c, double r, Color color, double w) {
+    canvas.drawCircle(c, r, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w
+      ..color = color);
+  }
+
+  void _drawLetter(Canvas canvas, String letter, Offset c, double size, Color color) {
+    final tp = TextPainter(
+      text: TextSpan(
+          text: letter,
+          style: TextStyle(
+              color: color, fontSize: size, fontWeight: FontWeight.w800)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, c);
+  }
 
   @override
   bool shouldRepaint(covariant BookNestEmojiPainter old) =>

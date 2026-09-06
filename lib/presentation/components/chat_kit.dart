@@ -10,6 +10,7 @@ import '../../config/theme.dart';
 import '../screens/chat/camera_screen.dart';
 import '../screens/chat/file_picker_screen.dart';
 import '../screens/chat/media_viewer_screen.dart';
+import '../../services/backend_api.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/supabase_service.dart';
 import 'booknest_ui.dart';
