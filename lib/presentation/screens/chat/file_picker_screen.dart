@@ -126,9 +126,9 @@ class _BookNestFilePickerState extends State<BookNestFilePicker> {
 
   Future<void> _finish(String name, Uint8List bytes) async {
     if (bytes.length > _maxBytes) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-              'That file is ${(bytes.length / (1024 * 1024)).toStringAsFixed(1)} MB — the limit is 25 MB.')));
+      final mb = (bytes.length / (1024 * 1024)).toStringAsFixed(1);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('That file is $mb MB — the limit is 25 MB.')));
       return;
     }
     if (!mounted) return;
@@ -192,9 +192,9 @@ class _BookNestFilePickerState extends State<BookNestFilePicker> {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: dark ? BookNestColors.navyDeep : BookNestColors.offWhite,
+      backgroundColor: dark ? BookNestColors.navyDeep : BookNestColors.lightSurface,
       appBar: AppBar(
-        backgroundColor: dark ? BookNestColors.navyDeep : BookNestColors.offWhite,
+        backgroundColor: dark ? BookNestColors.navyDeep : BookNestColors.lightSurface,
         elevation: 0,
         title: const Text('Attach a file',
             style: TextStyle(fontWeight: FontWeight.w800)),

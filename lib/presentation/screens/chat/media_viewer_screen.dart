@@ -303,7 +303,7 @@ class _MediaFileViewerState extends State<MediaFileViewer> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final item = widget.item;
     return Scaffold(
-      backgroundColor: dark ? BookNestColors.navyDeep : BookNestColors.offWhite,
+      backgroundColor: dark ? BookNestColors.navyDeep : BookNestColors.lightSurface,
       appBar: AppBar(
         backgroundColor: dark ? Colors.black : Colors.white,
         foregroundColor: dark ? Colors.white : BookNestColors.navyDeep,
@@ -447,10 +447,6 @@ class _PdfPaneState extends State<_PdfPane> {
             if (!mounted) return;
             setState(() => _error = error.toString());
           },
-          documentLoaderBuilder: (_) => const Center(
-              child: CircularProgressIndicator(color: BookNestColors.cyan)),
-          pageLoaderBuilder: (_) => const Center(
-              child: CircularProgressIndicator(color: BookNestColors.cyan)),
           errorBuilder: (_, error) => Center(
             child: Text('This PDF could not be previewed.',
                 style: TextStyle(color: widget.dark ? Colors.white60 : null)),
