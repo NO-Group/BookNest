@@ -407,6 +407,7 @@ function bookView(b: Record<string, unknown>) {
     description: b.description ?? '',
     genre: b.genre ?? null,
     cover_url: b.coverUrl ?? null,
+    banner_url: b.bannerUrl ?? null,
     content_format: b.contentFormat ?? 'markdown',
     moderation_status: b.moderationStatus ?? 'pending',
     like_count: Math.max(0, Number(b.likeCount ?? 0)),
@@ -719,10 +720,17 @@ Deno.serve(async (req: Request) => {
           _id: crypto.randomUUID(),
           title,
           authorId: uid,
-          authorName: String(p.authorName ?? prof.data?.display_name ?? prof.data?.username ?? 'Unknown').slice(0, 80),
+          authorName: (() => {
+            const requested = typeof p.authorName === 'string' ? p.authorName.trim() : '';
+            const clean = requested && !requested.includes('@')
+              ? requested
+              : String(prof.data?.display_name ?? prof.data?.username ?? 'Unknown');
+            return clean.slice(0, 80);
+          })(),
           description: String(p.description ?? '').slice(0, 5000),
           genre: typeof p.genre === 'string' && p.genre.trim() ? p.genre.trim() : null,
           coverUrl: typeof p.coverUrl === 'string' && p.coverUrl.startsWith('http') ? p.coverUrl : null,
+          bannerUrl: typeof p.bannerUrl === 'string' && p.bannerUrl.startsWith('http') ? p.bannerUrl : null,
           contentFormat: 'markdown',
           moderationStatus: 'approved',
           clubId: typeof p.clubId === 'string' && p.clubId ? p.clubId : null,
@@ -976,6 +984,23 @@ Deno.serve(async (req: Request) => {
           await (await dbFor('groups')).collection(`${kind}_members`)
             .insertOne({ groupId: doc._id, userId: uid, role: 'owner', joinedAt: now });
         } catch { /* already a member */ }
+        // Every group is born with its announcement forum…
+        try {
+          await (await dbFor('groups')).collection('announcements').insertOne({
+            groupId: doc._id,
+            kind,
+            title: 'Welcome to ' + name,
+            body: 'This is the announcement forum for ' + name +
+              '. Everything posted here reaches every member of the group.',
+            authorId: uid,
+            pinned: true,
+            createdAt: now,
+          });
+        } catch { /* forum already exists */ }
+        // …and its members-only group chat room.
+        try {
+          await ensureClubRoom(kind, String(doc._id), uid);
+        } catch { /* room is created lazily on first open */ }
         return ok({ id: doc._id });
       }
 
@@ -2059,9 +2084,120 @@ Deno.serve(async (req: Request) => {
         if (typeof p.coverUrl === 'string' && p.coverUrl.startsWith('http')) {
           updates.coverUrl = p.coverUrl;
         }
+        if (typeof p.bannerUrl === 'string' && p.bannerUrl.startsWith('http')) {
+          updates.bannerUrl = p.bannerUrl;
+        }
         await d.collection('books')
           .updateOne({ _id: book._id }, { $set: updates });
         return ok({ updated: true });
+      }
+
+      case 'books.updateChapter': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
+        const bookId = String(p.bookId);
+        const chapterNumber = Number(p.chapterNumber ?? 0);
+        if (!(chapterNumber >= 1)) return fail('A valid chapterNumber is required');
+        const d = await dbFor('books');
+        const book = await d.collection('books')
+          .findOne({ _id: bookOid(bookId) }, { projection: { authorId: 1 } });
+        if (!book) return fail('Book not found', 404);
+        if (book.authorId !== uid) return fail('Only the author can edit chapters', 403);
+        const set: Record<string, unknown> = { updatedAt: new Date() };
+        if (typeof p.title === 'string' && p.title.trim()) {
+          set.title = p.title.trim().slice(0, 200);
+        }
+        if (typeof p.content === 'string') set.content = p.content.slice(0, 500_000);
+        const res = await d.collection('chapters').updateOne(
+          { bookId, chapterNumber } as never,
+          { $set: set },
+        );
+        if (res.matchedCount === 0) return fail('Chapter not found', 404);
+        return ok({ updated: true });
+      }
+
+      case 'books.deleteChapter': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
+        const bookId = String(p.bookId);
+        const chapterNumber = Number(p.chapterNumber ?? 0);
+        if (!(chapterNumber >= 1)) return fail('A valid chapterNumber is required');
+        const d = await dbFor('books');
+        const book = await d.collection('books')
+          .findOne({ _id: bookOid(bookId) }, { projection: { authorId: 1 } });
+        if (!book) return fail('Book not found', 404);
+        if (book.authorId !== uid) return fail('Only the author can delete chapters', 403);
+        const res = await d.collection('chapters')
+          .deleteOne({ bookId, chapterNumber } as never);
+        if (res.deletedCount === 0) return fail('Chapter not found', 404);
+        const remaining = await d.collection('chapters')
+          .countDocuments({ bookId });
+        await d.collection('books').updateOne(
+          { _id: bookOid(bookId) },
+          { $set: { chaptersCount: remaining, updatedAt: new Date() } },
+        );
+        return ok({ deleted: true, chaptersCount: remaining });
+      }
+
+      // ── groups: announcement forum (auto-created with every group) ──────
+      case 'groups.announcements.list': {
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        if (!groupId) return fail('A valid groupId is required');
+        const rows = await (await dbFor('groups')).collection('announcements')
+          .find({ groupId }).sort({ createdAt: -1 }).limit(50).toArray();
+        return ok({ announcements: rows.map((a) => ({
+          id: String(a._id),
+          title: a.title ?? '',
+          body: a.body ?? '',
+          authorId: a.authorId ?? null,
+          pinned: a.pinned === true,
+          createdAt: a.createdAt ?? null,
+        })) });
+      }
+
+      case 'groups.announcements.post': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        if (!groupId) return fail('A valid groupId is required');
+        const title = String(p.title ?? '').trim().slice(0, 160);
+        const body = String(p.body ?? '').trim().slice(0, 4000);
+        if (!title || !body) return fail('A title and a message are required');
+        const kind = String(p.kind ?? 'clubs');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const group = await (await dbFor('groups')).collection(kind)
+          .findOne({ _id: groupId } as never, { projection: { ownerId: 1, viceModeratorId: 1 } });
+        if (!group) return fail('Group not found', 404);
+        const canPost = group.ownerId === uid || group.viceModeratorId === uid;
+        if (!canPost) return fail('Only owners can post announcements', 403);
+        const doc = {
+          groupId, kind, title, body, authorId: uid,
+          pinned: p.pinned === true,
+          createdAt: new Date(),
+        };
+        const inserted = await (await dbFor('groups'))
+          .collection('announcements').insertOne({ ...doc });
+        return ok({ announcement: { id: String(inserted.insertedId), ...doc } });
+      }
+
+      case 'groups.announcements.delete': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const id = typeof p.announcementId === 'string' ? p.announcementId : '';
+        const col = (await dbFor('groups')).collection('announcements');
+        const doc = isHexId(id)
+          ? await col.findOne({ _id: new ObjectId(id) })
+          : null;
+        if (!doc) return fail('Announcement not found', 404);
+        const group = await (await dbFor('groups')).collection(String(doc.kind ?? 'clubs'))
+          .findOne({ _id: String(doc.groupId) } as never,
+            { projection: { ownerId: 1, viceModeratorId: 1 } });
+        const canDelete = group?.ownerId === uid || group?.viceModeratorId === uid;
+        if (!canDelete) return fail('Only owners can remove announcements', 403);
+        await col.deleteOne({ _id: doc._id } as never);
+        return ok({ deleted: true });
       }
 
       case 'books.stats': {
