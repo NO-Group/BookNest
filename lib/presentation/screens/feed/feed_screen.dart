@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../config/theme.dart';
+import '../../components/post_extras.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
@@ -634,16 +635,16 @@ class _NewsPostCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
+                ExpandableText(
                   post['content'] ?? '',
+                  collapsedLines: 3,
                   style: const TextStyle(
                     color: BookNestColors.lightTextSecondary,
                     fontSize: 14,
                     height: 1.5,
                   ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
                 ),
+                LinkPreviewCard(content: post['content']?.toString() ?? ''),
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -891,16 +892,16 @@ class _ArticlePostCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
+          ExpandableText(
             post['content'] ?? '',
+            collapsedLines: 4,
             style: const TextStyle(
               color: BookNestColors.lightTextSecondary,
               fontSize: 14,
               height: 1.5,
             ),
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
           ),
+          LinkPreviewCard(content: post['content']?.toString() ?? ''),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -944,9 +945,16 @@ class _DefaultPostCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
-      child: Text(
-        post['content'] ?? '',
-        style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ExpandableText(
+            post['content'] ?? '',
+            collapsedLines: 5,
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, height: 1.45),
+          ),
+          LinkPreviewCard(content: post['content']?.toString() ?? ''),
+        ],
       ),
     );
   }

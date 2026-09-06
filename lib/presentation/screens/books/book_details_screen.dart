@@ -25,9 +25,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
   bool _loading = true;
   bool _saved = false;
   bool _liked = false;
-  final List<_Review> _reviews = [
-    const _Review(name: 'Amina M.', initials: 'AM', text: 'A beautifully written read — I could not put it down.', rating: 5),
-  ];
+  List<_Review> _reviews = [];
 
   @override
   void initState() { super.initState(); _load(); }
@@ -41,6 +39,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
         BackendApi.instance.fetchBook(widget.bookId),
         BackendApi.instance.call('books.list', {'limit': 8}),
         BackendApi.instance.call('reader.progress.get', {'bookId': widget.bookId}),
+        BackendApi.instance.call('reviews.list', {'bookId': widget.bookId, 'limit': 12}),
       ]);
       if (!mounted) return;
       final bookRes = results[0];
@@ -56,6 +55,9 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
         _progress = progressData is Map
             ? Map<String, dynamic>.from(progressData)
             : null;
+        _reviews = (((results[3] as Map<String, dynamic>?)?['reviews'] as List?) ?? const [])
+            .map((row) => _Review.fromRow(Map<String, dynamic>.from(row as Map)))
+            .toList();
         if (_book != null && rows.isNotEmpty) {
           _book!['chapters'] = rows;
         }
@@ -67,6 +69,17 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
         _loading = false;
       });
     } catch (_) { if (mounted) setState(() => _loading = false); }
+  }
+
+  Future<void> _loadReviews() async {
+    final res = await BackendApi.instance
+        .call('reviews.list', {'bookId': widget.bookId, 'limit': 12});
+    if (!mounted || res == null) return;
+    setState(() {
+      _reviews = (((res['reviews'] as List?) ?? const []))
+          .map((row) => _Review.fromRow(Map<String, dynamic>.from(row as Map)))
+          .toList();
+    });
   }
 
   void _notice(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
@@ -176,7 +189,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               Row(children: List.generate(5, (index) => IconButton(onPressed: () => setSheetState(() => rating = index + 1), icon: Icon(index < rating ? Icons.star_rounded : Icons.star_outline_rounded, color: BookNestColors.cyan)))),
               TextField(controller: controller, autofocus: true, minLines: 3, maxLines: 6, decoration: const InputDecoration(hintText: 'Tell readers what you think…')),
               const SizedBox(height: 14),
-              SizedBox(width: double.infinity, child: ElevatedButton(onPressed: () { final text = controller.text.trim(); if (text.isEmpty) return; setState(() => _reviews.insert(0, _Review(name: 'You', initials: 'YO', text: text, rating: rating))); Navigator.pop(sheetContext); unawaited(BackendApi.instance.createReview(widget.bookId, rating, text, displayName: _viewerName)); _notice('Your review has been posted.'); }, child: const Text('Post review'))),
+              SizedBox(width: double.infinity, child: ElevatedButton(onPressed: () { final text = controller.text.trim(); if (text.isEmpty) return; Navigator.pop(sheetContext); unawaited(BackendApi.instance.createReview(widget.bookId, rating, text, displayName: _viewerName).then((_) => _loadReviews())); _notice('Your review has been posted.'); }, child: const Text('Post review'))),
             ]),
           ),
         ),
@@ -208,11 +221,22 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
             ],
             flexibleSpace: FlexibleSpaceBar(background: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [BookNestColors.navyDeep, BookNestColors.navy.withOpacity(.65), surface], begin: Alignment.topLeft, end: Alignment.bottomRight)))),
           ),
+          if (book['banner_url'] is String &&
+              (book['banner_url'] as String).startsWith('http'))
+            SliverToBoxAdapter(
+              child: Image.network(
+                book['banner_url'] as String,
+                width: double.infinity,
+                height: 150,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
           SliverToBoxAdapter(child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 30),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Hero(tag: 'book-${widget.bookId}', child: _Cover(title: title)), const SizedBox(width: 18),
+                Hero(tag: 'book-${widget.bookId}', child: _Cover(title: title, coverUrl: book['cover_url']?.toString())), const SizedBox(width: 18),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)), const SizedBox(height: 6),
                   GestureDetector(
@@ -227,7 +251,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                       ],
                     ]),
                   ), const SizedBox(height: 14),
-                  Row(children: [const Icon(Icons.star_rounded, color: BookNestColors.cyan, size: 20), const SizedBox(width: 4), Text('4.8', style: theme.textTheme.titleMedium), Text('  •  128 ratings', style: TextStyle(color: muted))]),
+                  Row(children: [Icon(_book?['average_rating'] is num && (_book!['average_rating'] as num) > 0 ? Icons.star_rounded : Icons.star_outline_rounded, color: BookNestColors.cyan, size: 20), const SizedBox(width: 4), Text(_book?['average_rating'] is num && (_book!['average_rating'] as num) > 0 ? '${(_book!['average_rating'] as num).toStringAsFixed(1)}' : 'New', style: theme.textTheme.titleMedium), Text('  •  ${book['review_count'] is num && (book['review_count'] as num) > 0 ? '\${(book['review_count'] as num).toInt()} ratings' : 'No ratings yet'}', style: TextStyle(color: muted))]),
                   const SizedBox(height: 12), Text('Ebook • Markdown', style: TextStyle(color: muted)),
                 ])),
               ]),
@@ -240,7 +264,12 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               ]),
               const SizedBox(height: 28), _Heading('About this book'), const SizedBox(height: 10), Text(description, style: theme.textTheme.bodyLarge?.copyWith(height: 1.55, color: muted)),
               const SizedBox(height: 28), _Heading('Ratings and reviews'), const SizedBox(height: 14),
-              _Reviews(reviews: _reviews, onReview: _writeReview),
+              _Reviews(
+                reviews: _reviews,
+                ratingText: book['average_rating'] is num && (book['average_rating'] as num) > 0 ? (book['average_rating'] as num).toStringAsFixed(1) : '—',
+                ratingsNote: book['review_count'] is num && (book['review_count'] as num) > 0 ? '\${(book['review_count'] as num).toInt()} community ratings' : 'Not rated yet',
+                onReview: _writeReview,
+              ),
               const SizedBox(height: 6),
               Row(children: [
                 Expanded(child: OutlinedButton.icon(onPressed: () => context.push('/book/${widget.bookId}/reviews'), icon: const Icon(Icons.star_rounded, size: 17), label: const Text('All reviews'))),
@@ -248,7 +277,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                 Expanded(child: OutlinedButton.icon(onPressed: () => context.push('/book/${widget.bookId}/discussion'), icon: const Icon(Icons.forum_rounded, size: 17), label: const Text('Discussion'))),
               ]),
               const SizedBox(height: 28), _Heading('Recommended for you'), const SizedBox(height: 12),
-              SizedBox(height: 184, child: ListView.separated(scrollDirection: Axis.horizontal, itemCount: _recommended.length, separatorBuilder: (_, __) => const SizedBox(width: 12), itemBuilder: (_, i) { final item = _recommended[i]; return InkWell(borderRadius: BorderRadius.circular(16), onTap: () => context.push('/book/${item['id']}'), child: SizedBox(width: 112, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_Cover(title: item['title']?.toString() ?? 'Book', small: true), const SizedBox(height: 7), Text(item['title']?.toString() ?? 'Untitled', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12))]))); })),
+              SizedBox(height: 184, child: ListView.separated(scrollDirection: Axis.horizontal, itemCount: _recommended.length, separatorBuilder: (_, __) => const SizedBox(width: 12), itemBuilder: (_, i) { final item = _recommended[i]; return InkWell(borderRadius: BorderRadius.circular(16), onTap: () => context.push('/book/${item['id']}'), child: SizedBox(width: 112, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_Cover(title: item['title']?.toString() ?? 'Book', coverUrl: item['cover_url']?.toString(), small: true), const SizedBox(height: 7), Text(item['title']?.toString() ?? 'Untitled', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12))]))); })),
             ]),
           )),
         ],
@@ -257,11 +286,124 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
   }
 }
 
-class _Cover extends StatelessWidget { final String title; final bool small; const _Cover({required this.title, this.small = false}); @override Widget build(BuildContext context) => Container(width: small ? 112 : 118, height: small ? 140 : 164, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [BookNestColors.navy, BookNestColors.navyDeep], begin: Alignment.topLeft, end: Alignment.bottomRight), boxShadow: [BoxShadow(color: BookNestColors.cyan.withOpacity(.18), blurRadius: 18, offset: const Offset(0, 8))]), child: Padding(padding: const EdgeInsets.all(13), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.auto_stories_rounded, color: BookNestColors.cyan), const Spacer(), Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: small ? 12 : 14))]))); }
+class _Cover extends StatelessWidget { final String title; final String? coverUrl; final bool small; const _Cover({required this.title, this.coverUrl, this.small = false});
+  @override
+  Widget build(BuildContext context) {
+    final url = coverUrl;
+    final box = Container(width: small ? 112 : 118, height: small ? 140 : 164, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [BookNestColors.navy, BookNestColors.navyDeep], begin: Alignment.topLeft, end: Alignment.bottomRight), boxShadow: [BoxShadow(color: BookNestColors.cyan.withOpacity(.18), blurRadius: 18, offset: const Offset(0, 8))]));
+    if (url != null && url.startsWith('http')) {
+      return ClipRRect(borderRadius: BorderRadius.circular(15), child: SizedBox(width: small ? 112 : 118, height: small ? 140 : 164, child: Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => box)));
+    }
+    return Container(width: small ? 112 : 118, height: small ? 140 : 164, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [BookNestColors.navy, BookNestColors.navyDeep], begin: Alignment.topLeft, end: Alignment.bottomRight), boxShadow: [BoxShadow(color: BookNestColors.cyan.withOpacity(.18), blurRadius: 18, offset: const Offset(0, 8))]), child: Padding(padding: const EdgeInsets.all(13), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.auto_stories_rounded, color: BookNestColors.cyan), const Spacer(), Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: small ? 12 : 14))])));
+  }
+}
 class _Heading extends StatelessWidget { final String text; const _Heading(this.text); @override Widget build(BuildContext context) => Text(text, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)); }
 class _RoundAction extends StatelessWidget { final IconData icon; final bool selected; final String label; final VoidCallback onTap; const _RoundAction({required this.icon, required this.selected, required this.label, required this.onTap}); @override Widget build(BuildContext context) => Column(children: [IconButton.filledTonal(onPressed: onTap, icon: Icon(icon, color: selected ? BookNestColors.cyan : null)), Text(label, style: Theme.of(context).textTheme.labelSmall)]); }
-class _Reviews extends StatelessWidget { final List<_Review> reviews; final VoidCallback onReview; const _Reviews({required this.reviews, required this.onReview}); @override Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [Text('4.8', style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.bold)), const SizedBox(width: 12), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Row(children: [Icon(Icons.star_rounded, color: BookNestColors.cyan), Icon(Icons.star_rounded, color: BookNestColors.cyan), Icon(Icons.star_rounded, color: BookNestColors.cyan), Icon(Icons.star_rounded, color: BookNestColors.cyan), Icon(Icons.star_half_rounded, color: BookNestColors.cyan)]), Text('128 community ratings', style: TextStyle(color: Theme.of(context).hintColor))])]), const SizedBox(height: 16), OutlinedButton.icon(onPressed: onReview, icon: const Icon(Icons.rate_review_outlined), label: const Text('Write a review')), const SizedBox(height: 12), ...reviews.map((review) => ListTile(contentPadding: EdgeInsets.zero, leading: CircleAvatar(child: Text(review.initials)), title: Row(children: [Text(review.name), const SizedBox(width: 6), ...List.generate(review.rating, (_) => const Icon(Icons.star_rounded, color: BookNestColors.cyan, size: 14))]), subtitle: Text(review.text, maxLines: 3, overflow: TextOverflow.ellipsis), trailing: const Icon(Icons.more_vert))), ]); }
-class _Review { final String name; final String initials; final String text; final int rating; const _Review({required this.name, required this.initials, required this.text, required this.rating}); }
+class _Reviews extends StatelessWidget {
+  final List<_Review> reviews;
+  final String ratingText;
+  final String ratingsNote;
+  final VoidCallback onReview;
+  const _Reviews({
+    required this.reviews,
+    required this.ratingText,
+    required this.ratingsNote,
+    required this.onReview,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final filled = double.tryParse(ratingText)?.round() ?? 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(ratingText,
+                style: theme.textTheme.displaySmall
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: List.generate(
+                      5,
+                      (i) => Icon(
+                        i < filled
+                            ? Icons.star_rounded
+                            : Icons.star_outline_rounded,
+                        color: BookNestColors.cyan,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(ratingsNote,
+                      style: TextStyle(color: theme.hintColor)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          onPressed: onReview,
+          icon: const Icon(Icons.rate_review_outlined),
+          label: const Text('Write a review'),
+        ),
+        const SizedBox(height: 12),
+        if (reviews.isEmpty)
+          Text(
+            'Be the first to share what you thought of this book.',
+            style: TextStyle(color: theme.hintColor),
+          )
+        else
+          ...reviews.map(
+            (review) => ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(child: Text(review.initials)),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(review.name,
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: 6),
+                  ...List.generate(
+                    review.rating,
+                    (_) => const Icon(Icons.star_rounded,
+                        color: BookNestColors.cyan, size: 14),
+                  ),
+                ],
+              ),
+              subtitle: Text(
+                review.text,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+class _Review { final String name; final String initials; final String text; final int rating; const _Review({required this.name, required this.initials, required this.text, required this.rating});
+  factory _Review.fromRow(Map<String, dynamic> row) {
+    final name = row['userName']?.toString() ?? 'Reader';
+    final initials = name.trim().isEmpty
+        ? 'R'
+        : name.trim().split(RegExp(r'\s+')).map((w) => w.characters.first.toUpperCase()).take(2).join();
+    return _Review(
+      name: name,
+      initials: initials,
+      text: row['body']?.toString() ?? '',
+      rating: (row['rating'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
 
 /// Contact picker for sending a book card inside BookNest. It intentionally does
 /// not use the operating system share sheet: the selected recipient is from the

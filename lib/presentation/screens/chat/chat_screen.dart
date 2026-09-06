@@ -199,6 +199,33 @@ class _ChatScreenState extends State<ChatScreen> {
     await _load();
   }
 
+  Future<void> _sendFile(String filename, bytes) async {
+    final conversationId = _conversationId;
+    if (conversationId == null) return;
+    final url = await uploadChatFile(filename, bytes);
+    if (!mounted) return;
+    if (url == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('The file could not be uploaded — please try again.'),
+      ));
+      return;
+    }
+    final res = await BackendApi.instance.sendClubMessage(
+      conversationId: conversationId,
+      type: 'file',
+      text: filename,
+      mediaUrl: url,
+    );
+    if (!mounted) return;
+    if (res == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('The file could not be delivered — please try again.'),
+      ));
+      return;
+    }
+    await _load();
+  }
+
   String _senderName(String senderId) {
     final person = _people[senderId];
     final name = (person?['display_name'] ?? person?['username'])?.toString();
@@ -326,6 +353,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                               : _senderName(message['senderId']
                                                       ?.toString() ??
                                                   ''),
+                                          senderId:
+                                              message['senderId']?.toString(),
                                           onOpenImage: () => showChatPhoto(
                                             context,
                                             message['mediaUrl']?.toString() ??
@@ -339,6 +368,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           ChatComposer(
                             onSendText: _sendText,
                             onSendImage: _sendImage,
+                            onSendFile: _sendFile,
                             hint: 'Message ${widget.title}…',
                           ),
                         ],

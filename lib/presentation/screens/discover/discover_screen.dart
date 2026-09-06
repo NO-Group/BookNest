@@ -420,14 +420,14 @@ class _DiscoverCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: BookNestColors.navy,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                image: item['cover_image_url'] != null
+                image: item['cover_url'] != null
                     ? DecorationImage(
-                        image: NetworkImage(item['cover_image_url']),
+                        image: NetworkImage(item['cover_url']),
                         fit: BoxFit.cover,
                       )
                     : null,
               ),
-              child: item['cover_image_url'] == null
+              child: item['cover_url'] == null
                   ? Center(
                       child: Icon(
                         _typeIcon,

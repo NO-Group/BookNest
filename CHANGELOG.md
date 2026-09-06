@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.9.0+11 — 2026-09-05
+
+- **The Manuscript Studio** — writing a book is now a word-processor
+  experience: a details view (title, pen name, description, all 22
+  genres, Cloudinary cover art AND a wide banner picture), and a write
+  view with real chapters (add/remove), a full formatting toolbar,
+  undo & redo, live word count and reading time. Publishing uploads
+  every chapter in order and can resume if the network drops.
+- **Book profiles are fully real**: the actual cover art and banner,
+  the real average rating and ratings count, and genuine community
+  reviews from the data store — no more stand-in numbers or seeded
+  reviews. Posting a review refreshes instantly.
+- **Feed**: long posts collapse behind "Read more", and any link in a
+  post gets a live preview card (picture, headline, source) below it.
+- **Chat**: paperclip attachments for any file format (up to 25 MB,
+  stored in Cloudinary), a camera button with a built-in editor —
+  seven filters plus brightness and contrast — and tapping a person's
+  name opens their profile.
+- **Discover** cards now show each group's real cover picture.
+- **Every club/community/organization/school is born complete**: its
+  own announcement forum (owners post; members read; a pinned welcome
+  waits on arrival) and its own members-only group chat.
+- The create-book button sits above the navigation bar where it
+  belongs.
+
 ## 1.8.0+10 — 2026-09-05
 
 - **BookNest Wrapped** — your whole reading story on one beautiful page:

@@ -1,10 +1,14 @@
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/theme.dart';
+import '../screens/chat/photo_edit_screen.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/supabase_service.dart';
 import 'booknest_ui.dart';
@@ -88,8 +92,10 @@ class ChatBubble extends StatelessWidget {
   final Map<String, dynamic> message;
   final bool mine;
 
-  /// Group chats show a name above other people's messages.
+  /// Group chats show a name above other people's messages. Tapping it
+  /// opens that reader's profile.
   final String? senderName;
+  final String? senderId;
   final VoidCallback? onOpenBook;
   final VoidCallback? onOpenImage;
 
@@ -98,6 +104,7 @@ class ChatBubble extends StatelessWidget {
     required this.message,
     required this.mine,
     this.senderName,
+    this.senderId,
     this.onOpenBook,
     this.onOpenImage,
   });
@@ -114,6 +121,8 @@ class ChatBubble extends StatelessWidget {
     final Widget content;
     if (type == 'image' && mediaUrl != null && mediaUrl.startsWith('http')) {
       content = _ImageContent(url: mediaUrl, onTap: onOpenImage);
+    } else if (type == 'file' && mediaUrl != null && mediaUrl.startsWith('http')) {
+      content = _FileContent(url: mediaUrl, dark: dark);
     } else if (type == 'book_share') {
       content = _BookShareContent(
         title: text,
@@ -138,7 +147,7 @@ class ChatBubble extends StatelessWidget {
         left: mine ? 48 : 0,
         right: mine ? 0 : 48,
       ),
-      padding: type == 'book_share'
+      padding: (type == 'book_share' || type == 'file')
           ? const EdgeInsets.all(10)
           : (type == 'image'
               ? const EdgeInsets.fromLTRB(4, 4, 4, 4)
@@ -174,12 +183,20 @@ class ChatBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!mine && senderName != null && senderName!.isNotEmpty && type != 'book_share') ...[
-            Text(
-              senderName!,
-              style: const TextStyle(
-                color: BookNestColors.cyan,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
+            GestureDetector(
+              onTap: () {
+                final id = senderId;
+                if (id != null && id.isNotEmpty) context.push('/user/$id');
+              },
+              child: Text(
+                senderName!,
+                style: TextStyle(
+                  color: BookNestColors.cyan,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  decoration: senderId == null ? null : TextDecoration.underline,
+                  decorationColor: BookNestColors.cyan.withOpacity(.5),
+                ),
               ),
             ),
             const SizedBox(height: 2),
@@ -308,6 +325,109 @@ class _ImageContent extends StatelessWidget {
                   color: BookNestColors.cyan),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// An attachment chip for any file type — tap to open or download.
+class _FileContent extends StatelessWidget {
+  final String url;
+  final bool dark;
+  const _FileContent({required this.url, required this.dark});
+
+  String get _name {
+    try {
+      final uri = Uri.parse(url);
+      final segments = uri.pathSegments;
+      if (segments.isNotEmpty) {
+        final last = Uri.decodeComponent(segments.last);
+        final dot = last.indexOf('.', last.indexOf('/') == -1 ? 0 : last.length - 8);
+        final clean = last.contains('/') ? last.split('/').last : last;
+        // Cloudinary appends an extension: 'invoice1234.pdf' stays, hashed
+        // ids keep their extension too — show as-is, minus version suffix.
+        return clean.replaceAll(RegExp(r'\.[a-z0-9]{6,8}$'), '');
+      }
+    } catch (_) {}
+    return 'Attachment';
+  }
+
+  String get _extension {
+    final match = RegExp(r'\.([a-z0-9]{2,5})(?:\?|$)').firstMatch(url);
+    return (match?.group(1) ?? 'file').toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () =>
+          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: dark ? Colors.white.withOpacity(.06) : Colors.white,
+          border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                gradient: const LinearGradient(
+                  colors: [BookNestColors.navy, BookNestColors.navyDeep],
+                ),
+              ),
+              child: Text(
+                _extension.characters.take(4).toString(),
+                style: const TextStyle(
+                  color: BookNestColors.cyan,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: dark ? BookNestColors.darkTextPrimary : BookNestColors.navyDeep,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.open_in_new_rounded,
+                          size: 11, color: BookNestColors.cyan),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Tap to open',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: BookNestColors.cyan,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -464,13 +584,16 @@ class ChatComposer extends StatefulWidget {
   final String hint;
   final Future<void> Function(String text) onSendText;
   final Future<void> Function(Uint8List bytes, String extension) onSendImage;
+
+  /// Any file format — invoked from the paperclip's "File" option.
+  final Future<void> Function(String filename, Uint8List bytes)? onSendFile;
   final bool enabled;
 
   const ChatComposer({
     super.key,
     required this.onSendText,
     required this.onSendImage,
-    this.hint = 'Message…',
+    this.onSendFile,
     this.enabled = true,
   });
 
@@ -497,7 +620,7 @@ class _ChatComposerState extends State<ChatComposer> {
     await widget.onSendText(text);
   }
 
-  Future<void> _attach() async {
+  Future<void> _attachFromGallery() async {
     if (_uploading) return;
     try {
       final picked = await _picker.pickImage(
@@ -531,6 +654,108 @@ class _ChatComposerState extends State<ChatComposer> {
     }
   }
 
+  /// Snap → edit with filters → send.
+  Future<void> _snap() async {
+    if (_uploading) return;
+    try {
+      final picked = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 88,
+        maxWidth: 1800,
+      );
+      if (picked == null || !mounted) return;
+      final edited = await Navigator.of(context).push<Uint8List>(
+        MaterialPageRoute(
+          builder: (_) => PhotoEditScreen(photo: picked),
+          fullscreenDialog: true,
+        ),
+      );
+      if (!mounted || edited == null) return;
+      setState(() {
+        _uploading = true;
+        _photoName = 'camera shot';
+      });
+      await widget.onSendImage(edited, 'png');
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('The camera shot could not be attached — please try again.'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  /// Any file format, via the system document picker.
+  Future<void> _attachFile() async {
+    if (_uploading || widget.onSendFile == null) return;
+    try {
+      final result = await FilePicker.platform.pickFiles(withData: true);
+      final file = result?.files.single;
+      if (file == null || file.bytes == null || !mounted) return;
+      if ((file.size ?? 0) > 25 * 1024 * 1024) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('That file is larger than 25 MB — please send a smaller one.'),
+        ));
+        return;
+      }
+      setState(() {
+        _uploading = true;
+        _photoName = file.name;
+      });
+      await widget.onSendFile!(file.name, file.bytes!);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('That file could not be attached — please try another one.'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  void _openAttachSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined,
+                  color: BookNestColors.cyan),
+              title: const Text('Photo library',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Send a picture from your gallery',
+                  style: TextStyle(fontSize: 12)),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _attachFromGallery();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_file_rounded,
+                  color: BookNestColors.cyan),
+              title: const Text('Any file',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Documents, PDFs, audio — up to 25 MB',
+                  style: TextStyle(fontSize: 12)),
+              onTap: widget.onSendFile == null
+                  ? null
+                  : () {
+                      Navigator.pop(sheetContext);
+                      _attachFile();
+                    },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -557,11 +782,18 @@ class _ChatComposerState extends State<ChatComposer> {
                     ),
                   )
                 : IconButton(
-                    onPressed: widget.enabled ? _attach : null,
-                    icon: const Icon(Icons.image_outlined),
+                    onPressed: widget.enabled ? _openAttachSheet : null,
+                    icon: const Icon(Icons.attach_file_rounded),
                     color: BookNestColors.cyan,
-                    tooltip: 'Send a photo',
+                    tooltip: 'Attach',
                   ),
+            if (!_uploading)
+              IconButton(
+                onPressed: widget.enabled ? _snap : null,
+                icon: const Icon(Icons.photo_camera_outlined),
+                color: BookNestColors.cyan,
+                tooltip: 'Camera',
+              ),
             Expanded(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 120),
@@ -625,6 +857,12 @@ class ChatAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return BookNestAvatar(imageUrl: imageUrl, name: name, radius: radius);
   }
+}
+
+/// Uploads any chat attachment (documents, audio, PDFs…) and returns the
+/// hosted URL, or null when the upload could not complete.
+Future<String?> uploadChatFile(String filename, Uint8List bytes) {
+  return CloudinaryService.uploadRaw(bytes: bytes, filename: filename);
 }
 
 /// Uploads chat photos to Cloudinary under the chat folder and returns the

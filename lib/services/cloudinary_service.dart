@@ -64,6 +64,38 @@ class CloudinaryService {
   }
 
   /// Helper for on-the-fly resized thumbnails (Cloudinary transformation):
+  /// Uploads any file (documents, audio, PDFs…) via Cloudinary's auto
+  /// endpoint and returns the hosted URL, or null on failure.
+  static Future<String?> uploadRaw({
+    required Uint8List bytes,
+    required String filename,
+  }) async {
+    final safeName = filename.trim().isEmpty ? 'attachment' : filename.trim();
+    final uri =
+        Uri.parse('\$_base/\${AppConfig.cloudinaryCloudName}/auto/upload');
+    final request = http.MultipartRequest('POST', uri)
+      ..fields['upload_preset'] = AppConfig.cloudinaryUploadPreset
+      ..fields['folder'] = '\${AppConfig.cloudinaryBaseFolder}/files';
+    request.files.add(http.MultipartFile.fromBytes('file', bytes,
+        filename: safeName));
+    try {
+      final streamed = await request.send().timeout(const Duration(seconds: 90));
+      final body = jsonDecode(await streamed.stream.bytesToString())
+          as Map<String, dynamic>;
+      if (streamed.statusCode == 200 && body['secure_url'] is String) {
+        return body['secure_url'] as String;
+      }
+      if (kDebugMode) {
+        debugPrint('Cloudinary raw upload failed: '
+            '\${body['error'] is Map ? (body['error'] as Map)['message'] : 'HTTP \${streamed.statusCode}'}');
+      }
+      return null;
+    } catch (error) {
+      if (kDebugMode) debugPrint('Cloudinary raw upload error: \$error');
+      return null;
+    }
+  }
+
   /// transformUrl(url, width: 320) where url is a secure_url from uploadImage.
   static String transformUrl(String url, {int? width, int? height}) {
     final marker = '/upload/';

@@ -199,6 +199,43 @@ class _DMChatScreenState extends State<DMChatScreen> {
     await _load();
   }
 
+  Future<void> _sendFile(String filename, bytes) async {
+    final localId = 'local-\${DateTime.now().microsecondsSinceEpoch}';
+    setState(() => _messages.add({
+          'id': localId,
+          'senderId': _viewerId,
+          'type': 'file',
+          'text': filename,
+          'createdAt': DateTime.now().toIso8601String(),
+          'pending': true,
+        }));
+    _jumpToBottom();
+
+    final url = await uploadChatFile(filename, bytes);
+    if (!mounted) return;
+    if (url == null) {
+      _markLocal(localId, failed: true);
+      _notice('The file could not be uploaded — please try again.');
+      return;
+    }
+    final res = await BackendApi.instance.sendMessage(
+      conversationId: _conversationId,
+      peerId: widget.peerId,
+      type: 'file',
+      text: filename,
+      mediaUrl: url,
+    );
+    if (!mounted) return;
+    if (res == null) {
+      _markLocal(localId, failed: true);
+      _notice('The file could not be delivered — please try again.');
+      return;
+    }
+    _conversationId ??=
+        res['conversationId']?.toString() ?? widget.conversationId;
+    await _load();
+  }
+
   void _markLocal(String localId, {required bool failed}) {
     final index = _messages.indexWhere((m) => m['id'] == localId);
     if (index == -1) return;
@@ -224,29 +261,35 @@ class _DMChatScreenState extends State<DMChatScreen> {
         leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
         titleSpacing: 0,
-        title: Row(
-          children: [
-            ChatAvatar(name: _peerName, imageUrl: _avatarUrl),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_peerName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                  Text(
-                    'BookNest chat',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: BookNestColors.cyan.withOpacity(.85),
+        title: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: widget.peerId == null || widget.peerId!.isEmpty
+              ? null
+              : () => context.push('/user/${widget.peerId}'),
+          child: Row(
+            children: [
+              ChatAvatar(name: _peerName, imageUrl: _avatarUrl),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_peerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    Text(
+                      'View profile',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: BookNestColors.cyan.withOpacity(.85),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       body: ChatCanvas(
@@ -307,6 +350,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
             ChatComposer(
               onSendText: _sendText,
               onSendImage: _sendImage,
+              onSendFile: _sendFile,
             ),
           ],
         ),

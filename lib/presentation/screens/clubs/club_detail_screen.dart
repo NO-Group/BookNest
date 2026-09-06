@@ -28,6 +28,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
   Map<String, dynamic>? _club;
   int _memberCount = 0;
   bool _isMember = false;
+  List<Map<String, dynamic>> _announcements = [];
   List<Map<String, dynamic>> _books = const [];
   List<Map<String, dynamic>> _pending = const [];
   bool _isOwner = false;
@@ -63,6 +64,8 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
       final members = ((gres?['members'] as List?) ?? const [])
           .map((m) => {'user_id': (m as Map)['user_id']})
           .toList();
+      final announcementsRes = await BackendApi.instance
+          .call('groups.announcements.list', {'groupId': widget.clubId});
       final booksRes = await BackendApi.instance
           .call('books.list', {'clubId': widget.clubId, 'limit': 50});
       final books = (booksRes?['books'] as List?) ?? const [];
@@ -73,6 +76,9 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
         _club = Map<String, dynamic>.from(club as Map);
         _memberCount = (members as List).length;
         _books = (books as List)
+            .map((row) => Map<String, dynamic>.from(row as Map))
+            .toList();
+        _announcements = (((announcementsRes?['announcements'] as List?) ?? const []))
             .map((row) => Map<String, dynamic>.from(row as Map))
             .toList();
         _isOwner = viewerId != null && owner == viewerId;
@@ -127,6 +133,87 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
     _load();
   }
 
+  Future<void> _postAnnouncement() async {
+    final titleController = TextEditingController();
+    final bodyController = TextEditingController();
+    final posted = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            20, 8, 20, MediaQuery.viewInsetsOf(sheetContext).bottom + 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('New announcement',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 14),
+            TextField(
+              controller: titleController,
+              autofocus: true,
+              maxLength: 160,
+              decoration: const InputDecoration(
+                  labelText: 'Headline', hintText: 'What is happening?'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: bodyController,
+              minLines: 3,
+              maxLines: 6,
+              decoration: const InputDecoration(
+                  labelText: 'Message',
+                  hintText: 'Tell every member of the group…'),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  if (titleController.text.trim().isEmpty ||
+                      bodyController.text.trim().isEmpty) {
+                    return;
+                  }
+                  Navigator.pop(sheetContext, true);
+                },
+                child: const Text('Post to the forum'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (posted != true || !mounted) return;
+    final res = await BackendApi.instance.call('groups.announcements.post', {
+      'groupId': widget.clubId,
+      'kind': 'clubs',
+      'title': titleController.text.trim(),
+      'body': bodyController.text.trim(),
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(res == null
+          ? 'The announcement could not be posted — please try again.'
+          : 'Announcement posted to every member.'),
+    ));
+    if (res != null) _load();
+  }
+
+  Future<void> _deleteAnnouncement(String id) async {
+    final res = await BackendApi.instance
+        .call('groups.announcements.delete', {'announcementId': id});
+    if (!mounted) return;
+    if (res != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Announcement removed.')));
+      _load();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -174,6 +261,12 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
                     children: [
+                      _AnnouncementsSection(
+                        announcements: _announcements,
+                        isOwner: _isOwner,
+                        onPost: _postAnnouncement,
+                        onDelete: _deleteAnnouncement,
+                      ),
                       // ── glass header ──
                       GlassPanel(
                         radius: 24,
@@ -460,6 +553,133 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                     color: filled
                         ? BookNestColors.navyDeep
                         : BookNestColors.cyan)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Every group is born with an announcement forum — this renders it.
+/// Owners post and remove; members read. Pinned posts float to the top.
+class _AnnouncementsSection extends StatelessWidget {
+  final List<Map<String, dynamic>> announcements;
+  final bool isOwner;
+  final Future<void> Function() onPost;
+  final Future<void> Function(String id) onDelete;
+
+  const _AnnouncementsSection({
+    required this.announcements,
+    required this.isOwner,
+    required this.onPost,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final sorted = [...announcements]
+      ..sort((a, b) {
+        final pinnedA = a['pinned'] == true ? 1 : 0;
+        final pinnedB = b['pinned'] == true ? 1 : 0;
+        if (pinnedA != pinnedB) return pinnedB - pinnedA;
+        final aTime = DateTime.tryParse(a['createdAt']?.toString() ?? '');
+        final bTime = DateTime.tryParse(b['createdAt']?.toString() ?? '');
+        return (bTime ?? DateTime(0)).compareTo(aTime ?? DateTime(0));
+      });
+
+    return GlassPanel(
+      radius: 22,
+      blur: 16,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.campaign_rounded,
+                    color: BookNestColors.cyan, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('Announcement forum',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                ),
+                if (isOwner)
+                  IconButton.filledTonal(
+                    onPressed: onPost,
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    color: BookNestColors.cyan,
+                    tooltip: 'Post an announcement',
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (sorted.isEmpty)
+              Text(
+                'Announcements from the owners will appear here — every '
+                'member sees them the moment they land.',
+                style: TextStyle(color: theme.hintColor, height: 1.45),
+              )
+            else
+              ...sorted.map((item) {
+                final pinned = item['pinned'] == true;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: dark
+                        ? Colors.white.withOpacity(.04)
+                        : BookNestColors.lightSurface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: BookNestColors.cyan.withOpacity(pinned ? .45 : .2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          if (pinned)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 6),
+                              child: Icon(Icons.push_pin_rounded,
+                                  size: 13, color: BookNestColors.cyan),
+                            ),
+                          Expanded(
+                            child: Text(
+                              item['title']?.toString() ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 13.5),
+                            ),
+                          ),
+                          if (isOwner)
+                            GestureDetector(
+                              onTap: () =>
+                                  onDelete(item['id']?.toString() ?? ''),
+                              child: const Icon(Icons.close_rounded,
+                                  size: 16, color: BookNestColors.cyan),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        item['body']?.toString() ?? '',
+                        style: TextStyle(
+                            height: 1.45,
+                            fontSize: 13,
+                            color: dark
+                                ? BookNestColors.darkTextSecondary
+                                : BookNestColors.navyDeep.withOpacity(.85)),
+                      ),
+                    ],
+                  ),
+                );
+              }),
           ],
         ),
       ),
