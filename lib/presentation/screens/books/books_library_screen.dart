@@ -5,7 +5,7 @@ import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
-import '../../components/booknest_ui.dart' show TagChip, kBookNestGenres;
+import '../../components/booknest_ui.dart' show BookNestLoader, TagChip, kBookNestGenres;
 
 class BooksLibraryScreen extends StatefulWidget {
   const BooksLibraryScreen({super.key});

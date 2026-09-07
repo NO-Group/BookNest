@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../components/chat_kit.dart';
+import '../../components/booknest_ui.dart';
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';

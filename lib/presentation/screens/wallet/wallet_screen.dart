@@ -56,7 +56,7 @@ class _WalletScreenState extends State<WalletScreen> {
     final hist = await BackendApi.instance.call('wallet.history');
     final history = hist?['history'];
     if (mounted && history is List) {
-      rows = ((hist['history'] as List?) ?? const [])
+      rows = history
           .map((row) => Map<String, dynamic>.from(row as Map))
           .toList();
     }
