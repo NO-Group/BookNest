@@ -8,6 +8,7 @@ import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
 import 'book_editor_screen.dart';
 import '../../components/booknest_ui.dart';
+import '../../components/report_sheet.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
@@ -347,6 +348,21 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                 const SizedBox(width: 10),
                 Expanded(child: OutlinedButton.icon(onPressed: () => context.push('/book/${widget.bookId}/discussion'), icon: const Icon(Icons.forum_rounded, size: 17), label: const Text('Discussion'))),
               ]),
+              if (!(book['added_by']?.toString().isNotEmpty == true &&
+                  book['added_by'].toString() == _viewerId))
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => showReportSheet(context,
+                        kind: ReportTargetKind.book,
+                        targetId: widget.bookId),
+                    icon: Icon(Icons.flag_outlined,
+                        size: 15, color: theme.hintColor),
+                    label: Text('Report this book',
+                        style: TextStyle(
+                            fontSize: 12, color: theme.hintColor)),
+                  ),
+                ),
               const SizedBox(height: 28), _Heading('Recommended for you'), const SizedBox(height: 12),
               SizedBox(height: 184, child: ListView.separated(scrollDirection: Axis.horizontal, itemCount: _recommended.length, separatorBuilder: (_, __) => const SizedBox(width: 12), itemBuilder: (_, i) { final item = _recommended[i]; return InkWell(borderRadius: BorderRadius.circular(16), onTap: () => context.push('/book/${item['id']}'), child: SizedBox(width: 112, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_Cover(title: item['title']?.toString() ?? 'Book', coverUrl: item['cover_url']?.toString(), small: true), const SizedBox(height: 7), Text(item['title']?.toString() ?? 'Untitled', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12))]))); })),
             ]),

@@ -14,6 +14,7 @@ import '../../components/booknest_keyboard.dart';
 //   · Account     — edit profile, change password, sign out
 //   · About       — version + links
 
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:go_router/go_router.dart';
@@ -336,6 +337,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: 'Privacy & safety',
               onTap: () => context.push('/privacy'),
             ),
+            _SettingsRow(
+              icon: Icons.shield_outlined,
+              label: 'Terms of Service',
+              onTap: () => context.push('/terms'),
+            ),
           ]),
           const SizedBox(height: 24),
 
@@ -459,6 +465,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
           const SizedBox(height: 28),
           _SignOutButton(),
+          const SizedBox(height: 18),
+          _DeleteAccountButton(),
         ],
       ),
     );
@@ -755,6 +763,125 @@ class _SignOutButton extends StatelessWidget {
         label: const Text('Sign out',
             style: TextStyle(fontWeight: FontWeight.w700)),
       ),
+    );
+  }
+}
+
+
+/// The store-required escape hatch: deletes the account and every piece of
+/// associated data server-side, then signs out. Double-confirmed, honest
+/// about every step.
+class _DeleteAccountButton extends StatefulWidget {
+  @override
+  State<_DeleteAccountButton> createState() => _DeleteAccountButtonState();
+}
+
+class _DeleteAccountButtonState extends State<_DeleteAccountButton> {
+  bool _busy = false;
+
+  static const _typeToDelete = 'DELETE';
+
+  Future<void> _confirmAndDelete() async {
+    if (_busy) return;
+    final controller = TextEditingController();
+    final first = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete your account?'),
+        content: const Text(
+            'This permanently removes your profile, books, drafts, posts, '
+            'reviews, messages, gems and every reading habit. There is no '
+            'undo, and the username becomes unavailable.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Keep my account')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Continue',
+                  style: TextStyle(
+                      color: Color(0xFFD06A6A),
+                      fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+    if (first != true || !mounted) return;
+    // Typed confirmation: "DELETE" — no accidents.
+    final typed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Type DELETE to confirm'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'DELETE',
+            counterText: '',
+          ),
+          maxLength: 6,
+          onChanged: (_) {},
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, value, _) => TextButton(
+              onPressed: value.text.trim().toUpperCase() == _typeToDelete
+                  ? () => Navigator.pop(dialogContext, true)
+                  : null,
+              child: const Text('Delete forever',
+                  style: TextStyle(
+                      color: Color(0xFFD06A6A),
+                      fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (typed != true || !mounted) return;
+    setState(() => _busy = true);
+    final res = await BackendApi.instance.call('account.delete');
+    if (!mounted) return;
+    if (res == null) {
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Deletion could not finish — please check your connection and '
+              'try again. Nothing was deleted yet.')));
+      return;
+    }
+    // Clear this device's traces, then sign out for real.
+    BackendApi.instance.bustCache();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+    } catch (_) {}
+    await SupabaseService().auth.signOut();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFFD06A6A),
+        side: BorderSide(color: const Color(0xFFD06A6A).withOpacity(.5)),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      onPressed: _busy ? null : _confirmAndDelete,
+      icon: _busy
+          ? const SizedBox(
+              width: 17,
+              height: 17,
+              child:
+                  CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFD06A6A)))
+          : const Icon(Icons.delete_forever_rounded, size: 19),
+      label: Text(_busy ? 'Deleting…' : 'Delete my account',
+          style: const TextStyle(fontWeight: FontWeight.w700)),
     );
   }
 }

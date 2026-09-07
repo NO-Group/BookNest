@@ -14,6 +14,7 @@ import '../../components/post_extras.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
+import '../../components/report_sheet.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
@@ -1141,6 +1142,20 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
               ],
             ),
           ),
+        ),
+        IconButton(
+          icon: Icon(Icons.flag_outlined,
+              color: muted.withOpacity(.7), size: 18),
+          tooltip: 'Report post',
+          visualDensity: VisualDensity.compact,
+          onPressed: () {
+            final id = widget.post is Map && widget.post['id'] != null
+                ? widget.post['id'].toString()
+                : null;
+            if (id == null) return;
+            showReportSheet(context,
+                kind: ReportTargetKind.post, targetId: id);
+          },
         ),
       ],
     );

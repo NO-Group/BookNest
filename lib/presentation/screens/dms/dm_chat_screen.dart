@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../components/chat_kit.dart';
+import '../../components/report_sheet.dart';
 import '../chat/media_viewer_screen.dart';
 import '../../components/booknest_emojis.dart';
 import '../../../services/reader_profile.dart';
@@ -593,6 +594,11 @@ class _DMChatScreenState extends State<DMChatScreen> {
                                     _translateMessage(message),
                                 onReply: () =>
                                     setState(() => _replyTo = message),
+                                onReport: () => showReportSheet(
+                                  context,
+                                  kind: ReportTargetKind.message,
+                                  targetId: message['id']?.toString() ?? '',
+                                ),
                               );
                             },
                           ),

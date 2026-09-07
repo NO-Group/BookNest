@@ -49,6 +49,14 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>BookNest uses the camera so you can take photos and record video clips with sound — always inside the app, never the phone's camera app.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>The microphone records your voice messages and video clips with sound.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Pick photos from your library to share in chats and to design your book covers.</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>Notifications let BookNest tell you about new chapters, replies and reading reminders.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

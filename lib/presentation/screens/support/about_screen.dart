@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../config/app_config.dart';
 import '../../../config/theme.dart';
@@ -66,10 +67,33 @@ class AboutScreen extends StatelessWidget {
           _Row(label: 'Built with', value: 'Flutter'),
           _Row(label: 'Cloud', value: 'Supabase · MongoDB · Cloudinary · R2'),
           _Row(label: 'By', value: 'N.O Group'),
-          const SizedBox(height: 28),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              GestureDetector(
+                onTap: () => context.push('/terms'),
+                child: const Text('Terms of Service',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        color: BookNestColors.cyan,
+                        fontWeight: FontWeight.w700)),
+              ),
+              Text('  ·  ', style: TextStyle(color: theme.hintColor)),
+              GestureDetector(
+                onTap: () => context.push('/privacy'),
+                child: const Text('Privacy Policy',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        color: BookNestColors.cyan,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
           Center(
             child: Text(
-              'Made with 💙 for readers everywhere.\nNext stop: v1.2 — with Jenny on the team.',
+              'Made with 💙 for readers everywhere.',
               textAlign: TextAlign.center,
               style: TextStyle(color: theme.hintColor, fontSize: 12.5, height: 1.5),
             ),

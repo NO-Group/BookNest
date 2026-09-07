@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.5.0+17 — 2026-09-07 · Launch readiness
+
+- **Delete your account for real**: Settings now carries the full account
+  deletion flow — double-confirmed, server-enforced, and it removes your
+  profile, books, drafts, posts, reviews, messages, gems and reading
+  history everywhere, then signs you out. Required by the app stores and,
+  frankly, just right.
+- **Report anything**: a designed report sheet lives on posts, messages,
+  books and profiles — ten clear reasons plus free text, delivered
+  confidentially to the moderation team.
+- **Block readers**: blocking is server-enforced — no more messages, and
+  blocked readers' club messages stay hidden. Unblock any time from their
+  profile.
+- **Terms of Service**: readable, real terms now live in the app, linked
+  at sign-up, in Settings and in About.
+- **iOS permission strings**: the camera, microphone and photo library now
+  introduce themselves properly on iPhones.
+- **About, freshened**: legal links and a launch-day footer.
+
 ## 2.4.0+16 — 2026-09-07
 
 - **The studio never freezes again**: typing is butter-smooth — word counts

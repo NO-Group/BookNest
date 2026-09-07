@@ -9,6 +9,7 @@ import '../../components/chat_kit.dart';
 import '../chat/media_viewer_screen.dart';
 import '../../components/booknest_emojis.dart';
 import '../../components/booknest_ui.dart';
+import '../../components/report_sheet.dart';
 import '../../../services/reader_profile.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
@@ -554,6 +555,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                                   code),
                                           onReply: () => setState(
                                               () => _replyTo = message),
+                                          onReport: () => showReportSheet(
+                                              context,
+                                              kind: ReportTargetKind.message,
+                                              targetId:
+                                                  message['id']?.toString() ??
+                                                      ''),
                                           onForward: () =>
                                               _forwardMessage(message),
                                           onInfo: () => showMessageInfo(

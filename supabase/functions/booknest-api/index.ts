@@ -58,6 +58,7 @@ export const DB_NAMES = {
   users: 'booknest_users', // reader preferences
   dictionary: 'booknest_dictionary', // Word Nest lookups + trending
   feed: 'booknest_feed', // feed posts (cutover complete: was transitional SQL)
+  moderation: 'booknest_moderation', // UGC reports from the community
   groups: 'booknest_groups', // clubs, communities, organizations, schools
   moderation: 'booknest_moderation', // reports
 } as const;
@@ -103,6 +104,13 @@ async function ensureIndexes(
 ): Promise<void> {
   try {
     switch (domain) {
+      case 'moderation':
+        await Promise.all([
+          database.collection('reports').createIndex({ reporterId: 1, createdAt: -1 }),
+          database.collection('reports').createIndex({ status: 1, createdAt: -1 }),
+          database.collection('blocks').createIndex({ userId: 1, blockedId: 1 }, { unique: true }),
+        ]);
+        break;
       case 'books':
         await Promise.all([
           database.collection('books').createIndex({ createdAt: -1 }),
@@ -532,6 +540,13 @@ async function buildReplyPreview(
       src.type === 'voice' ? 'Voice message' : src.type === 'book_share' ?
       String(src.bookTitle ?? 'Book') : 'Message')).slice(0, 160),
   };
+}
+
+/** The reader ids [uid] has blocked. */
+async function blockedSet(uid: string): Promise<Set<string>> {
+  const rows = await (await dbFor('moderation')).collection('blocks')
+    .find({ userId: uid }).toArray();
+  return new Set(rows.map((r) => String(r.blockedId)));
 }
 
 async function applyReaction(uid: string, messageId: string, emoji: string, isMember: () => Promise<boolean>) {
@@ -1881,6 +1896,10 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in required', 401);
         const peer = typeof p.peerId === 'string' ? p.peerId : '';
         if (!peer || peer === uid) return fail('A valid peerId is required');
+        const blocked = await blockedSet(uid);
+        if (blocked.has(peer)) return fail('You blocked this reader — unblock them to chat again');
+        const blockedByPeer = await blockedSet(peer);
+        if (blockedByPeer.has(uid)) return fail('This reader is not accepting messages right now');
         return ok({ conversation: await ensureDirect(uid, peer) });
       }
 
@@ -1908,6 +1927,10 @@ Deno.serve(async (req: Request) => {
         if (!isHexId(conversationId)) {
           const peer = typeof p.peerId === 'string' ? p.peerId : '';
           if (!peer || peer === uid) return fail('conversationId or peerId is required');
+          const blockedNow = await blockedSet(uid);
+          if (blockedNow.has(peer)) return fail('You blocked this reader — unblock them to chat again');
+          const blockedByPeer = await blockedSet(peer);
+          if (blockedByPeer.has(uid)) return fail('This reader is not accepting messages right now');
           conversationId = String((await ensureDirect(uid, peer)).id);
         }
         const conversation = await d.collection('conversations')
@@ -1996,6 +2019,9 @@ Deno.serve(async (req: Request) => {
         if (typeof p.before === 'string' && isHexId(p.before)) {
           query._id = { $lt: new ObjectId(p.before as string) };
         }
+        // Blocked readers' messages stay invisible (own messages always show).
+        const hidden = await blockedSet(uid);
+        if (hidden.size > 0) query.senderId = { $nin: [...hidden] };
         const rows = await d.collection('messages')
           .find(query).sort({ _id: -1 }).limit(limit + 1).toArray();
         const hasMore = rows.length > limit;
@@ -3028,6 +3054,120 @@ Deno.serve(async (req: Request) => {
           createdAt: new Date(),
         });
         return ok({ reported: true });
+      }
+
+      // ── launch: community safety — reports, blocks, account deletion ──
+      case 'moderation.report': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kinds = ['post', 'message', 'user', 'book', 'club'];
+        const kind = kinds.includes(String(p.kind)) ? String(p.kind) : null;
+        if (!kind) return fail('What you are reporting is unclear');
+        const targetId = typeof p.targetId === 'string' ? p.targetId.slice(0, 64) : '';
+        if (!targetId) return fail('A target is required');
+        const reasons = ['spam', 'harassment', 'hate', 'violence', 'sexual',
+          'misinformation', 'copyright', 'self_harm', 'illegal', 'other'];
+        const reason = reasons.includes(String(p.reason)) ? String(p.reason) : 'other';
+        const details = typeof p.details === 'string'
+          ? p.details.trim().slice(0, 500) : '';
+        await (await dbFor('moderation')).collection('reports').insertOne({
+          reporterId: uid, kind, targetId, reason, details,
+          status: 'open', createdAt: new Date(),
+        });
+        return ok({ reported: true });
+      }
+
+      case 'dm.blocklist': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const rows = await (await dbFor('moderation')).collection('blocks')
+          .find({ userId: uid }).toArray();
+        return ok({ blocked: rows.map((r) => String(r.blockedId)) });
+      }
+
+      case 'dm.block': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const target = typeof p.peerId === 'string' ? p.peerId : '';
+        if (!target || target === uid) return fail('A valid reader is required');
+        await (await dbFor('moderation')).collection('blocks').updateOne(
+          { userId: uid, blockedId: target },
+          { $set: { userId: uid, blockedId: target, createdAt: new Date() } },
+          { upsert: true },
+        );
+        return ok({ blocked: true });
+      }
+
+      case 'dm.unblock': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const target = typeof p.peerId === 'string' ? p.peerId : '';
+        if (!target) return fail('A valid reader is required');
+        await (await dbFor('moderation')).collection('blocks').deleteOne(
+          { userId: uid, blockedId: target });
+        return ok({ blocked: false });
+      }
+
+      // Full account deletion: the reader's data goes, the auth user goes.
+      // Every delete is best-effort and continues even if one store is empty.
+      case 'account.delete': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const removed: Record<string, number> = {};
+        const counts = async (label: string, task: Promise<unknown>) => {
+          try {
+            const result = await task as { deletedCount?: number } | null;
+            removed[label] = result?.deletedCount ?? 0;
+          } catch (_) { removed[label] = 0; }
+        };
+        const booksDb = await dbFor('books');
+        const social = await dbFor('social');
+        const feed = await dbFor('feed');
+        const reviews = await dbFor('reviews');
+        const chats = await dbFor('chats');
+        const users = await dbFor('users');
+        const moderation = await dbFor('moderation');
+        // Chapters hang off the books — collect ids before the books go.
+        const owned = await booksDb.collection('books')
+          .find({ authorId: uid }, { projection: { _id: 1 } }).toArray();
+        const ownedIds = owned.map((b) => b._id);
+        await counts('books', booksDb.collection('books').deleteMany({ authorId: uid }));
+        if (ownedIds.length > 0) {
+          await counts('chapters', booksDb.collection('chapters')
+            .deleteMany({ bookId: { $in: ownedIds } }));
+        }
+        await counts('book_likes', social.collection('book_likes').deleteMany({ userId: uid }));
+        await counts('book_bookmarks', social.collection('book_bookmarks').deleteMany({ userId: uid }));
+        await counts('book_views', social.collection('book_views').deleteMany({ userId: uid }));
+        await counts('user_stats', social.collection('user_stats').deleteMany({ userId: uid }));
+        await counts('follows', social.collection('follows').deleteMany({ $or: [{ followerId: uid }, { followeeId: uid }] }));
+        await counts('post_likes', social.collection('post_likes').deleteMany({ userId: uid }));
+        await counts('posts', feed.collection('posts').deleteMany({ authorId: uid }));
+        await counts('post_views', feed.collection('post_views').deleteMany({ userId: uid }));
+        await counts('post_reshares', feed.collection('post_reshares').deleteMany({ userId: uid }));
+        await counts('post_comments', feed.collection('post_comments').deleteMany({ userId: uid }));
+        await counts('reviews', reviews.collection('reviews').deleteMany({ userId: uid }));
+        await counts('review_comments', reviews.collection('comments').deleteMany({ userId: uid }));
+        await counts('messages', chats.collection('messages').deleteMany({ senderId: uid }));
+        await counts('conversations', chats.collection('conversations').deleteMany({ memberIds: uid }));
+        await counts('gem_ledger', users.collection('gem_ledger').deleteMany({ userId: uid }));
+        await counts('blocks', moderation.collection('blocks').deleteMany({ $or: [{ userId: uid }, { blockedId: uid }] }));
+        await counts('reports', moderation.collection('reports').deleteMany({ reporterId: uid }));
+        // The profile row and the auth account itself.
+        let profileGone = false;
+        let authGone = false;
+        try {
+          const del = await serviceClient().from('profiles').delete().eq('id', uid);
+          profileGone = !del.error;
+        } catch (_) { profileGone = false; }
+        try {
+          const del = await serviceClient().auth.admin.deleteUser(uid);
+          authGone = !del.error;
+        } catch (_) { authGone = false; }
+        if (!profileGone || !authGone) {
+          return fail('Deletion could not finish — please try again in a moment');
+        }
+        return ok({ deleted: true, removed });
       }
 
       default:

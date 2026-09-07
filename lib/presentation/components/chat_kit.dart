@@ -127,6 +127,9 @@ class ChatBubble extends StatefulWidget {
   /// Swipe the bubble toward the center — replies to the message.
   final VoidCallback? onReply;
 
+  /// Report this message to the moderators.
+  final VoidCallback? onReport;
+
   const ChatBubble({
     super.key,
     required this.message,
@@ -144,6 +147,7 @@ class ChatBubble extends StatefulWidget {
     this.onDeleteForEveryone,
     this.onTranslate,
     this.onReply,
+    this.onReport,
   });
 
   @override
@@ -295,6 +299,16 @@ class _ChatBubbleState extends State<ChatBubble>
                 onTap: () {
                   Navigator.pop(sheetContext);
                   widget.onForward?.call();
+                },
+              ),
+            if (widget.onReport != null && canAct)
+              ListTile(
+                leading: const Icon(Icons.flag_rounded, color: Colors.redAccent),
+                title: const Text('Report message',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  widget.onReport?.call();
                 },
               ),
             if (widget.onInfo != null && canAct)

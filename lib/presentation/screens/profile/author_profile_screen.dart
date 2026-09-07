@@ -5,6 +5,7 @@ import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
+import '../../components/report_sheet.dart';
 
 /// Public author profile — any reader's page: avatar, follow, stats, works.
 class AuthorProfileScreen extends StatefulWidget {
@@ -24,6 +25,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
   bool _following = false;
   bool _followBusy = false;
   int _followerDelta = 0;
+  bool _blocked = false;
 
   String? get _viewerId => SupabaseService().auth.currentUser?.id;
   bool get _isMe => _viewerId == widget.userId;
@@ -32,6 +34,16 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
   void initState() {
     super.initState();
     _load();
+    _loadBlocked();
+  }
+
+  Future<void> _loadBlocked() async {
+    if (_isMe) return;
+    final res = await BackendApi.instance.call('dm.blocklist');
+    final blocked = res?['blocked'];
+    if (blocked is List && mounted) {
+      setState(() => _blocked = blocked.contains(widget.userId));
+    }
   }
 
   Future<void> _load() async {
@@ -102,6 +114,57 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
         elevation: 0,
         title: Text(_name,
             style: const TextStyle(fontWeight: FontWeight.w800)),
+        actions: [
+          if (!_isMe && !_loading)
+            PopupMenuButton<String>(
+              tooltip: 'More options',
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              icon: const Icon(Icons.more_vert_rounded),
+              onSelected: (value) async {
+                if (value == 'report') {
+                  await showReportSheet(context,
+                      kind: ReportTargetKind.user,
+                      targetId: widget.userId,
+                      hintName: _name);
+                }
+                if (value == 'block') {
+                  await confirmBlock(
+                    context,
+                    peerId: widget.userId,
+                    peerName: _name,
+                    currentlyBlocked: _blocked,
+                  );
+                  if (mounted) {
+                    setState(() => _blocked = !_blocked);
+                  }
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'report',
+                  child: Row(children: [
+                    Icon(Icons.flag_rounded,
+                        color: Colors.redAccent, size: 19),
+                    SizedBox(width: 10),
+                    Text('Report profile'),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'block',
+                  child: Row(children: [
+                    Icon(
+                        _blocked
+                            ? Icons.lock_open_rounded
+                            : Icons.block_rounded,
+                        size: 19),
+                    SizedBox(width: 10),
+                    Text(_blocked ? 'Unblock reader' : 'Block reader'),
+                  ]),
+                ),
+              ],
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),

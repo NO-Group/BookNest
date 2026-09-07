@@ -471,7 +471,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 14),
+        Text(
+          'By creating an account you agree to our Terms of Service and '
+          'Privacy Policy.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 12, color: theme.hintColor, height: 1.4),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: () => context.push('/terms'),
+              child: const Text(
+                'Terms of Service',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: BookNestColors.cyan,
+                    fontWeight: FontWeight.w700),
+              ),
+            ),
+            Text('  ·  ', style: TextStyle(color: theme.hintColor)),
+            GestureDetector(
+              onTap: () => context.push('/privacy'),
+              child: const Text(
+                'Privacy Policy',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: BookNestColors.cyan,
+                    fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
