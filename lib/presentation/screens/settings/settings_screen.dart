@@ -24,6 +24,7 @@ import '../../../config/app_state.dart';
 import '../../../config/app_config.dart';
 import '../../../config/theme.dart';
 import '../../../services/notification_service.dart';
+import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
 /// Settings — appearance (theme switcher), account shortcuts, support pages.
