@@ -147,9 +147,12 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => FutureBuilder<Map<String, dynamic>?>(
         future: BackendApi.instance
             .fetchBook(state.pathParameters['id'] ?? '')
-            .then((res) => res is Map && res['book'] is Map
-                ? Map<String, dynamic>.from(res['book'] as Map)
-                : null),
+            .then((res) {
+              final book = res?['book'];
+              return book is Map
+                  ? Map<String, dynamic>.from(book)
+                  : null;
+            }),
         builder: (context, snap) {
           final book = snap.data;
           if (book == null) {

@@ -923,7 +923,7 @@ class _VideoContentState extends State<_VideoContent> {
                   Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.movie_off_rounded,
+                      const Icon(Icons.videocam_off_rounded,
                           color: Colors.white54, size: 30),
                       const SizedBox(height: 6),
                       Text('Video unavailable',
@@ -1901,6 +1901,11 @@ class ChatComposer extends StatefulWidget {
   /// Any file format — invoked from the paperclip's "File" option.
   final Future<void> Function(String filename, Uint8List bytes)? onSendFile;
 
+  /// The message being replied to — shown as a quote strip above the
+  /// input, cleared by [onCancelReply].
+  final Map<String, dynamic>? replyTo;
+  final VoidCallback? onCancelReply;
+
   /// A clip recorded in the BookNest camera (local file path), with
   /// duration in seconds.
   final Future<void> Function(String videoPath, int seconds)? onSendVideo;
@@ -1919,6 +1924,8 @@ class ChatComposer extends StatefulWidget {
     this.onSendEmote,
     this.hint = 'Message…',
     this.enabled = true,
+    this.replyTo,
+    this.onCancelReply,
   });
 
   @override

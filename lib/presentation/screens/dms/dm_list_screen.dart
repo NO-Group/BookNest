@@ -183,7 +183,7 @@ class _DMListScreenState extends State<DMListScreen> {
             const SizedBox(height: 8),
             Expanded(
               child: _loading
-                  ? const Center(
+                  ? Center(
                       child: BookNestLoader(size: 44))
                   : RefreshIndicator(
                       color: BookNestColors.cyan,
@@ -298,9 +298,9 @@ class _DMListScreenState extends State<DMListScreen> {
           future: _directory,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(
+              return Center(
                   child: Padding(
-                padding: EdgeInsets.all(28),
+                padding: const EdgeInsets.all(28),
                 child: BookNestLoader(size: 44),
               ));
             }

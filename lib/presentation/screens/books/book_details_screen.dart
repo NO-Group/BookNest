@@ -295,7 +295,8 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                 _RoundAction(icon: _liked ? Icons.favorite : Icons.favorite_border, selected: _liked, label: 'Like', onTap: () => _guard(_liked ? 'Like removed.' : 'You liked this book.', _toggleLike)),
               ]),
               const SizedBox(height: 12),
-              if ($mine_expr)
+              if (book['added_by']?.toString().isNotEmpty == true &&
+                  book['added_by'].toString() == _viewerId)
                 Row(children: [
                   Expanded(
                     child: OutlinedButton.icon(

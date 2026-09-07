@@ -392,7 +392,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
     try {
       final res = await BackendApi.instance.call('books.chapters',
           {'bookId': bookId});
-      final chapters = res is Map ? res['chapters'] : null;
+      final chapters = res?['chapters'];
       if (chapters is List) {
         _chapters.clear();
         for (final raw in chapters) {
@@ -931,21 +931,15 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                     fontWeight: FontWeight.w600),
               ),
               const Spacer(),
-              Text(
-                ValueListenableBuilder<int>(
-                  valueListenable: _words,
-                  builder: (context, words, _) => Text(
-                    '$words words in the book',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: BookNestColors.cyan,
-                        fontWeight: FontWeight.w700),
-                  ),
+              ValueListenableBuilder<int>(
+                valueListenable: _words,
+                builder: (context, words, _) => Text(
+                  '$words words in the book',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      color: BookNestColors.cyan,
+                      fontWeight: FontWeight.w700),
                 ),
-                style: TextStyle(
-                    fontSize: 12,
-                    color: BookNestColors.cyan,
-                    fontWeight: FontWeight.w700),
               ),
             ],
           ),
