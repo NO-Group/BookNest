@@ -209,12 +209,14 @@ class BackendApi {
     int? fileSize,
     bool forwarded = false,
     bool animated = false,
+    String? replyToId,
   }) =>
       call('dm.send', <String, dynamic>{
         if (conversationId != null) 'conversationId': conversationId,
         if (peerId != null) 'peerId': peerId,
         'type': type,
         'text': text,
+        if (replyToId != null) 'replyToId': replyToId,
         if (bookId != null) 'bookId': bookId,
         if (bookTitle != null) 'bookTitle': bookTitle,
         if (mediaUrl != null) 'mediaUrl': mediaUrl,
@@ -247,11 +249,13 @@ class BackendApi {
     int? fileSize,
     bool forwarded = false,
     bool animated = false,
+    String? replyToId,
   }) =>
       call('chat.send', <String, dynamic>{
         'conversationId': conversationId,
         'type': type,
         'text': text,
+        if (replyToId != null) 'replyToId': replyToId,
         if (mediaUrl != null) 'mediaUrl': mediaUrl,
         if (fileName != null) 'fileName': fileName,
         if (fileSize != null) 'fileSize': fileSize,

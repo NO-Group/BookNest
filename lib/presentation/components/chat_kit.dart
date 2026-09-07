@@ -3,9 +3,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../config/theme.dart';
 import '../../config/locales.dart';
@@ -122,6 +124,9 @@ class ChatBubble extends StatefulWidget {
   /// language.
   final VoidCallback? onTranslate;
 
+  /// Swipe the bubble toward the center — replies to the message.
+  final VoidCallback? onReply;
+
   const ChatBubble({
     super.key,
     required this.message,
@@ -138,6 +143,7 @@ class ChatBubble extends StatefulWidget {
     this.onDeleteForMe,
     this.onDeleteForEveryone,
     this.onTranslate,
+    this.onReply,
   });
 
   @override
@@ -218,6 +224,29 @@ class _ChatBubbleState extends State<ChatBubble>
     final raw = widget.message['reactions'];
     if (raw is! Map) return false;
     return raw[widget.viewerId]?.toString() == code;
+  }
+
+  // ── Swipe-to-reply ──────────────────────────────────────────────────
+  double _swipe = 0;
+
+  /// +1 for bubbles on the left (drag right), −1 for mine (drag left).
+  double get _swipeDir => widget.mine ? -1 : 1;
+
+  void _onSwipeUpdate(DragUpdateDetails d) {
+    if (widget.onReply == null) return;
+    setState(() {
+      final next = _swipe + d.delta.dx * _swipeDir;
+      _swipe = next.clamp(0.0, 88.0);
+    });
+  }
+
+  void _onSwipeEnd(DragEndDetails d) {
+    if (widget.onReply == null) return;
+    if (_swipe >= 56) {
+      HapticFeedback.mediumImpact();
+      widget.onReply!();
+    }
+    setState(() => _swipe = 0);
   }
 
   void _fireBurst() {
@@ -359,6 +388,11 @@ class _ChatBubbleState extends State<ChatBubble>
         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
         child: BookNestEmojiView(_text, size: 72, animate: true),
       );
+    } else if (_type == 'video' &&
+        _mediaUrl.startsWith('http') &&
+        !_deletedForEveryone) {
+      // Our own player — videos play right inside the chat.
+      content = _VideoContent(url: _mediaUrl, dark: dark);
     } else if (_type == 'image' &&
         _mediaUrl.startsWith('http') &&
         !_deletedForEveryone) {
@@ -403,7 +437,7 @@ class _ChatBubbleState extends State<ChatBubble>
       ),
       padding: (_type == 'book_share' || _type == 'file')
           ? const EdgeInsets.all(10)
-          : (_type == 'image'
+          : (_type == 'image' || _type == 'video'
               ? const EdgeInsets.all(4)
               : const EdgeInsets.fromLTRB(13, 8, 13, 6)),
       constraints:
@@ -557,11 +591,21 @@ class _ChatBubbleState extends State<ChatBubble>
     final reactions = _reactionCounts;
     final hasReactions = reactions.isNotEmpty && !_deletedForEveryone;
 
+    final replyStrip = widget.message['replyTo'] is Map
+        ? _ReplyStrip(
+            replyTo: widget.message['replyTo'] as Map,
+            mine: mine,
+            dark: dark,
+          )
+        : null;
+
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Listener(
         onPointerUp: (_) => _countTap(),
         child: GestureDetector(
+        onHorizontalDragUpdate: widget.onReply != null ? _onSwipeUpdate : null,
+        onHorizontalDragEnd: widget.onReply != null ? _onSwipeEnd : null,
         onLongPress: _showToolkit,
         child: Stack(
           children: [
@@ -569,7 +613,11 @@ class _ChatBubbleState extends State<ChatBubble>
               crossAxisAlignment:
                   mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                bubbleStack,
+                if (replyStrip != null) replyStrip,
+                Transform.translate(
+                  offset: Offset(_swipe * _swipeDir, 0),
+                  child: bubbleStack,
+                ),
                 if (hasReactions)
                   Padding(
                     padding:
@@ -628,6 +676,36 @@ class _ChatBubbleState extends State<ChatBubble>
                   ),
               ],
             ),
+            // Reply arrow revealed by the swipe.
+            if (_swipe > 6)
+              Positioned(
+                top: 0,
+                bottom: 0,
+                left: mine ? 0 : null,
+                right: mine ? null : 0,
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: (_swipe / 56).clamp(0.0, 1.0),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: BookNestColors.cyan.withOpacity(.16),
+                        border: Border.all(
+                            color: BookNestColors.cyan.withOpacity(.5)),
+                      ),
+                      child: Icon(
+                        mine
+                            ? Icons.reply_rounded
+                            : Icons.shortcut_rounded,
+                        color: BookNestColors.cyan,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             // Double-tap love burst.
             Positioned.fill(
               child: IgnorePointer(
@@ -649,6 +727,398 @@ class _ChatBubbleState extends State<ChatBubble>
           ],
         ),
       ),
+      ),
+    );
+  }
+}
+
+/// Reply preview pinned above the input while composing.
+class _ComposerReplyBar extends StatelessWidget {
+  final Map<String, dynamic> message;
+  final VoidCallback? onCancel;
+  final bool dark;
+  const _ComposerReplyBar(
+      {required this.message, required this.dark, this.onCancel});
+
+  @override
+  Widget build(BuildContext context) {
+    final type = message['type']?.toString() ?? 'text';
+    final preview = switch (type) {
+      'image' => '📷 Photo',
+      'video' => '🎬 Video',
+      'voice' => '🎤 Voice message',
+      'file' => message['fileName']?.toString() ?? 'File',
+      'emoji' => 'BookNest emote',
+      'book_share' => message['bookTitle']?.toString() ?? 'Book',
+      _ => message['text']?.toString() ?? '',
+    };
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: dark
+            ? Colors.white.withOpacity(.06)
+            : BookNestColors.navyDeep.withOpacity(.05),
+        border: const Border(
+            left: BorderSide(color: BookNestColors.cyan, width: 3)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Replying',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: BookNestColors.cyan)),
+                const SizedBox(height: 2),
+                Text(
+                  preview.isEmpty ? 'Message' : preview,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: dark
+                          ? Colors.white.withOpacity(.75)
+                          : BookNestColors.navyDeep.withOpacity(.75)),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 18),
+            color: dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.55),
+            onPressed: onCancel,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The quoted strip shown above a reply — who answered what.
+class _ReplyStrip extends StatelessWidget {
+  final Map<dynamic, dynamic> replyTo;
+  final bool mine;
+  final bool dark;
+  const _ReplyStrip(
+      {required this.replyTo, required this.mine, required this.dark});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = replyTo['text']?.toString() ?? '';
+    return Container(
+      margin: EdgeInsets.only(
+          bottom: 2, left: mine ? 48 : 2, right: mine ? 2 : 48),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: dark
+            ? Colors.white.withOpacity(.05)
+            : BookNestColors.navyDeep.withOpacity(.05),
+        border: Border(
+          left: BorderSide(
+              color: BookNestColors.cyan, width: 2.5),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.reply_rounded,
+              size: 13,
+              color: BookNestColors.cyan.withOpacity(.9)),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              text.isEmpty ? 'Media message' : text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontStyle: FontStyle.italic,
+                color: dark
+                    ? Colors.white.withOpacity(.65)
+                    : BookNestColors.navyDeep.withOpacity(.65),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// BookNest's own in-chat video player: tap to play and pause, a
+/// scrubber, mute, and an in-app fullscreen theater. Videos never leave
+/// the app.
+class _VideoContent extends StatefulWidget {
+  final String url;
+  final bool dark;
+  const _VideoContent({required this.url, required this.dark});
+  @override
+  State<_VideoContent> createState() => _VideoContentState();
+}
+
+class _VideoContentState extends State<_VideoContent> {
+  late final VideoPlayerController _controller;
+  bool _ready = false;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize().then((_) {
+        if (!mounted) return;
+        setState(() => _ready = true);
+      }).catchError((_) {
+        if (mounted) setState(() => _failed = true);
+      });
+    _controller.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = (MediaQuery.sizeOf(context).width * .72)
+        .clamp(220.0, 340.0);
+    final aspect = _ready && _controller.value.aspectRatio > 0
+        ? _controller.value.aspectRatio
+        : 16 / 9;
+    return GestureDetector(
+      onTap: () {
+        if (!_ready) return;
+        setState(() {
+          _controller.value.isPlaying
+              ? _controller.pause()
+              : _controller.play();
+        });
+      },
+      onDoubleTap: _ready
+          ? () => _openFullscreen(context)
+          : null,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: width,
+          color: BookNestColors.navyDeep,
+          child: AspectRatio(
+            aspectRatio: aspect,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (_ready)
+                  VideoPlayer(_controller)
+                else if (_failed)
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.movie_off_rounded,
+                          color: Colors.white54, size: 30),
+                      const SizedBox(height: 6),
+                      Text('Video unavailable',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withOpacity(.7))),
+                      const SizedBox(height: 14),
+                    ],
+                  )
+                else
+                  const SizedBox(
+                    width: 26,
+                    height: 26,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: BookNestColors.cyan),
+                  ),
+                if (_ready && !_controller.value.isPlaying)
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: BookNestColors.navyDeep.withOpacity(.55),
+                    ),
+                    padding: const EdgeInsets.all(12),
+                    child: const Icon(Icons.play_arrow_rounded,
+                        color: Colors.white, size: 34),
+                  ),
+                if (_ready)
+                  Positioned(
+                    left: 10,
+                    right: 10,
+                    bottom: 8,
+                    child: Row(
+                      children: [
+                        ValueListenableBuilder<VideoPlayerValue>(
+                          valueListenable: _controller,
+                          builder: (context, value, _) => Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(2),
+                              child: LinearProgressIndicator(
+                                value: value.duration.inMilliseconds == 0
+                                    ? 0
+                                    : value.position.inMilliseconds /
+                                        value.duration.inMilliseconds,
+                                minHeight: 3.5,
+                                backgroundColor: Colors.white24,
+                                valueColor: const AlwaysStoppedAnimation(
+                                    BookNestColors.cyan),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () => setState(() {
+                            _controller.value.volume > 0
+                                ? _controller.setVolume(0)
+                                : _controller.setVolume(1);
+                          }),
+                          child: Icon(
+                            _controller.value.volume > 0
+                                ? Icons.volume_up_rounded
+                                : Icons.volume_off_rounded,
+                            color: Colors.white.withOpacity(.85),
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () => _openFullscreen(context),
+                          child: const Icon(Icons.fullscreen_rounded,
+                              color: Colors.white, size: 20),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openFullscreen(BuildContext context) {
+    if (!_ready) return;
+    Navigator.of(context).push(PageRouteBuilder<void>(
+      opaque: false,
+      barrierColor: Colors.black,
+      pageBuilder: (_, __, ___) => _VideoFullscreen(controller: _controller),
+    ));
+  }
+}
+
+/// In-app fullscreen theater for chat videos — never an external app.
+class _VideoFullscreen extends StatefulWidget {
+  final VideoPlayerController controller;
+  const _VideoFullscreen({required this.controller});
+  @override
+  State<_VideoFullscreen> createState() => _VideoFullscreenState();
+}
+
+class _VideoFullscreenState extends State<_VideoFullscreen> {
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    widget.controller.play();
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Center(
+              child: AspectRatio(
+                aspectRatio: widget.controller.value.aspectRatio == 0
+                    ? 16 / 9
+                    : widget.controller.value.aspectRatio,
+                child: VideoPlayer(widget.controller),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              left: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close_rounded,
+                    color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 24,
+              child: Row(
+                children: [
+                  ValueListenableBuilder<VideoPlayerValue>(
+                    valueListenable: widget.controller,
+                    builder: (context, value, _) {
+                      final total = value.duration.inSeconds;
+                      final pos = value.position.inSeconds;
+                      return Expanded(
+                        child: Row(
+                          children: [
+                            Text('$pos:$total'.replaceAllMapped(
+                                RegExp(r'^(\d+):(\d+)$'), (m) =>
+                                    '${m[1]!.padLeft(2, '0')}:${m[2]!.padLeft(2, '0')}'),
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 12)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: VideoProgressIndicator(
+                                widget.controller,
+                                allowScrubbing: true,
+                                colors: const VideoProgressColors(
+                                  playedColor: BookNestColors.cyan,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 10),
+                  IconButton(
+                    icon: ValueListenableBuilder<VideoPlayerValue>(
+                      valueListenable: widget.controller,
+                      builder: (context, value, _) => Icon(
+                        value.isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        color: Colors.white,
+                      ),
+                    ),
+                    onPressed: () => setState(() {
+                      widget.controller.value.isPlaying
+                          ? widget.controller.pause()
+                          : widget.controller.play();
+                    }),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1683,6 +2153,12 @@ class _ChatComposerState extends State<ChatComposer> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (widget.replyTo != null)
+              _ComposerReplyBar(
+                message: widget.replyTo!,
+                onCancel: widget.onCancelReply,
+                dark: dark,
+              ),
             if (_emotesOpen && keyboardOn)
               BookNestKeyboard(
                 preferredLanguage:

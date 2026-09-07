@@ -36,6 +36,8 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  Map<String, dynamic>? _replyTo;
+
   final ScrollController _scroll = ScrollController();
 
   String? _conversationId;
@@ -163,9 +165,15 @@ class _ChatScreenState extends State<ChatScreen> {
           'pending': true,
         }));
     _jumpToBottom();
+    final replying = _replyTo;
+    if (mounted) setState(() => _replyTo = null);
     final res = await BackendApi.instance.sendClubMessage(
       conversationId: conversationId,
       text: text,
+      replyToId:
+          replying != null && !replying['id'].toString().startsWith('local-')
+              ? replying['id'].toString()
+              : null,
     );
     if (!mounted) return;
     if (res == null) {
@@ -510,6 +518,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                               _reactToMessage(
                                                   message['id']?.toString() ?? '',
                                                   code),
+                                          onReply: () => setState(
+                                              () => _replyTo = message),
                                           onForward: () =>
                                               _forwardMessage(message),
                                           onInfo: () => showMessageInfo(
@@ -537,6 +547,8 @@ class _ChatScreenState extends State<ChatScreen> {
                             onSendFile: _sendFile,
                             onSendEmote: _sendEmote,
                             hint: 'Message ${widget.title}…',
+                            replyTo: _replyTo,
+                            onCancelReply: () => setState(() => _replyTo = null),
                           ),
                         ],
                       ),

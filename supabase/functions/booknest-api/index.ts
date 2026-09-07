@@ -499,6 +499,7 @@ function messageView(m: MsgRow) {
     forwarded: m.forwarded === true,
     animated: m.animated === true,
     reactions: (m.reactions ?? {}) as Record<string, string>,
+    replyTo: (m.replyTo ?? null) as Record<string, string> | null,
     deletedFor: (m.deletedFor ?? []) as string[],
     deletedForEveryone: m.deletedForEveryone === true,
     readBy: (m.readBy ?? []) as string[],
@@ -510,6 +511,26 @@ async function loadMessage(messageId: string): Promise<MsgRow | null> {
   if (!isHexId(messageId)) return null;
   return (await dbFor('chats')).collection('messages')
     .findOne({ _id: new ObjectId(messageId) }) as Promise<MsgRow | null>;
+}
+
+/** Resolves a quoted message into the lightweight reply preview. */
+async function buildReplyPreview(
+  conversationId: string, replyToId: string,
+): Promise<Record<string, string> | null> {
+  if (!isHexId(replyToId)) return null;
+  const src = await (await dbFor('chats')).collection('messages')
+    .findOne({ _id: new ObjectId(replyToId), conversationId: new ObjectId(conversationId) } as unknown as Record<string, unknown>) as MsgRow | null;
+  if (!src) return null;
+  return {
+    id: String(src._id),
+    senderId: String(src.senderId),
+    type: String(src.type),
+    text: String(src.text ?? (src.type === 'image' ? 'Photo' :
+      src.type === 'video' ? 'Video' : src.type === 'file' ?
+      String(src.fileName ?? 'File') : src.type === 'emoji' ? 'Emote' :
+      src.type === 'voice' ? 'Voice message' : src.type === 'book_share' ?
+      String(src.bookTitle ?? 'Book') : 'Message')).slice(0, 160),
+  };
 }
 
 async function applyReaction(uid: string, messageId: string, emoji: string, isMember: () => Promise<boolean>) {
@@ -1879,6 +1900,9 @@ Deno.serve(async (req: Request) => {
         }
 
         const now = new Date();
+        const replyTo = typeof p.replyToId === 'string'
+          ? await buildReplyPreview(conversationId, p.replyToId)
+          : null;
         const message = {
           conversationId,
           senderId: uid,
@@ -1892,6 +1916,7 @@ Deno.serve(async (req: Request) => {
           forwarded: p.forwarded === true,
           animated: type === 'emoji' && p.animated === true,
           reactions: {},
+          replyTo,
           deletedFor: [],
           deletedForEveryone: false,
           readBy: [uid],
@@ -2014,6 +2039,9 @@ Deno.serve(async (req: Request) => {
           ? Math.max(0, Math.round(Number(p.fileSize)))
           : null;
         const now = new Date();
+        const replyTo = typeof p.replyToId === 'string'
+          ? await buildReplyPreview(conversationId, p.replyToId)
+          : null;
         const message = {
           conversationId,
           senderId: uid,
@@ -2025,6 +2053,7 @@ Deno.serve(async (req: Request) => {
           forwarded: p.forwarded === true,
           animated: type === 'emoji' && p.animated === true,
           reactions: {},
+          replyTo,
           deletedFor: [],
           deletedForEveryone: false,
           readBy: [uid],

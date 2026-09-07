@@ -34,6 +34,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
   String? _conversationId;
   Map<String, dynamic>? _peer;
   List<Map<String, dynamic>> _messages = [];
+  Map<String, dynamic>? _replyTo;
   Timer? _poll;
   bool _loading = true;
   bool _cloudOfflineAnnounced = false;
@@ -149,12 +150,18 @@ class _DMChatScreenState extends State<DMChatScreen> {
         }));
     _jumpToBottom();
 
+    final replying = _replyTo;
     final res = await BackendApi.instance.sendMessage(
       conversationId: _conversationId,
       peerId: widget.peerId,
       type: 'text',
       text: text,
+      replyToId:
+          replying != null && !replying['id'].toString().startsWith('local-')
+              ? replying['id'].toString()
+              : null,
     );
+    if (mounted) setState(() => _replyTo = null);
     if (!mounted) return;
     if (res == null) {
       _markLocal(localId, failed: true);
@@ -531,6 +538,8 @@ class _DMChatScreenState extends State<DMChatScreen> {
                                     forEveryone: true),
                                 onTranslate: () =>
                                     _translateMessage(message),
+                                onReply: () =>
+                                    setState(() => _replyTo = message),
                               );
                             },
                           ),
@@ -541,6 +550,8 @@ class _DMChatScreenState extends State<DMChatScreen> {
               onSendImage: _sendImage,
               onSendFile: _sendFile,
               onSendEmote: _sendEmote,
+              replyTo: _replyTo,
+              onCancelReply: () => setState(() => _replyTo = null),
             ),
           ],
         ),
