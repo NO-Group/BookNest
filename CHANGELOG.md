@@ -1,5 +1,46 @@
 # Changelog
 
+## 2.4.0+16 — 2026-09-07
+
+- **The studio never freezes again**: typing is butter-smooth — word counts
+  tick on their own beat instead of redrawing the whole editor per letter.
+- **Book IDs**: every book gets a unique, unstealable ID. Publish the same
+  ID with the same title and BookNest turns it into the next part of a
+  series automatically — with series marks on the book page.
+- **Drafts**: save a work-in-progress any time; drafts show on your writer
+  dashboard and publish when you are ready. Published books can go back to
+  draft too.
+- **Edit published books**: open any of your books from the dashboard and
+  polish details or units — changes go live when you press Save.
+- **Remix and sequel**: start from any published book — every chapter is
+  carried into your draft, the remix/sequel mark and original credit
+  travel with it, and +10 gems land in your wallet.
+- **The camera, upgraded**: photo and video modes (with sound), more
+  lenses via flip, the zoom slider, and twelve designed filters — all
+  inside BookNest, never the phone's camera app.
+- **Videos play in chat**: our own player — tap to play, scrubber, mute,
+  fullscreen theater. Record with sound straight from the attachment sheet.
+- **Swipe to reply**: drag any bubble toward the center and the reply
+  arrow answers; quotes show above the message and above the input.
+- **Reactions land instantly** (and roll back honestly if the network
+  says no).
+- **Emotes, reborn**: every BookNest emote is alive now — soft idle bob,
+  blinks, glossy sphere shading, ground shadows. The keyboard animates
+  them all.
+- **Posts**: view counts, comment threads in a sheet, and one-tap
+  reshares — right on the card.
+- **Gems are real**: the wallet shows the full earning and spending
+  ledger, and 20 gems boost your book to the top of Discover for three
+  days.
+- **The BookNest loader**: an opening-book spinner now waits on the feed,
+  shelves and chats — no more generic spinners.
+- **Super-fast screens**: feeds, shelves and inboxes answer from a
+  60-second cache that any write refreshes; pull-to-refresh always
+  reaches the network.
+- **Premium reader**: four reading papers (Night, Paper, Sepia, Ink),
+  text size and spacing that remember themselves, and unit words that
+  follow the author's own vocabulary.
+
 ## 2.3.0+15 — 2026-09-06
 
 - **The keyboard grows up (SwiftKey model).** A toolbar with translator

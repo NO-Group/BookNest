@@ -48,11 +48,21 @@ class _WalletScreenState extends State<WalletScreen> {
       });
       return;
     }
-    setState(() {
-      _gems = (res['gems'] as num?)?.toInt() ?? 0;
-      _ledger = ((res['ledger'] as List?) ?? const [])
+    var rows = ((res['ledger'] as List?) ?? const [])
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    // The full ledger (publish, remix and boost movements included),
+    // newest first — the claim response only carries the daily tail.
+    final hist = await BackendApi.instance.call('wallet.history');
+    if (mounted && hist is Map && hist['history'] is List) {
+      rows = ((hist['history'] as List?) ?? const [])
           .map((row) => Map<String, dynamic>.from(row as Map))
           .toList();
+    }
+    if (!mounted) return;
+    setState(() {
+      _gems = (res['gems'] as num?)?.toInt() ?? 0;
+      _ledger = rows;
       _loading = false;
     });
   }

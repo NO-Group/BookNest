@@ -752,6 +752,22 @@ Deno.serve(async (req: Request) => {
 
       // Spend gems for real value: boosting a book pins it to the top of
       // its shelves for 3 days. Balance and ledger enforced server-side.
+      // The gem ledger, newest first — earning and spending in the open.
+      case 'wallet.history': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const col = dbFor('users').collection('gem_ledger');
+        const rows = await col.find({ userId: uid })
+          .sort({ createdAt: -1 }).limit(30).toArray();
+        return ok({
+          history: rows.map((r) => ({
+            delta: Number(r.delta ?? 0),
+            reason: String(r.reason ?? ''),
+            createdAt: r.createdAt,
+          })),
+        });
+      }
+
       case 'gems.spend': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
