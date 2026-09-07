@@ -417,6 +417,15 @@ function bookView(b: Record<string, unknown>) {
     average_rating:
       reviewCount > 0 ? Math.round((ratingSum / reviewCount) * 10) / 10 : 0,
     created_at: b.createdAt ?? null,
+    status: b.status ?? 'published',
+    book_code: b.bookCode ?? null,
+    unit_type: b.unitType ?? 'chapter',
+    part_number: Number(b.partNumber ?? 1),
+    sequel_of: b.sequelOf ?? null,
+    sequel_root: b.sequelRoot ?? null,
+    remix_of: b.remixOf ?? null,
+    is_remix: b.isRemix === true,
+    boosted_until: b.boostUntil ?? null,
   };
 }
 
@@ -710,17 +719,39 @@ Deno.serve(async (req: Request) => {
         const col = dbFor('users').collection('gem_ledger');
         const day = todayUtc();
         const existing = await col.findOne({ userId: uid, reason: 'daily', day });
+        if (existing) {
+          const prof = await serviceClient().from('profiles')
+            .select('gems').eq('id', uid).single();
+          return ok({ granted: false, gems: prof.error ? 0 : Number(prof.data?.gems ?? 0) });
+        }
+        const gems = await grantGems(uid, 5, 'daily', day);
+        return ok({ granted: true, gems });
+      }
+
+      // Spend gems for real value: boosting a book pins it to the top of
+      // its shelves for 3 days. Balance and ledger enforced server-side.
+      case 'gems.spend': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? '');
+        if (kind !== 'boost_book') return fail('Unknown spend kind');
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
+        const d = await dbFor('books');
+        const book = await d.collection('books')
+          .findOne({ _id: bookOid(String(p.bookId)) }, { projection: { authorId: 1 } });
+        if (!book) return fail('Book not found', 404);
+        if (book.authorId !== uid) return fail('Only the author can boost this book', 403);
         const prof = await serviceClient().from('profiles')
           .select('gems').eq('id', uid).single();
-        const current = prof.error ? 0 : Number(prof.data?.gems ?? 0);
-        if (existing) return ok({ granted: false, gems: current });
-        await col.insertOne({
-          userId: uid, delta: 5, reason: 'daily', day,
-          createdAt: new Date(),
-        });
-        const gems = current + 5;
-        await serviceClient().from('profiles').update({ gems }).eq('id', uid);
-        return ok({ granted: true, gems });
+        const balance = prof.error ? 0 : Number(prof.data?.gems ?? 0);
+        if (balance < 20) return fail('You need 20 gems to boost — claim your daily gems first.');
+        const gems = await grantGems(uid, -20, 'boost_book');
+        const until = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+        await d.collection('books').updateOne(
+          { _id: book._id as unknown as ObjectId },
+          { $set: { boostUntil: until, updatedAt: new Date() } },
+        );
+        return ok({ gems, boostedUntil: until });
       }
 
       // ── Jenny: the AI reading companion (JENNY_API_KEY edge secret) ──────
@@ -798,11 +829,75 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── books: draft + chapter append (editor flow, Mongo-first) ─────────
+      // ── gems: one honest ledger. Balance lives in profiles, history in Mongo.
+      async function grantGems(uid: string, delta: number, reason: string, day: string | null = null) {
+        const prof = await serviceClient().from('profiles')
+          .select('gems').eq('id', uid).single();
+        const current = prof.error ? 0 : Math.max(0, Number(prof.data?.gems ?? 0));
+        const next = Math.max(0, current + delta);
+        await serviceClient().from('profiles').update({ gems: next }).eq('id', uid);
+        await (await dbFor('users')).collection('gem_ledger').insertOne({
+          userId: uid, delta, reason, day,
+          createdAt: new Date(),
+        });
+        return next;
+      }
+
+      // ── book identity: unique Book IDs, drafts, sequels, units ───────────
+      const UNIT_TYPES = ['chapter', 'part', 'act', 'episode', 'volume'];
+
+      function cleanBookCode(raw: unknown): string | null {
+        if (typeof raw !== 'string') return null;
+        const code = raw.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
+        return code.length >= 3 && code.length <= 24 ? code : null;
+      }
+
+      /** Resolves the Book ID: rejects stolen codes, chains sequels for the
+       *  same author+code+title, and returns the fields to store. Throws
+       *  an error message when the code is taken. */
+      async function resolveBookIdentity(
+        uid: string,
+        bookCode: string,
+        title: string,
+      ): Promise<{ sequelOf: string | null; sequelRoot: string | null; partNumber: number }> {
+        const d = await dbFor('books');
+        const existing = await d.collection('books')
+          .find({ bookCode }, { projection: {
+            _id: 1, authorId: 1, title: 1, partNumber: 1, sequelRoot: 1,
+          } })
+          .sort({ partNumber: -1 }).limit(1).toArray();
+        if (existing.length === 0) {
+          return { sequelOf: null, sequelRoot: null, partNumber: 1 };
+        }
+        const last = existing[0];
+        if (String(last.authorId) !== uid) {
+          throw new Error('That Book ID is already used by another author — choose another.');
+        }
+        const sameStory = String(last.title).trim().toLowerCase() === title.trim().toLowerCase();
+        if (!sameStory) {
+          throw new Error('That Book ID belongs to “' + String(last.title) + '” — same ID + same title makes a sequel. Rename this book or pick a new ID.');
+        }
+        const root = last.sequelRoot ?? String(last._id);
+        return {
+          sequelOf: String(last._id),
+          sequelRoot: root,
+          partNumber: Number(last.partNumber ?? 1) + 1,
+        };
+      }
+
       case 'books.createDraft': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         const title = String(p.title ?? '').trim();
         if (title.length < 2 || title.length > 200) return fail('Title must be 2–200 characters');
+        const bookCode = cleanBookCode(p.bookCode);
+        if (!bookCode) return fail('A Book ID of 3–24 letters, numbers or dashes is required');
+        let identity;
+        try {
+          identity = await resolveBookIdentity(uid, bookCode, title);
+        } catch (e) {
+          return fail(e instanceof Error ? e.message : 'Could not use that Book ID');
+        }
         const now = new Date();
         const prof = await serviceClient().from('profiles')
           .select('username,display_name').eq('id', uid).maybeSingle();
@@ -823,13 +918,20 @@ Deno.serve(async (req: Request) => {
           bannerUrl: typeof p.bannerUrl === 'string' && p.bannerUrl.startsWith('http') ? p.bannerUrl : null,
           contentFormat: 'quill',
           moderationStatus: 'approved',
+          status: 'draft',
+          bookCode,
+          unitType: UNIT_TYPES.includes(String(p.unitType)) ? String(p.unitType) : 'chapter',
+          partNumber: identity.partNumber,
+          sequelOf: identity.sequelOf,
+          sequelRoot: identity.sequelRoot,
+          isRemix: false,
           clubId: typeof p.clubId === 'string' && p.clubId ? p.clubId : null,
           chaptersCount: 0,
           likeCount: 0, bookmarkCount: 0, viewCount: 0, reviewCount: 0, ratingSum: 0,
           createdAt: now, updatedAt: now,
         };
         await (await dbFor('books')).collection('books').insertOne(doc);
-        return ok({ id: doc._id });
+        return ok({ id: doc._id, partNumber: identity.partNumber });
       }
 
       case 'books.addChapter': {
@@ -912,6 +1014,9 @@ Deno.serve(async (req: Request) => {
             metadata: r.metadata ?? {},
             like_count: likeCounts.get(String(r._id)) ?? 0,
             liked_by_me: likedByMe.has(String(r._id)),
+            view_count: Math.max(0, Number(r.viewCount ?? 0)),
+            comment_count: Math.max(0, Number(r.commentCount ?? 0)),
+            reshare_count: Math.max(0, Number(r.reshareCount ?? 0)),
             created_by: r.createdBy ?? null,
             created_at: r.createdAt ?? null,
             profiles: authors.get(String(r.createdBy)) ??
@@ -1401,9 +1506,11 @@ Deno.serve(async (req: Request) => {
           const uid = await currentUserId(req);
           if (!uid) return fail('Sign in required', 401);
           query.authorId = uid;
+          if (p.status === 'draft' || p.status === 'published') query.status = p.status;
         } else {
           // v1.1 auto-approves everything; flip to a moderation queue later.
           query.moderationStatus = p.moderationStatus ?? 'approved';
+          query.status = 'published';
         }
         if (typeof p.genre === 'string' && p.genre.trim()) query.genre = p.genre.trim();
         if (typeof p.clubId === 'string' && isAnyId(p.clubId)) query.clubId = p.clubId;
@@ -1418,11 +1525,21 @@ Deno.serve(async (req: Request) => {
           if (!isNaN(before.getTime())) query.createdAt = { $lt: before };
         }
         const rows = await d.collection('books')
-          .find(query).sort({ createdAt: -1 }).limit(limit + 1).toArray();
-        const hasMore = rows.length > limit;
+          .find(query).sort({ createdAt: -1 }).limit(limit * 2 + 4).toArray();
+        // Boosted books surface first (within the same page window).
+        const nowMs = Date.now();
+        const sorted = [...rows].sort((a, b) => {
+          const ab = a.boostUntil ? new Date(String(a.boostUntil)).getTime() : 0;
+          const bb = b.boostUntil ? new Date(String(b.boostUntil)).getTime() : 0;
+          const aBoost = ab > nowMs ? 1 : 0;
+          const bBoost = bb > nowMs ? 1 : 0;
+          if (aBoost !== bBoost) return bBoost - aBoost;
+          return new Date(String(b.createdAt)).getTime() - new Date(String(a.createdAt)).getTime();
+        }).slice(0, limit + 1);
+        const hasMore = sorted.length > limit;
         return ok({
-          books: rows.slice(0, limit).map(bookView),
-          nextCursor: hasMore ? rows[limit - 1].createdAt : null,
+          books: sorted.slice(0, limit).map(bookView),
+          nextCursor: hasMore ? sorted[limit - 1].createdAt : null,
         });
       }
 
@@ -1462,9 +1579,18 @@ Deno.serve(async (req: Request) => {
         if (title.length < 2 || title.length > 200) {
           return fail('Title must be 2–200 characters');
         }
+        const bookCode = cleanBookCode(p.bookCode);
+        if (!bookCode) return fail('A Book ID of 3–24 letters, numbers or dashes is required');
+        const asDraft = p.asDraft === true;
         const rawChapters = Array.isArray(p.chapters) ? p.chapters : [];
-        if (rawChapters.length === 0) return fail('At least one chapter is required');
+        if (!asDraft && rawChapters.length === 0) return fail('At least one chapter is required');
         if (rawChapters.length > 300) return fail('Too many chapters (max 300)');
+        let identity;
+        try {
+          identity = await resolveBookIdentity(uid, bookCode, title);
+        } catch (e) {
+          return fail(e instanceof Error ? e.message : 'Could not use that Book ID');
+        }
         const chapters = rawChapters.map((raw, index) => {
           const c = (raw ?? {}) as Record<string, unknown>;
           return {
@@ -1488,6 +1614,13 @@ Deno.serve(async (req: Request) => {
           // v1.1: auto-approved so authors see their work instantly. When
           // moderation tooling ships, default this back to 'pending'.
           moderationStatus: 'approved',
+          status: asDraft ? 'draft' : 'published',
+          bookCode,
+          unitType: UNIT_TYPES.includes(String(p.unitType)) ? String(p.unitType) : 'chapter',
+          partNumber: identity.partNumber,
+          sequelOf: identity.sequelOf,
+          sequelRoot: identity.sequelRoot,
+          isRemix: false,
           chaptersCount: chapters.length,
           likeCount: 0,
           bookmarkCount: 0,
@@ -1499,10 +1632,20 @@ Deno.serve(async (req: Request) => {
         };
         const inserted = await d.collection('books').insertOne({ ...book });
         const bookId = inserted.insertedId.toHexString();
-        await d.collection('chapters').insertMany(
-          chapters.map((c) => ({ ...c, bookId })),
-        );
-        return ok({ id: bookId, book: bookView({ ...book, _id: inserted.insertedId }) });
+        if (chapters.length > 0) {
+          await d.collection('chapters').insertMany(
+            chapters.map((c) => ({ ...c, bookId })),
+          );
+        }
+        // Real gems: every new part of a story earns the author 25 gems.
+        if (!asDraft) {
+          await grantGems(uid, 25, 'publish');
+        }
+        return ok({
+          id: bookId,
+          partNumber: identity.partNumber,
+          book: bookView({ ...book, _id: inserted.insertedId }),
+        });
       }
 
       // ── books: like / bookmark / view (atomic, idempotent) ───────────────
@@ -1707,7 +1850,7 @@ Deno.serve(async (req: Request) => {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         const d = await dbFor('chats');
-        const type = ['text', 'book_share', 'image', 'file', 'voice', 'emoji']
+        const type = ['text', 'book_share', 'image', 'file', 'voice', 'emoji', 'video']
           .includes(String(p.type)) ? String(p.type) : 'text';
         const text = String(p.text ?? '').trim().slice(0, 4000);
         if (type === 'text' && !text) return fail('Message text is empty');
@@ -1855,7 +1998,7 @@ Deno.serve(async (req: Request) => {
         if (!(await isClubMember(String(room.kind), String(room.clubId), uid))) {
           return fail('Join this group to chat', 403);
         }
-        const type = ['text', 'image', 'file', 'voice', 'emoji']
+        const type = ['text', 'image', 'file', 'voice', 'emoji', 'video']
           .includes(String(p.type))
           ? String(p.type)
           : 'text';
@@ -2391,6 +2534,11 @@ Deno.serve(async (req: Request) => {
           updates.description = p.description.slice(0, 5000);
         }
         if (typeof p.genre === 'string' && p.genre.trim()) updates.genre = p.genre.trim();
+        if (p.status === 'draft' || p.status === 'published') updates.status = String(p.status);
+        if (typeof p.unitType === 'string' && UNIT_TYPES.includes(String(p.unitType))) {
+          updates.unitType = String(p.unitType);
+        }
+        if (typeof p.description === 'string') updates.description = p.description.slice(0, 5000);
         if (typeof p.coverUrl === 'string' && p.coverUrl.startsWith('http')) {
           updates.coverUrl = p.coverUrl;
         }
@@ -2425,6 +2573,180 @@ Deno.serve(async (req: Request) => {
         );
         if (res.matchedCount === 0) return fail('Chapter not found', 404);
         return ok({ updated: true });
+      }
+
+      // Chapters list for the editor.
+      case 'books.chapters': {
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
+        const d = await dbFor('books');
+        const rows = await d.collection('chapters')
+          .find({ bookId: String(p.bookId) })
+          .sort({ chapterNumber: 1 })
+          .limit(300)
+          .toArray();
+        return ok({
+          chapters: rows.map((c) => ({
+            chapterNumber: c.chapterNumber,
+            title: c.title ?? '',
+            content: c.content ?? '',
+          })),
+        });
+      }
+
+      // ── remix / sequel another author's book (marked forever) ───────────
+      case 'books.remix': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
+        const mode = String(p.mode ?? 'remix') === 'sequel' ? 'sequel' : 'remix';
+        const d = await dbFor('books');
+        const origin = await d.collection('books')
+          .findOne({ _id: bookOid(String(p.bookId)) });
+        if (!origin) return fail('Book not found', 404);
+        if (String(origin.authorId) === uid) {
+          return fail(mode === 'sequel'
+            ? 'Use the same Book ID + title in the studio to add the next part of your own book.'
+            : 'This is already your book — edit it instead.');
+        }
+        const now = new Date();
+        const baseTitle = String(origin.title ?? 'Untitled').slice(0, 140);
+        const title = mode === 'sequel'
+          ? (baseTitle + ': The Next Part').slice(0, 200)
+          : (baseTitle + ' (Remix)').slice(0, 200);
+        const bookCode = (String(origin.bookCode ?? 'book').slice(0, 16) + '-' + mode + '-' + crypto.randomUUID().slice(0, 6));
+        const originId = String(origin._id);
+        const root = origin.sequelRoot ? String(origin.sequelRoot) : originId;
+        const originChapters = await d.collection('chapters')
+          .find({ bookId: originId }).sort({ chapterNumber: 1 }).limit(300).toArray();
+        const doc = {
+          _id: crypto.randomUUID(),
+          title,
+          authorId: uid,
+          authorName: mode === 'sequel'
+            ? String(origin.authorName ?? 'Unknown').slice(0, 70) + ' · sequel'
+            : String(origin.authorName ?? 'Unknown').slice(0, 70) + ' · remixed',
+          description: mode === 'sequel'
+            ? ('An unofficial sequel to "' + baseTitle + '".\n\n' + String(origin.description ?? '').slice(0, 4000))
+            : ('A remix of "' + baseTitle + '" by ' + String(origin.authorName ?? 'an author') + '.\n\n' + String(origin.description ?? '').slice(0, 4000)),
+          genre: origin.genre ?? null,
+          coverUrl: origin.coverUrl ?? null,
+          bannerUrl: origin.bannerUrl ?? null,
+          contentFormat: origin.contentFormat ?? 'markdown',
+          moderationStatus: 'approved',
+          status: 'draft',
+          bookCode,
+          unitType: origin.unitType ?? 'chapter',
+          partNumber: 1,
+          sequelOf: mode === 'sequel' ? originId : null,
+          sequelRoot: mode === 'sequel' ? root : null,
+          remixOf: mode === 'remix' ? originId : null,
+          isRemix: mode === 'remix',
+          chaptersCount: originChapters.length,
+          likeCount: 0, bookmarkCount: 0, viewCount: 0, reviewCount: 0, ratingSum: 0,
+          createdAt: now, updatedAt: now,
+        };
+        await d.collection('books').insertOne(doc);
+        if (originChapters.length > 0) {
+          await d.collection('chapters').insertMany(originChapters.map((c) => ({
+            bookId: String(doc._id),
+            chapterNumber: c.chapterNumber,
+            title: c.title ?? '',
+            content: c.content ?? '',
+            createdAt: now,
+          })));
+        }
+        await d.collection('books').updateOne(
+          { _id: origin._id as unknown as ObjectId },
+          { $inc: { remixCount: 1 } },
+        );
+        await grantGems(uid, 10, mode === 'sequel' ? 'sequel' : 'remix');
+        return ok({ id: doc._id, mode, carriedChapters: originChapters.length });
+      }
+
+      // ── posts: views, reshares, comments (feed store) ────────────────────
+      case 'posts.view': {
+        const uid = await currentUserId(req);
+        const ids = Array.isArray(p.postIds)
+          ? (p.postIds as unknown[]).filter((i) => typeof i === 'string').slice(0, 40)
+          : [];
+        if (ids.length === 0) return ok({ counted: 0 });
+        const feed = await dbFor('feed');
+        const day = new Date().toISOString().slice(0, 10);
+        let counted = 0;
+        for (const postId of ids) {
+          try {
+            await feed.collection('post_views').insertOne({
+              postId, day, viewerId: uid ?? 'anon', createdAt: new Date(),
+            });
+            await feed.collection('posts')
+              .updateOne({ _id: postId }, { $inc: { viewCount: 1 } });
+            counted += 1;
+          } catch (_) { /* duplicate view today — skip */ }
+        }
+        return ok({ counted });
+      }
+
+      case 'posts.reshare': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (typeof p.postId !== 'string' || !p.postId) return fail('A postId is required');
+        const feed = await dbFor('feed');
+        const original = await feed.collection('posts').findOne({ _id: p.postId });
+        if (!original) return fail('Post not found', 404);
+        const existing = await feed.collection('post_reshares')
+          .findOne({ postId: p.postId, userId: uid });
+        if (existing) return ok({ reshared: false });
+        await feed.collection('post_reshares')
+          .insertOne({ postId: p.postId, userId: uid, createdAt: new Date() });
+        await feed.collection('posts')
+          .updateOne({ _id: p.postId }, { $inc: { reshareCount: 1 } });
+        return ok({ reshared: true });
+      }
+
+      case 'posts.comments.list': {
+        if (typeof p.postId !== 'string' || !p.postId) return fail('A postId is required');
+        const rows = await (await dbFor('feed')).collection('post_comments')
+          .find({ postId: p.postId }).sort({ createdAt: -1 }).limit(100).toArray();
+        const authorIds = [...new Set(rows.map((r) => String(r.userId)))];
+        const authors = new Map<string, Record<string, unknown>>();
+        if (authorIds.length > 0) {
+          const profs = await serviceClient().from('profiles')
+            .select('id,username,avatar_url,display_name').in('id', authorIds);
+          for (const pr of profs.data ?? []) authors.set(String(pr.id), pr as Record<string, unknown>);
+        }
+        return ok({
+          comments: rows.map((r) => ({
+            id: String(r._id),
+            text: r.text ?? '',
+            userId: r.userId,
+            createdAt: r.createdAt,
+            profile: authors.get(String(r.userId)) ??
+              { username: 'reader', display_name: 'Reader', avatar_url: null },
+          })),
+        });
+      }
+
+      case 'posts.comments.create': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (typeof p.postId !== 'string' || !p.postId) return fail('A postId is required');
+        const text = String(p.text ?? '').trim().slice(0, 1000);
+        if (!text) return fail('Write something first');
+        const feed = await dbFor('feed');
+        const inserted = await feed.collection('post_comments').insertOne({
+          postId: p.postId, userId: uid, text, createdAt: new Date(),
+        });
+        await feed.collection('posts')
+          .updateOne({ _id: p.postId }, { $inc: { commentCount: 1 } });
+        const prof = await serviceClient().from('profiles')
+          .select('id,username,avatar_url,display_name').eq('id', uid).maybeSingle();
+        return ok({ comment: {
+          id: String(inserted.insertedId),
+          text,
+          userId: uid,
+          createdAt: new Date(),
+          profile: prof.data ?? { username: 'reader', display_name: 'Reader', avatar_url: null },
+        } });
       }
 
       case 'books.deleteChapter': {

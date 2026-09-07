@@ -353,7 +353,7 @@ class _BookNestKeyboardState extends State<BookNestKeyboard>
       itemBuilder: (context, i) {
         final e = items[i];
         return _EmoteButton(
-          child: BookNestEmojiView(e.code, size: 30, animate: animate),
+          child: BookNestEmojiView(e.code, size: 30, animate: true),
           onTap: () => _pick(e),
         );
       },
@@ -462,8 +462,7 @@ class _BookNestKeyboardState extends State<BookNestKeyboard>
       ),
       itemCount: defs.length,
       itemBuilder: (context, i) => _EmoteButton(
-        child: BookNestEmojiView(defs[i].code,
-            size: 30, animate: defs[i].isAnimated),
+        child: BookNestEmojiView(defs[i].code, size: 30, animate: true),
         onTap: () => _pick(defs[i]),
       ),
     );
@@ -479,16 +478,20 @@ class _EmoteButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color:
-              dark ? Colors.white.withOpacity(.05) : BookNestColors.lightSurface,
+    return Semantics(
+      button: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: dark
+                ? Colors.white.withOpacity(.05)
+                : BookNestColors.lightSurface,
+          ),
+          child: Center(child: child),
         ),
-        child: Center(child: child),
       ),
     );
   }

@@ -253,8 +253,48 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _reactToMessage(String messageId, String code) async {
     if (messageId.isEmpty || messageId.startsWith('local-')) return;
+    // Optimistic: the reaction lands instantly, like every modern chat.
+    final idx = _messages.indexWhere((m) => m['id'] == messageId);
+    if (idx == -1) return;
+    final before = Map<String, dynamic>.from(_messages[idx]);
+    final reactions = Map<String, String>.from(
+        (_messages[idx]['reactions'] as Map? ?? {}).map(
+            (k, v) => MapEntry(k.toString(), v.toString())));
+    if (_viewerId.isEmpty) return;
+    setState(() {
+      if (reactions[_viewerId] == code) {
+        reactions.remove(_viewerId);
+      } else {
+        reactions[_viewerId] = code;
+      }
+      _messages[idx]['reactions'] = reactions;
+    });
     final res = await BackendApi.instance.reactClubMessage(messageId, code);
-    if (res != null) _load();
+    if (!mounted) return;
+    if (res == null) {
+      // Roll back only on failure.
+      final at = _messages.indexWhere((m) => m['id'] == messageId);
+      if (at != -1) {
+        setState(() => _messages[at] = before);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('The reaction could not be saved — please try again.')));
+      }
+    } else {
+      // Reconcile with the server's truth.
+      final at = _messages.indexWhere((m) => m['id'] == messageId);
+      if (at != -1) {
+        final ok = res['reacted'];
+        final merged = Map<String, String>.from(
+            (_messages[at]['reactions'] as Map? ?? {}).map(
+                (k, v) => MapEntry(k.toString(), v.toString())));
+        if (ok == false) {
+          merged.remove(_viewerId);
+        } else if (ok == true) {
+          merged[_viewerId] = code;
+        }
+        setState(() => _messages[at]['reactions'] = merged);
+      }
+    }
   }
 
   Future<void> _deleteMessage(String messageId, {required bool forEveryone}) async {

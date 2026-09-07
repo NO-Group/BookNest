@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -25,7 +26,14 @@ import '../../../services/supabase_service.dart';
 class BookEditorScreen extends StatefulWidget {
   final String? clubId;
 
-  const BookEditorScreen({super.key, this.clubId});
+  /// Edit an existing book: preloads details and every chapter.
+  final Map<String, dynamic>? editBook;
+
+  const BookEditorScreen({super.key, this.clubId, this.editBook});
+
+  const BookEditorScreen.edit({super.key, required Map<String, dynamic> book})
+      : clubId = null,
+        editBook = book;
 
   @override
   State<BookEditorScreen> createState() => _BookEditorScreenState();
@@ -56,11 +64,19 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   final _titleController = TextEditingController();
   final _penNameController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _bookCodeController = TextEditingController();
+  String _unitType = 'chapter';
   String? _genre;
   String? _coverUrl;
   String? _bannerUrl;
   bool _uploadingCover = false;
   bool _uploadingBanner = false;
+
+  // ── Edit mode ────────────────────────────────────────────────────────
+  String? _editBookId;
+  String? _editStatus;
+  int _editChapterCount = 0;
+  final List<String?> _editChapterIds = [];
 
   // ── Manuscript ───────────────────────────────────────────────────────
   final List<_Chapter> _chapters = [_Chapter()];
@@ -71,6 +87,11 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   String? _publishedBookId;
   int _publishedChapters = 0;
   bool _insertingPicture = false;
+
+  // Live word total without rebuilding the studio on every keystroke —
+  // counts refresh at most twice a second on their own ticker.
+  final ValueNotifier<int> _words = ValueNotifier<int>(0);
+  Timer? _wordTimer;
 
   static const List<String> genres = [
     'Romance',
@@ -103,6 +124,8 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   void initState() {
     super.initState();
     _loadPenName();
+    _words.value = 0;
+    _maybeLoadExistingBook();
     _listenForCounts();
   }
 
@@ -115,11 +138,18 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   }
 
   void _onDocumentChanged() {
-    if (mounted) setState(() {});
+    // Debounced: typing stays butter-smooth even in long chapters.
+    _wordTimer ??= Timer(const Duration(milliseconds: 500), () {
+      _wordTimer = null;
+      if (mounted) _words.value = _totalWords;
+    });
   }
 
   @override
   void dispose() {
+    _wordTimer?.cancel();
+    _words.dispose();
+    _bookCodeController.dispose();
     _titleController.dispose();
     _penNameController.dispose();
     _descriptionController.dispose();
@@ -339,19 +369,69 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
     return words;
   }
 
-  Future<void> _publish() async {
+  /// Edit mode: pull the book's details and chapters into the studio.
+  Future<void> _maybeLoadExistingBook() async {
+    final book = widget.editBook;
+    if (book == null) return;
+    final bookId = book['id']?.toString() ?? '';
+    if (bookId.isEmpty) return;
+    _editBookId = bookId;
+    _publishedBookId = bookId;
+    _editStatus = book['status']?.toString() ?? 'published';
+    _titleController.text = book['title']?.toString() ?? '';
+    _descriptionController.text = book['description']?.toString() ?? '';
+    _genre = book['genre']?.toString();
+    _coverUrl = book['cover_url']?.toString();
+    if ((_coverUrl ?? '').isEmpty) _coverUrl = null;
+    _bannerUrl = book['banner_url']?.toString();
+    if ((_bannerUrl ?? '').isEmpty) _bannerUrl = null;
+    _unitType = book['unit_type']?.toString() ?? 'chapter';
+    final code = book['book_code']?.toString() ?? '';
+    _bookCodeController.text = code;
+    try {
+      final res = await BackendApi.instance.call('books.chapters',
+          {'bookId': bookId});
+      final chapters = res is Map ? res['chapters'] : null;
+      if (chapters is List) {
+        _chapters.clear();
+        for (final raw in chapters) {
+          if (raw is! Map) continue;
+          final c = _Chapter();
+          c.title.text = raw['title']?.toString() ?? '';
+          final content = raw['content']?.toString() ?? '';
+          try {
+            if (isQuillDelta(content)) {
+              c.controller.document = quill.Document.fromJson(
+                  (jsonDecode(content) as List).toList());
+            } else if (content.trim().isNotEmpty) {
+              c.controller.document = quill.Document()..insert(0, content);
+            }
+          } catch (_) {}
+          _chapters.add(c);
+          _editChapterIds.add(raw['chapterNumber']?.toString());
+        }
+        _editChapterCount = _chapters.length;
+        _publishedChapters = _chapters.length;
+        if (_chapters.isEmpty) _chapters.add(_Chapter());
+        _listenForCounts();
+        _words.value = _totalWords;
+      }
+    } catch (_) {}
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _publish({bool asDraft = false}) async {
     if (_publishing) return;
     final title = _titleController.text.trim();
     if (title.length < 2) {
       _notice('Give your book a title first — at least 2 characters.');
       return;
     }
-    final readyChapters = <_Chapter>[];
-    for (final c in _chapters) {
-      if (!c.isEmpty) readyChapters.add(c);
-    }
-    if (readyChapters.isEmpty) {
-      _notice('Write at least one chapter before publishing.');
+    final bookCode = _bookCodeController.text.trim();
+    if (bookCode.length < 3) {
+      _notice('A Book ID is required — 3+ letters, numbers or dashes. It is '
+          'yours alone, and adding a new book with the same ID + title makes '
+          'the next part automatically.');
       return;
     }
     final penName = _penNameController.text.trim();
@@ -360,85 +440,124 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
           'Pen names can\'t be email addresses — how will readers know you?');
       return;
     }
+    final readyChapters = <_Chapter>[];
+    for (final c in _chapters) {
+      if (!c.isEmpty) readyChapters.add(c);
+    }
+    if (!asDraft && readyChapters.isEmpty && _editBookId == null) {
+      _notice('Write at least one chapter before publishing — or save a draft.');
+      return;
+    }
 
     setState(() => _publishing = true);
-
     try {
-      // 1. The book record (or resume the one already created).
-      if (_publishedBookId == null) {
-        final created = await SupabaseService().writeRow('club_books', {
-          'club_id': widget.clubId,
-          'title': title,
-          if (penName.isNotEmpty) 'author': penName,
-          'description': _descriptionController.text.trim(),
-          'genre': _genre,
-          'cover_url': _coverUrl,
-        });
-        final id = created?['id']?.toString();
-        if (id == null || id.isEmpty) {
-          throw Exception(
-              'The book could not be created — please try again.');
-        }
-        _publishedBookId = id;
-      } else {
-        // Refresh the details in case the author polished them meanwhile.
+      if (_editBookId != null) {
+        // ── Editing an existing book ──
         await BackendApi.instance.call('books.update', {
-          'bookId': _publishedBookId,
+          'bookId': _editBookId,
           'title': title,
           'description': _descriptionController.text.trim(),
           if (_genre != null) 'genre': _genre,
           if (_coverUrl != null) 'coverUrl': _coverUrl,
           if (_bannerUrl != null) 'bannerUrl': _bannerUrl,
+          'unitType': _unitType,
+          if (!asDraft) 'status': 'published',
         });
-      }
-
-      // 2. Every remaining chapter, in order, as a rich document.
-      while (_publishedChapters < readyChapters.length) {
-        final c = readyChapters[_publishedChapters];
-        final res = await SupabaseService().writeRow('book_chapters', {
-          'club_book_id': _publishedBookId,
-          'chapter_number': _publishedChapters + 1,
-          'title': c.title.text.trim().isNotEmpty
-              ? c.title.text.trim()
-              : 'Chapter ${_publishedChapters + 1}',
-          'content':
-              jsonEncode(c.controller.document.toDelta().toJson()),
-        });
-        if (res == null) {
-          throw Exception(
-              'Chapter ${_publishedChapters + 1} could not be saved — press publish to resume.');
+        for (var i = 0; i < readyChapters.length; i++) {
+          final c = readyChapters[i];
+          final payload = {
+            'bookId': _editBookId,
+            'chapterNumber': i + 1,
+            'title': c.title.text.trim().isNotEmpty
+                ? c.title.text.trim()
+                : 'Unit ${i + 1}',
+            'content': jsonEncode(c.controller.document.toDelta().toJson()),
+          };
+          if (i < _editChapterCount) {
+            await BackendApi.instance.call('books.updateChapter', payload);
+          } else {
+            await BackendApi.instance.call('books.addChapter', payload);
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Saved unit ${i + 1} of ${readyChapters.length}…'),
+              duration: const Duration(seconds: 1),
+            ));
+          }
         }
-        _publishedChapters += 1;
-        if (mounted) {
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        if (_bannerUrl != null) {
+          await BackendApi.instance.call('books.update', {
+            'bookId': _editBookId,
+            'bannerUrl': _bannerUrl,
+          });
+        }
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Saved ✓'),
             content: Text(
-                'Published chapter $_publishedChapters of ${readyChapters.length}…'),
-            duration: const Duration(seconds: 1),
-          ));
-        }
+                '"$title" now carries every change — readers see it instantly.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  context.pop();
+                },
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        );
+        return;
       }
 
-      // 3. Banner is applied after creation (createDraft carries the cover;
-      //    the banner arrives via the update path).
-      if (_bannerUrl != null) {
-        await BackendApi.instance.call('books.update', {
-          'bookId': _publishedBookId,
-          'bannerUrl': _bannerUrl,
-        });
+      // ── New book: one call carries everything ──
+      final chapters = [
+        for (var i = 0; i < readyChapters.length; i++)
+          {
+            'chapterNumber': i + 1,
+            'title': readyChapters[i].title.text.trim().isNotEmpty
+                ? readyChapters[i].title.text.trim()
+                : 'Unit ${i + 1}',
+            'content':
+                jsonEncode(readyChapters[i].controller.document.toDelta().toJson()),
+          },
+      ];
+      final res = await BackendApi.instance.call('books.publish', {
+        'title': title,
+        if (penName.isNotEmpty) 'authorName': penName,
+        'description': _descriptionController.text.trim(),
+        if (_genre != null) 'genre': _genre,
+        if (_coverUrl != null) 'coverUrl': _coverUrl,
+        if (_bannerUrl != null) 'bannerUrl': _bannerUrl,
+        'bookCode': bookCode,
+        'unitType': _unitType,
+        'asDraft': asDraft,
+        'chapters': chapters,
+      });
+      if (res == null) {
+        throw Exception('Publishing hit a snag — check your connection and try again.');
       }
-
+      final part = (res['partNumber'] as num?)?.toInt() ?? 1;
       if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Your book is live 🎉'),
-          content: Text(
-            '“$title” is published with ${readyChapters.length} '
-            'chapter${readyChapters.length == 1 ? '' : 's'} and '
-            '${_totalWords == 0 ? 'zero' : '$_totalWords'} words. '
-            'Readers can open it right now.',
-          ),
+          title: Text(asDraft
+              ? 'Draft saved 🌱'
+              : (part > 1 ? 'Part $part is live 🎉' : 'Your book is live 🎉')),
+          content: Text(asDraft
+              ? '"$title" is saved as a draft. Finish it any time from your '
+                  'writer dashboard — readers don\'t see drafts.'
+              : (part > 1
+                  ? '"$title" was added as Part $part of your "$bookCode" '
+                      'story — readers can jump straight in. You also earned '
+                      '25 gems!'
+                  : '"$title" is published with ${chapters.length} '
+                      'unit${chapters.length == 1 ? '' : 's'} and '
+                      '$_totalWords words. You also earned 25 gems!')),
           actions: [
             TextButton(
               onPressed: () {
@@ -452,12 +571,11 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      final message = error is Exception
-          ? error.toString().replaceFirst('Exception: ', '')
+      final raw = error.toString().replaceFirst('Exception: ', '');
+      final message = raw.contains('Book ID') || raw.contains('already')
+          ? raw
           : 'Publishing hit a snag — please try again.';
-      _notice(_publishedBookId == null
-          ? message
-          : 'Saved so far — press Publish again to finish.');
+      _notice(message);
     } finally {
       if (mounted) setState(() => _publishing = false);
     }
@@ -813,7 +931,16 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
               ),
               const Spacer(),
               Text(
-                '${_totalWords} words in the book',
+                ValueListenableBuilder<int>(
+                  valueListenable: _words,
+                  builder: (context, words, _) => Text(
+                    '$words words in the book',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: BookNestColors.cyan,
+                        fontWeight: FontWeight.w700),
+                  ),
+                ),
                 style: TextStyle(
                     fontSize: 12,
                     color: BookNestColors.cyan,

@@ -231,11 +231,12 @@ class _BookNestEmojiViewState extends State<BookNestEmojiView>
   }
 
   void _maybeAnimate() {
-    final def = _def;
-    if (def.isAnimated && widget.animate) {
+    // Every BookNest emote is alive: faces blink and bob, objects
+    // shimmer. Effect emotes just move more dramatically.
+    if (widget.animate) {
       _controller ??= AnimationController(
         vsync: this,
-        duration: const Duration(milliseconds: 1400),
+        duration: const Duration(milliseconds: 2400),
       )..repeat();
     } else {
       _controller?.dispose();
@@ -293,7 +294,12 @@ class BookNestEmojiPainter extends CustomPainter {
     final c = Offset(size.width / 2, size.height / 2);
     switch (def.effect) {
       case EmojiEffect.none:
-        break;
+        // Idle life: a soft bob and a gentle sway.
+        final idle = math.sin(t * 2 * math.pi);
+        canvas.translate(0, -size.height * .035 * idle);
+        canvas.translate(c.dx, c.dy);
+        canvas.rotate(.05 * idle);
+        canvas.translate(-c.dx, -c.dy);
       case EmojiEffect.bounce:
         final bounce = (1 - (2 * t - 1).abs()); // 0→1→0
         canvas.translate(0, -size.height * .14 * bounce);
@@ -338,21 +344,67 @@ class BookNestEmojiPainter extends CustomPainter {
       width: size.width * .8,
       height: size.height * .8,
     );
+    final radius = rect.width / 2;
+
+    // Soft drop shadow so the face lifts off the bubble.
+    canvas.drawCircle(
+      rect.center.translate(0, radius * .1),
+      radius,
+      Paint()
+        ..color = BookNestEmojiPalette.navyDeep.withOpacity(.18)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+
+    // Body: a lit sphere, not a flat circle.
     final facePaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color.lerp(def.face, Colors.white, .25)!, def.face],
+      ..shader = RadialGradient(
+        center: const Alignment(-.35, -.45),
+        radius: 1.15,
+        colors: [
+          Color.lerp(def.face, Colors.white, .55)!,
+          def.face,
+          Color.lerp(def.face, BookNestEmojiPalette.navyDeep, .28)!,
+        ],
+        stops: const [0, .55, 1],
       ).createShader(rect);
-    canvas.drawCircle(rect.center, rect.width / 2, facePaint);
+    canvas.drawCircle(rect.center, radius, facePaint);
+
+    // Scene-glow rim on the lower edge.
     canvas.drawCircle(
       rect.center,
-      rect.width / 2,
+      radius * .985,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = size.width * .03
-        ..color = BookNestEmojiPalette.navyDeep.withOpacity(.55),
+        ..strokeWidth = size.width * .035
+        ..color = BookNestEmojiPalette.cyan.withOpacity(.35)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
     );
+
+    // Crisp sticker outline.
+    canvas.drawCircle(
+      rect.center,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * .028
+        ..color = BookNestEmojiPalette.navyDeep.withOpacity(.75),
+    );
+
+    // Glossy highlight, top-left.
+    canvas.save();
+    canvas.clipPath(Path()
+      ..addOval(Rect.fromCircle(center: rect.center, radius: radius)));
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(rect.center.dx - radius * .32, rect.center.dy - radius * .45),
+        width: radius * 1.05,
+        height: radius * .62,
+      ),
+      Paint()
+        ..color = Colors.white.withOpacity(.32)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+    canvas.restore();
 
     final dark = def.face == BookNestEmojiPalette.navy ||
         def.face == BookNestEmojiPalette.navyDeep;
@@ -360,15 +412,34 @@ class BookNestEmojiPainter extends CustomPainter {
     final eyeY = rect.center.dy - rect.height * .1;
     final eyeDx = rect.width * .19;
     final eyeR = rect.width * .075;
+    // Every dot-eyed face blinks once per idle cycle.
+    final blinkPhase = def.eyes == EmojiEyes.dot && t > .82 && t < .92;
     final winkPhase = def.effect == EmojiEffect.winkLoop
         ? (t < .15 || (t > .5 && t < .65))
         : false;
 
     void eye(double dx) {
       final x = rect.center.dx + dx;
+      if (blinkPhase) {
+        canvas.drawLine(
+          Offset(x - eyeR, eyeY),
+          Offset(x + eyeR, eyeY),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = eyeR * .9
+            ..strokeCap = StrokeCap.round
+            ..color = ink,
+        );
+        return;
+      }
       switch (def.eyes!) {
         case EmojiEyes.dot:
+          // Two-tone pupils with a catchlight.
           canvas.drawCircle(Offset(x, eyeY), eyeR, Paint()..color = ink);
+          canvas.drawCircle(
+              Offset(x - eyeR * .3, eyeY - eyeR * .35),
+              eyeR * .32,
+              Paint()..color = Colors.white.withOpacity(.9));
         case EmojiEyes.happy:
           canvas.drawArc(
             Rect.fromCircle(center: Offset(x, eyeY + eyeR * .8), radius: eyeR * 1.4),
@@ -566,6 +637,17 @@ class BookNestEmojiPainter extends CustomPainter {
   void _paintObject(Canvas canvas, Size size, EmojiObject object) {
     final c = Offset(size.width / 2, size.height / 2);
     final w = size.width;
+    // Grounding shadow.
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(c.dx, c.dy + w * .38),
+        width: w * .5,
+        height: w * .1,
+      ),
+      Paint()
+        ..color = BookNestEmojiPalette.navyDeep.withOpacity(.15)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
     switch (object) {
       case EmojiObject.openBook:
         final path = Path()
@@ -585,6 +667,15 @@ class BookNestEmojiPainter extends CustomPainter {
         canvas.drawLine(Offset(c.dx, c.dy - w * .18), Offset(c.dx, c.dy + w * .3), Paint()
           ..color = BookNestEmojiPalette.navyDeep.withOpacity(.6)
           ..strokeWidth = w * .025);
+        // Page block under the cover.
+        canvas.drawLine(
+          Offset(c.dx - w * .4, c.dy + w * .27),
+          Offset(c.dx + w * .4, c.dy + w * .27),
+          Paint()
+            ..color = BookNestEmojiPalette.navyDeep.withOpacity(.45)
+            ..strokeWidth = w * .035
+            ..strokeCap = StrokeCap.round,
+        );
         for (final sx in [-1.0, 1.0]) {
           for (var i = 0; i < 3; i++) {
             canvas.drawLine(
