@@ -23,10 +23,24 @@ Future<Uint8List?> openBookNestCamera(BuildContext context) {
   ));
 }
 
+/// Presents the camera in video mode and resolves with the recorded
+/// clip's file path (sound included), or null when the reader backed out.
+Future<String?> openBookNestCameraForVideo(BuildContext context) {
+  return Navigator.of(context, rootNavigator: true).push(
+    MaterialPageRoute<String>(
+      fullscreenDialog: true,
+      builder: (_) => const CameraScreen(mode: CameraMode.video),
+    ),
+  );
+}
+
+enum CameraMode { photo, video }
+
 enum _CamStage { asking, denied, live, failed }
 
 class CameraScreen extends StatefulWidget {
-  const CameraScreen({super.key});
+  final CameraMode mode;
+  const CameraScreen({super.key, this.mode = CameraMode.photo});
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -41,6 +55,10 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   FlashMode _flash = FlashMode.off;
   _CamStage _stage = _CamStage.asking;
   bool _capturing = false;
+  late CameraMode _mode = widget.mode;
+  bool _recording = false;
+  int _recordSeconds = 0;
+  Timer? _recordTimer;
 
   @override
   void initState() {
@@ -51,6 +69,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
   @override
   void dispose() {
+    _recordTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
     super.dispose();
@@ -93,7 +112,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     final controller = CameraController(
       camera,
       ResolutionPreset.high,
-      enableAudio: false,
+      enableAudio: true, // videos record with sound.
     );
     _controller = controller;
     try {
@@ -150,9 +169,60 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     }
   }
 
+  Future<void> _toggleVideo() async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (!_recording) {
+      if (_capturing) return;
+      try {
+        await controller.startVideoRecording();
+        if (!mounted) return;
+        setState(() {
+          _recording = true;
+          _recordSeconds = 0;
+          _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+            if (mounted) setState(() => _recordSeconds += 1);
+          });
+        });
+      } on CameraException {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(
+                  'Recording could not start — please try again.')));
+        }
+      }
+      return;
+    }
+    // Stop and hand the clip to the chat.
+    try {
+      _recordTimer?.cancel();
+      final file = await controller.stopVideoRecording();
+      if (!mounted) return;
+      setState(() => _recording = false);
+      Navigator.of(context).pop(file.path);
+    } on CameraException {
+      if (mounted) {
+        setState(() => _recording = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content:
+                Text('The clip could not be saved — please try again.')));
+      }
+    }
+  }
+
+  String get _recordLabel {
+    final m = _recordSeconds ~/ 60;
+    final sec = _recordSeconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _snap() async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized || _capturing) return;
+    if (_mode == CameraMode.video) {
+      await _toggleVideo();
+      return;
+    }
     setState(() => _capturing = true);
     try {
       final shot = await controller.takePicture();
@@ -299,8 +369,15 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                                       strokeWidth: 2.4,
                                       color: Colors.white),
                                 )
-                              : const Icon(Icons.camera_alt_rounded,
-                                  color: BookNestColors.navyDeep, size: 26),
+                              : _recording
+                                  ? const Icon(Icons.stop_rounded,
+                                      color: Colors.white, size: 30)
+                                  : Icon(
+                                      _mode == CameraMode.video
+                                          ? Icons.videocam_rounded
+                                          : Icons.camera_alt_rounded,
+                                      color: BookNestColors.navyDeep,
+                                      size: 26),
                         ),
                       ),
                     ),
@@ -322,8 +399,60 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 ],
               ),
               const SizedBox(height: 18),
-              const Text(
-                'BookNest camera  ·  filters on the next step',
+              if (_recording)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 9,
+                        height: 9,
+                        decoration: const BoxDecoration(
+                            color: Colors.red, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(_recordLabel,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800)),
+                    ],
+                  ),
+                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _ModeSwitch(
+                    icon: Icons.photo_camera_rounded,
+                    label: 'Photo',
+                    selected: _mode == CameraMode.photo,
+                    onTap: _recording
+                        ? null
+                        : () => setState(() => _mode = CameraMode.photo),
+                  ),
+                  const SizedBox(width: 14),
+                  _ModeSwitch(
+                    icon: Icons.videocam_rounded,
+                    label: 'Video',
+                    selected: _mode == CameraMode.video,
+                    onTap: _recording
+                        ? null
+                        : () => setState(() => _mode = CameraMode.video),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _mode == CameraMode.video
+                    ? 'BookNest camera  ·  video with sound'
+                    : 'BookNest camera  ·  filters on the next step',
                 style: TextStyle(
                     color: Colors.white60,
                     fontSize: 11.5,
@@ -419,6 +548,51 @@ class _Gate extends StatelessWidget {
                 ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _ModeSwitch extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+  const _ModeSwitch({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: selected ? BookNestColors.cyan : Colors.black38,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 16,
+                color: selected ? BookNestColors.navyDeep : Colors.white70),
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color:
+                        selected ? BookNestColors.navyDeep : Colors.white70)),
           ],
         ),
       ),

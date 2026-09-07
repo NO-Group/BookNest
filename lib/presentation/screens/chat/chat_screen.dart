@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -240,6 +241,38 @@ class _ChatScreenState extends State<ChatScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('The file could not be delivered — please try again.'),
       ));
+      return;
+    }
+    await _load();
+  }
+
+  Future<void> _sendVideo(String videoPath, int seconds) async {
+    final conversationId = _conversationId;
+    if (conversationId == null) return;
+    final file = File(videoPath);
+    final size = await file.length();
+    final url = await uploadChatFile(
+        'clip-${DateTime.now().millisecondsSinceEpoch}.mp4',
+        await file.readAsBytes());
+    if (!mounted) return;
+    if (url == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'The video could not be uploaded — please try again.')));
+      return;
+    }
+    final res = await BackendApi.instance.sendClubMessage(
+      conversationId: conversationId,
+      type: 'video',
+      mediaUrl: url,
+      fileName: 'clip.mp4',
+      fileSize: size,
+    );
+    if (!mounted) return;
+    if (res == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'The video could not be delivered — please try again.')));
       return;
     }
     await _load();
@@ -548,6 +581,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             onSendFile: _sendFile,
                             onSendEmote: _sendEmote,
                             hint: 'Message ${widget.title}…',
+                            onSendVideo: _sendVideo,
                             replyTo: _replyTo,
                             onCancelReply: () => setState(() => _replyTo = null),
                           ),

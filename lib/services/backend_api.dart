@@ -25,6 +25,69 @@ class BackendApi {
   bool _checked = false;
   bool _available = false;
 
+  // ── EphemCache: short-lived read-through cache for list reads. ──────
+  // Feeds, shelves and inboxes answer from memory for 60 seconds, so
+  // screens snap open instantly and the network breathes. Any write in
+  // the same domain drops the cache so fresh data is never hidden.
+  static const Duration _cacheTtl = Duration(seconds: 60);
+  static const Set<String> _cacheable = {
+    'posts.list',
+    'books.list',
+    'dm.list',
+    'chat.rooms',
+    'notifications.list',
+    'reviews.list',
+  };
+  static const Map<String, String> _cacheDomain = {
+    'posts.list': 'posts',
+    'posts.view': 'posts',
+    'posts.reshare': 'posts',
+    'posts.comments.create': 'posts',
+    'books.list': 'books',
+    'books.publish': 'books',
+    'books.update': 'books',
+    'books.remix': 'books',
+    'books.updateChapter': 'books',
+    'books.addChapter': 'books',
+    'dm.list': 'chats',
+    'dm.send': 'chats',
+    'dm.react': 'chats',
+    'chat.send': 'chats',
+    'chat.react': 'chats',
+    'chat.rooms': 'chats',
+    'notifications.list': 'notifications',
+    'reviews.list': 'books',
+    'reviews.create': 'books',
+  };
+  final Map<String, ({Map<String, dynamic> data, DateTime at})> _cache = {};
+
+  String _cacheKey(String action, Map<String, dynamic> payload) {
+    if (payload.isEmpty) return action;
+    final flat = payload.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return '$action?' +
+        flat
+            .map((e) => '${e.key}=${e.value?.toString() ?? ''}')
+            .join('&');
+  }
+
+  /// Drops cached reads — used after writes and by pull-to-refresh.
+  void bustCache([String? domain]) {
+    if (domain == null) {
+      _cache.clear();
+      return;
+    }
+    _cache.removeWhere(
+        (key, _) => _cacheDomain[key.split('?')[0]] == domain);
+  }
+
+  /// Force-bypasses the cache for the next read (pull-to-refresh).
+  Future<Map<String, dynamic>?> callFresh(String action,
+          [Map<String, dynamic> payload = const <String, dynamic>{}]) {
+    _cache.remove(_cacheKey(action, payload));
+    return call(action, payload);
+  }
+
   /// True once the edge function has answered successfully at least once
   /// during this app session.
   bool get available => _available;
@@ -49,6 +112,12 @@ class BackendApi {
   ]) async {
     // Fail fast once we know the backend is not reachable yet.
     if (_checked && !_available) return null;
+    final key = _cacheKey(action, payload);
+    final cached = _cache[key];
+    if (cached != null &&
+        DateTime.now().difference(cached.at) < _cacheTtl) {
+      return cached.data;
+    }
     try {
       final response = await _client.functions.invoke(
         AppConfig.edgeFunctionName,
@@ -59,7 +128,18 @@ class BackendApi {
         _available = true;
         _checked = true;
         final result = data['data'];
-        return result is Map ? Map<String, dynamic>.from(result) : <String, dynamic>{};
+        final value = result is Map
+            ? Map<String, dynamic>.from(result)
+            : <String, dynamic>{};
+        if (_cacheable.contains(action)) {
+          _cache[key] = (data: value, at: DateTime.now());
+        }
+        final domain = _cacheDomain[action];
+        if (domain != null && !_cacheable.contains(action)) {
+          _cache.removeWhere(
+              (k, _) => _cacheDomain[k.split('?')[0]] == domain);
+        }
+        return value;
       }
       _checked = true;
       if (kDebugMode) {

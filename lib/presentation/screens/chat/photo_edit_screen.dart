@@ -82,6 +82,54 @@ class _PhotoEditScreenState extends State<PhotoEditScreen> {
         0, 0, 0, 1, 0,
       ],
     ),
+      (
+      label: 'Sepia',
+      icon: Icons.energy_savings_leaf_outlined,
+      matrix: [
+        .39, .77, .19, 0, 0, .35, .69, .27, 0, 0, .27, .63, .35, 0, 0,
+        0, 0, 0, 1, 0,
+      ],
+    ),
+    (
+      label: 'Fade',
+      icon: Icons.blur_on_rounded,
+      matrix: [
+        .84, .1, .06, 0, 26, .1, .82, .08, 0, 26, .08, .1, .8, 0, 26,
+        0, 0, 0, 1, 0,
+      ],
+    ),
+    (
+      label: 'Mint',
+      icon: Icons.eco_outlined,
+      matrix: [
+        .88, .04, .04, 0, 0, .02, 1.06, .02, 0, 6, .02, .04, .96, 0, 4,
+        0, 0, 0, 1, 0,
+      ],
+    ),
+    (
+      label: 'Cyan',
+      icon: Icons.water_drop_outlined,
+      matrix: [
+        .82, .02, .18, 0, 4, .02, .98, .06, 0, 2, .1, .1, 1.12, 0, 10,
+        0, 0, 0, 1, 0,
+      ],
+    ),
+    (
+      label: 'Sunset',
+      icon: Icons.wb_twilight_outlined,
+      matrix: [
+        1.14, .02, 0, 0, 10, .02, .88, .12, 0, 0, .02, .06, .86, 0, 0,
+        0, 0, 0, 1, 0,
+      ],
+    ),
+    (
+      label: 'Dream',
+      icon: Icons.auto_awesome_outlined,
+      matrix: [
+        1.06, .06, .04, 0, 16, .04, 1.04, .06, 0, 12, .06, .04, 1.08, 0,
+        18, 0, 0, 0, 1, 0,
+      ],
+    ),
   ];
 
   @override

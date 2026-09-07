@@ -11,6 +11,8 @@ import '../../../config/theme.dart';
 import '../../components/booknest_ui.dart';
 import '../../components/manuscript_embeds.dart';
 import '../../components/watermark_background.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
@@ -51,6 +53,8 @@ class _ReaderScreenState extends State<ReaderScreen>
   double _scrollFraction = 0;
   double _fontScale = 1.0; // 0.85 – 1.35
   double _lineHeight = 1.75; // 1.5 / 1.75 / 2.0
+  int _readerTheme = 0; // 0 Night(auto) · 1 Paper · 2 Sepia · 3 Ink
+  String _unitType = 'chapter';
 
   Timer? _saveDebounce;
   Timer? _streakTimer;
@@ -61,6 +65,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _loadReaderPrefs();
     _loadBook();
     _readingTime.start();
     _streakTimer = Timer.periodic(const Duration(minutes: 5), (_) => _logStreak());
@@ -133,6 +138,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     setState(() {
       _bookTitle = book['title']?.toString() ?? 'Untitled';
       _author = book['author']?.toString() ?? 'Unknown';
+      _unitType = book['unit_type']?.toString() ?? 'chapter';
       _chapters = chapters;
       _chapterNumber = startChapter;
     });
@@ -243,9 +249,9 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   /// The manuscript's reading typography, themed for light and dark and
   /// scaled by the reader's comfort settings.
-  quill.DefaultStyles _manuscriptStyles(bool dark) {
-    final color =
-        dark ? BookNestColors.darkTextPrimary : BookNestColors.navyDeep;
+  quill.DefaultStyles _manuscriptStyles(bool dark, {Color? ink}) {
+    final color = ink ??
+        (dark ? BookNestColors.darkTextPrimary : BookNestColors.navyDeep);
     final base = TextStyle(
       color: color,
       fontSize: 16 * _fontScale,
@@ -300,6 +306,99 @@ class _ReaderScreenState extends State<ReaderScreen>
     );
   }
 
+  /// ── Premium reading comfort: preferences live on this device. ──────
+  Future<void> _loadReaderPrefs() async {
+    try {
+      final raw =
+          (await SharedPreferences.getInstance()).getString('reader.prefs');
+      if (raw == null) return;
+      final map = jsonDecode(raw);
+      if (map is! Map) return;
+      if (mounted) {
+        setState(() {
+          _fontScale = ((map['fs'] as num?)?.toDouble() ?? 1.0)
+              .clamp(0.85, 1.35);
+          _lineHeight = ((map['lh'] as num?)?.toDouble() ?? 1.75)
+              .clamp(1.5, 2.0);
+          _readerTheme = (map['theme'] as num?)?.toInt() ?? 0;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveReaderPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'reader.prefs',
+        jsonEncode({
+          'fs': _fontScale,
+          'lh': _lineHeight,
+          'theme': _readerTheme,
+        }),
+      );
+    } catch (_) {}
+  }
+
+  /// Whether the paper itself is dark — driven by the chosen reading theme.
+  bool _pageIsDark(bool systemDark) {
+    switch (_readerTheme) {
+      case 1:
+        return false; // Paper
+      case 2:
+        return false; // Sepia
+      case 3:
+        return true; // Ink
+      default:
+        return systemDark; // Night follows the app
+    }
+  }
+
+  Color _pageBackground(bool systemDark) {
+    switch (_readerTheme) {
+      case 1:
+        return const Color(0xFFFBFBF8);
+      case 2:
+        return const Color(0xFFF4E9D8);
+      case 3:
+        return const Color(0xFF0B1626);
+      default:
+        return systemDark
+            ? BookNestColors.darkChatBackground
+            : Colors.white;
+    }
+  }
+
+  Color _pageForeground(bool systemDark) {
+    switch (_readerTheme) {
+      case 1:
+        return BookNestColors.navyDeep;
+      case 2:
+        return const Color(0xFF3E3427);
+      case 3:
+        return const Color(0xFFE8EDF5);
+      default:
+        return systemDark
+            ? BookNestColors.darkTextPrimary
+            : BookNestColors.navyDeep;
+    }
+  }
+
+  String get _unitLabel {
+    switch (_unitType) {
+      case 'part':
+        return 'parts';
+      case 'act':
+        return 'acts';
+      case 'episode':
+        return 'episodes';
+      case 'volume':
+        return 'volumes';
+      default:
+        return 'chapters';
+    }
+  }
+
   void _openToc() {
     showModalBottomSheet<void>(
       context: context,
@@ -341,7 +440,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                     .titleLarge
                     ?.copyWith(fontWeight: FontWeight.w800),
               ),
-              Text('$_author · ${_chapters.length} chapters',
+              Text('$_author · ${_chapters.length} $_unitLabel',
                   style: TextStyle(color: BookNestColors.cyan, fontSize: 13)),
               const SizedBox(height: 10),
               Flexible(
@@ -436,6 +535,69 @@ class _ReaderScreenState extends State<ReaderScreen>
                       .titleLarge
                       ?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 18),
+              Text('Reading theme',
+                  style: TextStyle(
+                      color: Theme.of(sheetContext).hintColor, fontSize: 13)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  for (var i = 0; i < 4; i++)
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() => _readerTheme = i);
+                          _saveReaderPrefs();
+                        },
+                        child: Container(
+                          margin: EdgeInsets.only(right: i < 3 ? 8 : 0),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: [
+                              Colors.black87,
+                              const Color(0xFFFBFBF8),
+                              const Color(0xFFF4E9D8),
+                              const Color(0xFF0B1626),
+                            ][i],
+                            border: Border.all(
+                              width: _readerTheme == i ? 2.2 : 1,
+                              color: _readerTheme == i
+                                  ? BookNestColors.cyan
+                                  : Theme.of(sheetContext).dividerColor,
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              Text('Ag',
+                                  style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                      color: [
+                                        Colors.white,
+                                        BookNestColors.navyDeep,
+                                        const Color(0xFF3E3427),
+                                        const Color(0xFFE8EDF5),
+                                      ][i])),
+                              const SizedBox(height: 3),
+                              Text(
+                                ['Night', 'Paper', 'Sepia', 'Ink'][i],
+                                style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: _readerTheme == i
+                                        ? (Theme.of(sheetContext).brightness ==
+                                                Brightness.dark
+                                            ? Colors.white
+                                            : BookNestColors.navyDeep)
+                                        : Colors.white54),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
               Text('Text size',
                   style: TextStyle(
                       color: Theme.of(sheetContext).hintColor, fontSize: 13)),
@@ -446,7 +608,10 @@ class _ReaderScreenState extends State<ReaderScreen>
                 divisions: 5,
                 activeColor: BookNestColors.cyan,
                 label: '${(16 * _fontScale).round()} pt',
-                onChanged: (value) => setState(() => _fontScale = value),
+                onChanged: (value) {
+                  setState(() => _fontScale = value);
+                  _saveReaderPrefs();
+                },
               ),
               Text('Line spacing',
                   style: TextStyle(
@@ -465,8 +630,10 @@ class _ReaderScreenState extends State<ReaderScreen>
                       BookNestColors.cyan.withOpacity(.18),
                   selectedForegroundColor: BookNestColors.cyan,
                 ),
-                onSelectionChanged: (selection) =>
-                    setState(() => _lineHeight = selection.first),
+                onSelectionChanged: (selection) {
+                  setState(() => _lineHeight = selection.first);
+                  _saveReaderPrefs();
+                },
               ),
             ],
           ),
@@ -523,10 +690,14 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    // The chosen reading theme paints the paper; chrome follows the app.
+    final pageDark = _pageIsDark(dark);
+    final pageText = _pageForeground(dark);
+    final pageBg = _pageBackground(dark);
     final baseStyle = TextStyle(
       fontSize: 16 * _fontScale,
       height: _lineHeight,
-      color: dark ? BookNestColors.darkTextPrimary : BookNestColors.navyDeep,
+      color: pageText,
     );
 
     final markdownSheet = MarkdownStyleSheet.fromTheme(Theme.of(context))
@@ -564,9 +735,7 @@ class _ReaderScreenState extends State<ReaderScreen>
         children: [
           // Reading surface with the watermark whisper.
           Container(
-            color: dark
-                ? BookNestColors.darkChatBackground
-                : Colors.white,
+            color: pageBg,
             child: WatermarkBackground(
               opacity: dark ? 0.03 : 0.04,
               spacing: 168,
@@ -621,7 +790,8 @@ class _ReaderScreenState extends State<ReaderScreen>
                                             scrollController: _scroll,
                                             config: quill.QuillEditorConfig(
                                               customStyles:
-                                                  _manuscriptStyles(dark),
+                                                  _manuscriptStyles(dark,
+                                                      ink: pageText),
                                               embedBuilders:
                                                   manuscriptEmbedBuilders,
                                               padding:

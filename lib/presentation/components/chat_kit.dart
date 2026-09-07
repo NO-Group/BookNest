@@ -1901,6 +1901,10 @@ class ChatComposer extends StatefulWidget {
   /// Any file format — invoked from the paperclip's "File" option.
   final Future<void> Function(String filename, Uint8List bytes)? onSendFile;
 
+  /// A clip recorded in the BookNest camera (local file path), with
+  /// duration in seconds.
+  final Future<void> Function(String videoPath, int seconds)? onSendVideo;
+
   /// BookNest emote tapped on our own keyboard — sends instantly,
   /// Snapchat-style.
   final Future<void> Function(EmojiDef emote)? onSendEmote;
@@ -1911,6 +1915,7 @@ class ChatComposer extends StatefulWidget {
     required this.onSendText,
     required this.onSendImage,
     this.onSendFile,
+    this.onSendVideo,
     this.onSendEmote,
     this.hint = 'Message…',
     this.enabled = true,
@@ -2031,6 +2036,30 @@ class _ChatComposerState extends State<ChatComposer> {
     }
   }
 
+  /// Record inside the BookNest camera → upload → send as video.
+  Future<void> _snapVideo() async {
+    if (_uploading || widget.onSendVideo == null) return;
+    String? path;
+    try {
+      path = await openBookNestCameraForVideo(context);
+    } catch (_) {
+      path = null;
+    }
+    if (!mounted || path == null || path.isEmpty) return;
+    setState(() => _uploading = true);
+    try {
+      await widget.onSendVideo!(path, 0);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'The video could not be attached — please try again.')));
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
   /// Keeps a copy of outgoing media in the app cache so the custom file
   /// picker can offer it as a recent file next time.
   Future<void> _rememberInRecents(String name, Uint8List bytes) async {
@@ -2098,6 +2127,20 @@ class _ChatComposerState extends State<ChatComposer> {
                 Navigator.pop(sheetContext);
                 _attachFromGallery();
               },
+            ),
+            ListTile(
+              leading: const Icon(Icons.movie_creation_outlined,
+                  color: BookNestColors.cyan),
+              title: const Text('Video with sound',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Record inside BookNest — up to 60s',
+                  style: TextStyle(fontSize: 12)),
+              onTap: widget.onSendVideo == null
+                  ? null
+                  : () {
+                      Navigator.pop(sheetContext);
+                      _snapVideo();
+                    },
             ),
             ListTile(
               leading: const Icon(Icons.mic_rounded,

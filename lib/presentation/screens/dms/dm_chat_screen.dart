@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -266,6 +267,58 @@ class _DMChatScreenState extends State<DMChatScreen> {
       }
     }
     return photos;
+  }
+
+  /// Records stay local until the upload answers — honest states only.
+  Future<void> _sendVideo(String videoPath, int seconds) async {
+    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+    final file = File(videoPath);
+    final size = await file.length();
+    setState(() => _messages.add({
+          'id': localId,
+          'senderId': _viewerId,
+          'type': 'video',
+          'text': '',
+          'mediaUrl': videoPath,
+          'fileName': 'clip.mp4',
+          'fileSize': size,
+          'createdAt': DateTime.now().toIso8601String(),
+          'pending': true,
+        }));
+    _jumpToBottom();
+    final bytes = await file.readAsBytes();
+    final url = await uploadChatFile('clip-${DateTime.now().millisecondsSinceEpoch}.mp4', bytes);
+    if (!mounted) return;
+    if (url == null) {
+      _markLocal(localId, failed: true);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'The video could not be uploaded — press the message to retry '
+              'once your connection is back.')));
+      return;
+    }
+    final replying = _replyTo;
+    final res = await BackendApi.instance.sendMessage(
+      conversationId: _conversationId,
+      peerId: widget.peerId,
+      type: 'video',
+      text: '',
+      mediaUrl: url,
+      fileName: 'clip.mp4',
+      fileSize: size,
+      replyToId:
+          replying != null && !replying['id'].toString().startsWith('local-')
+              ? replying['id'].toString()
+              : null,
+    );
+    if (mounted) setState(() => _replyTo = null);
+    if (!mounted) return;
+    if (res == null) {
+      _markLocal(localId, failed: true);
+      return;
+    }
+    _conversationId ??= res['conversationId']?.toString() ?? widget.conversationId;
+    await _load();
   }
 
   Future<void> _reactToMessage(String messageId, String code) async {
@@ -549,6 +602,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
               onSendText: _sendText,
               onSendImage: _sendImage,
               onSendFile: _sendFile,
+              onSendVideo: _sendVideo,
               onSendEmote: _sendEmote,
               replyTo: _replyTo,
               onCancelReply: () => setState(() => _replyTo = null),

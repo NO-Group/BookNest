@@ -69,7 +69,7 @@ class _FeedScreenState extends State<FeedScreen>
     // SQL read remains as a graceful fallback while devices update.
     List<dynamic> response;
     try {
-      final res = await BackendApi.instance.call('posts.list');
+      final res = await BackendApi.instance.callFresh('posts.list');
       response = (res?['posts'] as List?) ?? const [];
     } catch (_) {
       response = const [];
