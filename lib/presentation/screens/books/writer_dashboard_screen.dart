@@ -162,16 +162,23 @@ class _WorkCard extends StatelessWidget {
                         Row(
                           children: [
                             Icon(
-                              live
-                                  ? Icons.check_circle_rounded
-                                  : Icons.hourglass_top_rounded,
+                              book['status']?.toString() == 'draft'
+                                  ? Icons.inventory_2_rounded
+                                  : (live
+                                      ? Icons.check_circle_rounded
+                                      : Icons.hourglass_top_rounded),
                               size: 14,
-                              color: live
-                                  ? BookNestColors.cyan
-                                  : theme.hintColor,
+                              color: book['status']?.toString() == 'draft'
+                                  ? theme.hintColor
+                                  : (live
+                                      ? BookNestColors.cyan
+                                      : theme.hintColor),
                             ),
                             const SizedBox(width: 5),
-                            Text(live ? 'Live' : 'In review',
+                            Text(
+                                book['status']?.toString() == 'draft'
+                                    ? 'Draft'
+                                    : (live ? 'Live' : 'In review'),
                                 style: TextStyle(
                                     color: theme.hintColor, fontSize: 12)),
                           ],
@@ -193,6 +200,18 @@ class _WorkCard extends StatelessWidget {
                   icon: const Icon(Icons.format_list_bulleted_rounded,
                       size: 17, color: BookNestColors.cyan),
                   label: const Text('Chapters',
+                      style: TextStyle(
+                          color: BookNestColors.cyan,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12.5)),
+                ),
+              ),
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: () => context.push('/editor/book/$id'),
+                  icon: const Icon(Icons.edit_rounded,
+                      size: 17, color: BookNestColors.cyan),
+                  label: const Text('Edit',
                       style: TextStyle(
                           color: BookNestColors.cyan,
                           fontWeight: FontWeight.w700,

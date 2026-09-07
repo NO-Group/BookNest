@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -9,6 +11,131 @@ import '../../config/theme.dart';
 
 /// Shared BookNest UI kit — one visual language across all screens:
 /// navy/cyan gradients, glass surfaces, soft cyan glows, honest empty states.
+
+/// The BookNest loader: an opening book with a stylus, drawn on a
+/// canvas — pages fan and settle while a cyan orbit sweeps. No system
+/// spinners anywhere; this is *the* way BookNest waits.
+class BookNestLoader extends StatefulWidget {
+  final double size;
+  final Color? color;
+  const BookNestLoader({super.key, this.size = 56, this.color});
+  @override
+  State<BookNestLoader> createState() => _BookNestLoaderState();
+}
+
+class _BookNestLoaderState extends State<BookNestLoader>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1300),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Loading',
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) => CustomPaint(
+          size: Size.square(widget.size),
+          painter: _LoaderPainter(t: _c.value, color: widget.color),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoaderPainter extends CustomPainter {
+  final double t;
+  final Color? color;
+  _LoaderPainter({required this.t, this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final ink = color ?? BookNestColors.cyan;
+    final navy = BookNestColors.navyDeep;
+    final c = Offset(w / 2, w / 2);
+
+    // Orbiting mote.
+    final orbitR = w * .42;
+    final angle = t * 2 * math.pi;
+    canvas.drawCircle(
+      c + Offset(math.cos(angle) * orbitR, math.sin(angle) * orbitR * .55),
+      w * .035,
+      Paint()..color = ink.withOpacity(.9),
+    );
+    canvas.drawCircle(
+      c + Offset(math.cos(angle) * orbitR, math.sin(angle) * orbitR * .55),
+      w * .07,
+      Paint()..color = ink.withOpacity(.18),
+    );
+
+    // Open book: two page fans that breathe with the cycle.
+    final breathe = (math.sin(t * 2 * math.pi) + 1) / 2; // 0..1
+    final pageW = w * .3;
+    final pageH = w * .3;
+    final tilt = .10 + .12 * breathe;
+    final pagePaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(c.dx - pageW, c.dy - pageH / 2),
+        Offset(c.dx + pageW, c.dy + pageH / 2),
+        [ink.withOpacity(.85), ink.withOpacity(.45)],
+      );
+    final spineX = c.dx;
+    final baseY = c.dy + pageH * .42;
+
+    Path leftPage = Path()
+      ..moveTo(spineX, baseY)
+      ..quadraticBezierTo(
+          spineX - pageW * .7, baseY - pageH * (.52 + tilt), spineX - pageW,
+          baseY - pageH * (.38 + tilt * 1.6))
+      ..quadraticBezierTo(spineX - pageW * .78, baseY - pageH * .12, spineX,
+          baseY - pageH * .04)
+      ..close();
+    Path rightPage = Path()
+      ..moveTo(spineX, baseY)
+      ..quadraticBezierTo(
+          spineX + pageW * .7, baseY - pageH * (.52 + tilt), spineX + pageW,
+          baseY - pageH * (.38 + tilt * 1.6))
+      ..quadraticBezierTo(spineX + pageW * .78, baseY - pageH * .12, spineX,
+          baseY - pageH * .04)
+      ..close();
+    canvas.drawPath(leftPage, pagePaint);
+    canvas.drawPath(rightPage, pagePaint);
+
+    // Stylus sweeping across the page.
+    final stylusAngle = -0.5 + 1.0 * math.sin(t * 2 * math.pi);
+    final stylusLen = w * .34;
+    final start = Offset(
+        spineX + math.cos(stylusAngle - math.pi / 2) * stylusLen * .45,
+        baseY - pageH * .5 + math.sin(stylusAngle) * stylusLen * .18);
+    final end = start + Offset(math.sin(stylusAngle) * stylusLen * .55,
+        -math.cos(stylusAngle) * stylusLen * .55);
+    canvas.drawLine(
+      start,
+      end,
+      Paint()
+        ..color = navy.withOpacity(.9)
+        ..strokeWidth = w * .03
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawCircle(
+      end,
+      w * .028,
+      Paint()..color = navy,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_LoaderPainter old) => old.t != t;
+}
 
 /// Rounded avatar with Cloudinary-aware caching and an initials fallback.
 class BookNestAvatar extends StatelessWidget {

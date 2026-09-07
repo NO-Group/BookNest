@@ -503,7 +503,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
               TextButton(
                 onPressed: () {
                   Navigator.pop(dialogContext);
-                  context.pop();
+                  context.pop(true);
                 },
                 child: const Text('Done'),
               ),

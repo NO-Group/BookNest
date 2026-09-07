@@ -426,6 +426,7 @@ function bookView(b: Record<string, unknown>) {
     remix_of: b.remixOf ?? null,
     is_remix: b.isRemix === true,
     boosted_until: b.boostUntil ?? null,
+    added_by: b.authorId ?? null,
   };
 }
 

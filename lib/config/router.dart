@@ -33,6 +33,7 @@ import '../presentation/screens/books/writer_dashboard_screen.dart';
 import '../presentation/screens/books/manage_book_screen.dart';
 import '../presentation/screens/books/chapter_manager_screen.dart';
 import '../presentation/screens/books/chapter_editor_screen.dart';
+import '../presentation/components/booknest_ui.dart';
 import '../presentation/screens/books/book_analytics_screen.dart';
 import '../presentation/screens/books/reviews_hub_screen.dart';
 import '../presentation/screens/books/book_reviews_screen.dart';
@@ -58,6 +59,7 @@ import '../presentation/screens/clubs/club_detail_screen.dart';
 import '../presentation/screens/discover/community_detail_screen.dart';
 import '../presentation/screens/discover/organization_detail_screen.dart';
 import '../presentation/screens/discover/school_detail_screen.dart';
+import '../services/backend_api.dart';
 import '../services/supabase_service.dart';
 
 /// Routes that must never be reached while signed out.
@@ -139,6 +141,25 @@ final GoRouter appRouter = GoRouter(
         final clubId = state.uri.queryParameters['clubId'];
         return BookEditorScreen(clubId: clubId);
       },
+    ),
+    GoRoute(
+      path: '/editor/book/:id',
+      builder: (context, state) => FutureBuilder<Map<String, dynamic>?>(
+        future: BackendApi.instance
+            .fetchBook(state.pathParameters['id'] ?? '')
+            .then((res) => res is Map && res['book'] is Map
+                ? Map<String, dynamic>.from(res['book'] as Map)
+                : null),
+        builder: (context, snap) {
+          final book = snap.data;
+          if (book == null) {
+            return const Scaffold(
+              body: Center(child: BookNestLoader(size: 64)),
+            );
+          }
+          return BookEditorScreen.edit(book: book);
+        },
+      ),
     ),
     GoRoute(
       path: '/book/:id',

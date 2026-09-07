@@ -238,10 +238,7 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
             ),
             Expanded(
               child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                          color: BookNestColors.cyan),
-                    )
+                  ? const Center(child: BookNestLoader(size: 64))
                   : RefreshIndicator(
                       color: BookNestColors.cyan,
                       onRefresh: _load,

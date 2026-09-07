@@ -106,6 +106,12 @@ class _FeedScreenState extends State<FeedScreen>
         _filteredPosts = response;
         _isLoading = false;
       });
+      // Count this visit's views (the cloud dedupes per reader per day).
+      if (ids.isNotEmpty) {
+        BackendApi.instance
+            .call('posts.view', {'postIds': ids})
+            .catchError((_) => null);
+      }
     } catch (e) {
       setState(() => _isLoading = false);
     }
@@ -242,9 +248,7 @@ class _FeedScreenState extends State<FeedScreen>
                 // Posts list
                 Expanded(
                   child: _isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(color: BookNestColors.cyan),
-                        )
+                      ? const Center(child: BookNestLoader(size: 64))
                       : _filteredPosts.isEmpty
                           ? _buildEmptyState()
                           : RefreshIndicator(
@@ -1012,12 +1016,77 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
     }
   }
 
+  late int _views = widget.post is Map
+      ? ((widget.post['view_count'] as num?)?.toInt() ?? 0)
+      : 0;
+  late int _comments = widget.post is Map
+      ? ((widget.post['comment_count'] as num?)?.toInt() ?? 0)
+      : 0;
+  late int _reshares = widget.post is Map
+      ? ((widget.post['reshare_count'] as num?)?.toInt() ?? 0)
+      : 0;
+
+  void _openComments() {
+    final id = widget.post is Map && widget.post['id'] != null
+        ? widget.post['id'].toString()
+        : null;
+    if (id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('This post is still on this device — comments open '
+              'once it syncs to the cloud.')));
+      return;
+    }
+    showPostComments(context, postId: id, initialCount: _comments)
+        .then((count) {
+      if (count != null && mounted) setState(() => _comments = count);
+    });
+  }
+
+  Future<void> _reshare() async {
+    final id = widget.post is Map && widget.post['id'] != null
+        ? widget.post['id'].toString()
+        : null;
+    if (id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('This post is still on this device — reshares open '
+              'once it syncs to the cloud.')));
+      return;
+    }
+    HapticFeedback.lightImpact();
+    final res = await BackendApi.instance.call('posts.reshare',
+        {'postId': id});
+    if (!mounted) return;
+    if (res == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not reshare — please try again.')));
+      return;
+    }
+    final already = res['already'] == true;
+    final total = (res['reshareCount'] as num?)?.toInt();
+    setState(() {
+      if (already && _reshares > 0) _reshares -= 1;
+      if (!already) _reshares += 1;
+      if (total != null) _reshares = total;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(already
+            ? 'You already shared this — taken back.'
+            : 'Shared with your followers 🎉')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final muted = Theme.of(context).hintColor;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        Icon(Icons.visibility_outlined, color: muted.withOpacity(.8), size: 18),
+        const SizedBox(width: 4),
+        AnimatedCount(
+          value: _views,
+          style: TextStyle(color: muted, fontSize: 12.5),
+        ),
+        const SizedBox(width: 8),
         IconButton(
           icon: Icon(
             _liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
@@ -1035,20 +1104,292 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
             fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(width: 10),
-        IconButton(
-          icon: Icon(Icons.share_outlined, color: muted, size: 20),
-          tooltip: 'Share post',
-          onPressed: () {
-            final content = widget.post?['content']?.toString() ?? '';
-            final title = widget.post?['title']?.toString() ?? '';
-            Share.share(
-              '${title.isNotEmpty ? title + "\n\n" : ''}$content'
-              '\n\n— shared from BookNest',
-            );
-          },
+        const SizedBox(width: 6),
+        InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: _openComments,
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.mode_comment_outlined, color: muted, size: 19),
+                const SizedBox(width: 4),
+                AnimatedCount(
+                  value: _comments,
+                  style: TextStyle(color: muted, fontSize: 12.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: _reshare,
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.repeat_rounded,
+                    color: muted, size: 19),
+                const SizedBox(width: 4),
+                AnimatedCount(
+                  value: _reshares,
+                  style: TextStyle(color: muted, fontSize: 12.5),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
+    );
+  }
+}
+
+/// The post comments sheet: read, write, count flows back to the card.
+Future<int?> showPostComments(
+  BuildContext context, {
+  required String postId,
+  required int initialCount,
+}) {
+  return showModalBottomSheet<int>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (sheetContext) => _PostCommentsSheet(
+      postId: postId,
+      initialCount: initialCount,
+    ),
+  );
+}
+
+class _PostCommentsSheet extends StatefulWidget {
+  final String postId;
+  final int initialCount;
+  const _PostCommentsSheet(
+      {required this.postId, required this.initialCount});
+  @override
+  State<_PostCommentsSheet> createState() => _PostCommentsSheetState();
+}
+
+class _PostCommentsSheetState extends State<_PostCommentsSheet> {
+  List<Map<String, dynamic>> _comments = [];
+  bool _loading = true;
+  bool _sending = false;
+  final _input = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final res = await BackendApi.instance
+        .call('posts.comments.list', {'postId': widget.postId});
+    if (!mounted) return;
+    setState(() {
+      _comments = ((res?['comments'] as List?) ?? const [])
+          .map((row) => Map<String, dynamic>.from(row as Map))
+          .toList();
+      _loading = false;
+    });
+  }
+
+  Future<void> _send() async {
+    final text = _input.text.trim();
+    if (text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    final res = await BackendApi.instance
+        .call('posts.comments.create', {'postId': widget.postId, 'text': text});
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (res == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('The comment could not be posted — please try again.')));
+      return;
+    }
+    _input.clear();
+    final comment = res['comment'];
+    setState(() {
+      if (comment is Map) {
+        _comments = [
+          Map<String, dynamic>.from(comment),
+          ..._comments,
+        ];
+      } else {
+        _comments = [
+          {'text': text, 'createdAt': DateTime.now().toIso8601String(), 'mine': true},
+          ..._comments,
+        ];
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final nameOf = (Map<String, dynamic> c) =>
+        c['profiles'] is Map
+            ? (c['profiles']['username']?.toString() ?? 'Reader')
+            : (c['mine'] == true ? 'You' : 'Reader');
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * .72,
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 44,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(context).hintColor.withOpacity(.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text('Comments',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Theme.of(context).colorScheme.onSurface)),
+            Expanded(
+              child: _loading
+                  ? const Center(
+                      child: BookNestLoader(size: 40),
+                    )
+                  : _comments.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.mode_comment_outlined,
+                                  size: 34,
+                                  color: Theme.of(context)
+                                      .hintColor
+                                      .withOpacity(.5)),
+                              const SizedBox(height: 10),
+                              Text(
+                                'Be the first to comment',
+                                style: TextStyle(
+                                    color: Theme.of(context).hintColor),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                          itemCount: _comments.length,
+                          itemBuilder: (context, i) {
+                            final c = _comments[i];
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(14),
+                                color: dark
+                                    ? Colors.white.withOpacity(.05)
+                                    : BookNestColors.navyDeep.withOpacity(.04),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 11,
+                                        backgroundColor:
+                                            BookNestColors.navy,
+                                        child: Text(
+                                          nameOf(c)[0].toUpperCase(),
+                                          style: const TextStyle(
+                                              color: BookNestColors.cyan,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(nameOf(c),
+                                          style: const TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w700)),
+                                      const Spacer(),
+                                      Text(
+                                        c['createdAt']?.toString() ?? '',
+                                        style: TextStyle(
+                                            fontSize: 10.5,
+                                            color: Theme.of(context)
+                                                .hintColor),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(c['text']?.toString() ?? '',
+                                      style: TextStyle(
+                                          fontSize: 14,
+                                          height: 1.35,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface)),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _input,
+                        minLines: 1,
+                        maxLines: 4,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: InputDecoration(
+                          hintText: 'Add a comment…',
+                          suffixIcon: _sending
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: BookNestColors.cyan)),
+                                )
+                              : null,
+                        ),
+                        onSubmitted: (_) => _send(),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _sending ? null : _send,
+                      icon: const Icon(Icons.send_rounded,
+                          color: BookNestColors.cyan),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

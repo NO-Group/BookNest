@@ -184,7 +184,7 @@ class _DMListScreenState extends State<DMListScreen> {
             Expanded(
               child: _loading
                   ? const Center(
-                      child: CircularProgressIndicator(color: BookNestColors.cyan))
+                      child: BookNestLoader(size: 44))
                   : RefreshIndicator(
                       color: BookNestColors.cyan,
                       onRefresh: _load,
@@ -301,7 +301,7 @@ class _DMListScreenState extends State<DMListScreen> {
               return const Center(
                   child: Padding(
                 padding: EdgeInsets.all(28),
-                child: CircularProgressIndicator(color: BookNestColors.cyan),
+                child: BookNestLoader(size: 44),
               ));
             }
             final contacts = snapshot.data ?? [];

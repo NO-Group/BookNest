@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
+import 'book_editor_screen.dart';
+import '../../components/booknest_ui.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
@@ -19,6 +21,7 @@ class BookDetailsScreen extends StatefulWidget {
 }
 
 class _BookDetailsScreenState extends State<BookDetailsScreen> {
+  String? _viewerId;
   Map<String, dynamic>? _book;
   Map<String, dynamic>? _progress;
   List<Map<String, dynamic>> _recommended = [];
@@ -28,7 +31,11 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
   List<_Review> _reviews = [];
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _viewerId = SupabaseService().client.auth.currentUser?.id;
+    _load();
+  }
 
   Future<void> _load() async {
     // Optimistic analytics: counted once per user per day server-side; a
@@ -275,16 +282,53 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                       style: TextStyle(color: muted),
                     ),
                   ]),
+                  const SizedBox(height: 10),
+                  _LineageBadges(book: book),
                   const SizedBox(height: 12), Text('Ebook • Markdown', style: TextStyle(color: muted)),
                 ])),
               ]),
               const SizedBox(height: 24),
               Row(children: [
-                Expanded(child: ElevatedButton.icon(onPressed: () => AuthGuard.run(context, () => context.push('/reader?bookId=${widget.bookId}')), icon: Icon(_progress != null ? Icons.auto_stories_rounded : Icons.menu_book_rounded), label: Text(_progress != null ? 'Continue · Chapter ${(_progress!['chapterNumber'] as num?)?.toInt() ?? 1}' : 'Read now'))),
+                Expanded(child: ElevatedButton.icon(onPressed: () => AuthGuard.run(context, () => context.push('/reader?bookId=${widget.bookId}')), icon: Icon(_progress != null ? Icons.auto_stories_rounded : Icons.menu_book_rounded), label: Text(_progress != null ? 'Continue · Unit ${(_progress!['chapterNumber'] as num?)?.toInt() ?? 1}' : 'Read now'))),
                 const SizedBox(width: 10),
                 _RoundAction(icon: _saved ? Icons.bookmark : Icons.bookmark_border, selected: _saved, label: 'Save', onTap: () => _guard(_saved ? 'Removed from saved books.' : 'Saved to your library.', _toggleSave)),
                 _RoundAction(icon: _liked ? Icons.favorite : Icons.favorite_border, selected: _liked, label: 'Like', onTap: () => _guard(_liked ? 'Like removed.' : 'You liked this book.', _toggleLike)),
               ]),
+              const SizedBox(height: 12),
+              if ($mine_expr)
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final edited = await context.push<bool>(
+                            '/editor/book/${widget.bookId}');
+                        if (edited == true && mounted) _load();
+                      },
+                      icon: const Icon(Icons.edit_rounded, size: 18),
+                      label: const Text('Edit book'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: _BoostButton(book: book, onBoosted: _load)),
+                ])
+              else
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _startRemix(context, 'remix'),
+                      icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
+                      label: const Text('Write a remix'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _startRemix(context, 'sequel'),
+                      icon: const Icon(Icons.queue_rounded, size: 18),
+                      label: const Text('Write a sequel'),
+                    ),
+                  ),
+                ]),
               const SizedBox(height: 28), _Heading('About this book'), const SizedBox(height: 10), Text(description, style: theme.textTheme.bodyLarge?.copyWith(height: 1.55, color: muted)),
               const SizedBox(height: 28), _Heading('Ratings and reviews'), const SizedBox(height: 14),
               _Reviews(
@@ -310,6 +354,70 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
       ),
     );
   }
+  /// Remix or sequel: the new draft carries every chapter and marks.
+  Future<void> _startRemix(BuildContext context, String mode) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(mode == 'remix'
+            ? 'Write a remix of this book?'
+            : 'Write the next part?'),
+        content: Text(mode == 'remix'
+            ? 'A remix starts from this book\'s every chapter — your own '
+                'words take it somewhere new. The remix mark travels with it '
+                'and the original author keeps full credit.'
+            : 'A sequel continues this story as its next part — every '
+                'chapter comes with you, and the series line stays unbroken. '
+                'The original author keeps full credit.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Start writing',
+                  style: TextStyle(
+                      color: BookNestColors.cyan,
+                      fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: BookNestLoader(size: 64)),
+    );
+    final res = await BackendApi.instance
+        .call('books.remix', {'bookId': widget.bookId, 'mode': mode});
+    if (!mounted) return;
+    Navigator.of(context).pop(); // loader
+    if (res == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Could not start — this book may be a draft, or you are its '
+              'author. Open it in the studio instead.')));
+      return;
+    }
+    final newId = res['id']?.toString() ?? '';
+    final carried = (res['carriedChapters'] as num?)?.toInt() ?? 0;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(mode == 'remix'
+            ? 'Remix draft created — $carried chapters carried. You earned 10 gems!'
+            : 'Sequel draft created — $carried chapters carried. You earned 10 gems!')));
+    if (newId.isNotEmpty && mounted) {
+      final book = await BackendApi.instance.fetchBook(newId);
+      final b = book?['book'];
+      if (b is Map && mounted) {
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (routeContext) => BookEditorScreen.edit(
+              book: Map<String, dynamic>.from(b)),
+        ));
+      }
+    }
+    if (mounted) _load();
+  }
+
 }
 
 class _Cover extends StatelessWidget { final String title; final String? coverUrl; final bool small; const _Cover({required this.title, this.coverUrl, this.small = false});
@@ -525,6 +633,168 @@ class _BookShareSheetState extends State<BookShareSheet> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Lineage marks: part number, sequel, remix and the boost flame.
+class _LineageBadges extends StatelessWidget {
+  final Map<dynamic, dynamic> book;
+  const _LineageBadges({required this.book});
+
+  @override
+  Widget build(BuildContext context) {
+    final part = (book['part_number'] as num?)?.toInt() ?? 1;
+    final isRemix = book['is_remix'] == true;
+    final isSequel = book['sequel_of'] != null;
+    final boosted = book['boosted_until'] != null &&
+        DateTime.tryParse(book['boosted_until'].toString()) != null &&
+        DateTime.parse(book['boosted_until'].toString())
+            .isAfter(DateTime.now());
+    if (part <= 1 && !isRemix && !isSequel && !boosted) {
+      return const SizedBox.shrink();
+    }
+    final chips = <Widget>[
+      if (boosted)
+        _Badge(
+          icon: Icons.local_fire_department_rounded,
+          label: 'Boosted',
+          color: BookNestColors.cyan,
+        ),
+      if (part > 1)
+        _Badge(
+          icon: Icons.queue_rounded,
+          label: 'Part $part',
+          color: BookNestColors.navy,
+        ),
+      if (isSequel && part <= 1)
+        const _Badge(
+          icon: Icons.auto_stories_rounded,
+          label: 'Sequel',
+          color: BookNestColors.navy,
+        ),
+      if (isRemix)
+        const _Badge(
+          icon: Icons.auto_fix_high_rounded,
+          label: 'Remix',
+          color: BookNestColors.navy,
+        ),
+    ];
+    return Wrap(spacing: 6, runSpacing: 6, children: chips);
+  }
+}
+
+class _Badge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  const _Badge({required this.icon, required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: color.withOpacity(.1),
+        border: Border.all(color: color.withOpacity(.45)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: color)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Author-only boost: 20 gems put the book at the top of Discover for
+/// three days.
+class _BoostButton extends StatefulWidget {
+  final Map<dynamic, dynamic> book;
+  final VoidCallback onBoosted;
+  const _BoostButton({required this.book, required this.onBoosted});
+  @override
+  State<_BoostButton> createState() => _BoostButtonState();
+}
+
+class _BoostButtonState extends State<_BoostButton> {
+  bool _busy = false;
+
+  Future<void> _boost() async {
+    if (_busy) return;
+    final until = widget.book['boosted_until']?.toString();
+    final active = until != null &&
+        DateTime.tryParse(until) != null &&
+        DateTime.parse(until).isAfter(DateTime.now());
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(active ? 'Extend the boost?' : 'Boost this book?'),
+        content: const Text(
+            '20 gems put this book at the top of Discover for three days. '
+            'Claim your daily gems from the wallet if you are short.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Boost · 20 gems',
+                  style: TextStyle(
+                      color: BookNestColors.cyan,
+                      fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    final res = await BackendApi.instance
+        .call('gems.spend', {'kind': 'boost_book', 'bookId': widget.book['id']?.toString() ?? ''});
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (res == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'You need 20 gems to boost — claim your daily gems first.')));
+      return;
+    }
+    final left = (res['gemsLeft'] as num?)?.toInt();
+    widget.onBoosted();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(active
+            ? 'Boost extended!${left != null ? ' $left gems left.' : ''}'
+            : 'Boosted — this book leads Discover for three days!${left != null ? ' $left gems left.' : ''}')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final until = widget.book['boosted_until']?.toString();
+    final active = until != null &&
+        DateTime.tryParse(until) != null &&
+        DateTime.parse(until).isAfter(DateTime.now());
+    return OutlinedButton.icon(
+      onPressed: _busy ? null : _boost,
+      icon: _busy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: BookNestColors.cyan))
+          : Icon(
+              active
+                  ? Icons.local_fire_department_rounded
+                  : Icons.rocket_launch_outlined,
+              size: 18,
+              color: active ? BookNestColors.cyan : null),
+      label: Text(active ? 'Boosted · extend' : 'Boost · 20 gems'),
     );
   }
 }

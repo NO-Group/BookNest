@@ -7,6 +7,7 @@ import '../../../config/theme.dart';
 import '../../components/chat_kit.dart';
 import '../chat/media_viewer_screen.dart';
 import '../../components/booknest_emojis.dart';
+import '../../components/booknest_ui.dart';
 import '../../../services/reader_profile.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
@@ -423,7 +424,7 @@ class _ChatScreenState extends State<ChatScreen> {
       body: ChatCanvas(
         child: _loading
             ? const Center(
-                child: CircularProgressIndicator(color: BookNestColors.cyan))
+                child: BookNestLoader(size: 44))
             : _offline
                 ? _buildNotice(
                     icon: Icons.cloud_off_rounded,
