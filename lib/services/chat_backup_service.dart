@@ -7,13 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:pointycastle/api.dart';
-import 'package:pointycastle/block/aes.dart';
-import 'package:pointycastle/block/modes/gcm.dart';
-import 'package:pointycastle/key_derivators/api.dart';
-import 'package:pointycastle/key_derivators/pbkdf2.dart';
-import 'package:pointycastle/macs/hmac.dart';
-import 'package:pointycastle/digests/sha256.dart';
+import 'package:pointycastle/export.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
