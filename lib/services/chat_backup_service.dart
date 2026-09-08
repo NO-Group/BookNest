@@ -117,7 +117,7 @@ class ChatBackupService {
     final json = utf8.encode(jsonEncode(payload));
     final iv = _random(12);
     final cipher = GCMBlockCipher(AESEngine())
-      ..init(true, AeadParameters(KeyParameter(key), 128, iv));
+      ..init(true, AEADParameters(KeyParameter(key), 128, iv, Uint8List(0)));
     final sealed = cipher.process(Uint8List.fromList(json));
     final out = Uint8List(4 + 1 + 16 + 12 + sealed.length);
     var at = 0;

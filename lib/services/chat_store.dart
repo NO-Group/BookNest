@@ -76,7 +76,7 @@ class ChatStore {
       iv[i] = random.nextInt(256);
     }
     final cipher = GCMBlockCipher(AESEngine())
-      ..init(true, AeadParameters(KeyParameter(key), 128, iv));
+      ..init(true, AEADParameters(KeyParameter(key), 128, iv, Uint8List(0)));
     final sealed = cipher.process(plain);
     final out = Uint8List(4 + 1 + 12 + sealed.length);
     out.setRange(0, 4, _magic);
@@ -97,7 +97,7 @@ class ChatStore {
     final iv = Uint8List.sublistView(blob, 5, 17);
     final sealed = Uint8List.sublistView(blob, 17);
     final cipher = GCMBlockCipher(AESEngine())
-      ..init(false, AeadParameters(KeyParameter(key), 128, iv));
+      ..init(false, AEADParameters(KeyParameter(key), 128, iv, Uint8List(0)));
     return cipher.process(sealed);
   }
 
