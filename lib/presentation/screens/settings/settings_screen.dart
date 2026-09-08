@@ -25,6 +25,8 @@ import '../../../config/app_config.dart';
 import '../../../config/theme.dart';
 import '../../../services/notification_service.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/chat_backup_service.dart';
+import '../../../services/chat_store.dart';
 import '../../../services/supabase_service.dart';
 
 /// Settings — appearance (theme switcher), account shortcuts, support pages.
@@ -332,6 +334,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.notifications_none_rounded,
               label: 'Notification centre',
               onTap: () => context.push('/notifications'),
+            ),
+            _SettingsRow(
+              icon: Icons.backup_outlined,
+              label: 'Chat backup',
+              onTap: () => context.push('/settings/chat-backup'),
             ),
             _SettingsRow(
               icon: Icons.shield_outlined,
@@ -854,8 +861,13 @@ class _DeleteAccountButtonState extends State<_DeleteAccountButton> {
               'try again. Nothing was deleted yet.')));
       return;
     }
-    // Clear this device's traces, then sign out for real.
+    // Clear this device's traces: the encrypted chat vault, the backup
+    // passphrase, then sign out for real.
     BackendApi.instance.bustCache();
+    try {
+      await ChatStore.instance.wipe();
+      await ChatBackupService.instance.forgetPassphraseKey();
+    } catch (_) {}
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();

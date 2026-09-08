@@ -8,6 +8,7 @@ import '../../../config/theme.dart';
 import '../../components/chat_kit.dart';
 import '../chat/media_viewer_screen.dart';
 import '../../components/booknest_emojis.dart';
+import '../../../services/chat_store.dart';
 import '../../components/booknest_ui.dart';
 import '../../components/report_sheet.dart';
 import '../../../services/reader_profile.dart';
@@ -75,6 +76,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _poll?.cancel();
     _scroll.dispose();
+    ChatStore.instance.flush();
     super.dispose();
   }
 
@@ -107,9 +109,28 @@ class _ChatScreenState extends State<ChatScreen> {
     final res = await BackendApi.instance.listClubMessages(conversationId);
     if (!mounted) return;
     if (res == null) return;
-    final messages = (res['messages'] as List? ?? [])
+    var messages = (res['messages'] as List? ?? [])
         .map((row) => Map<String, dynamic>.from(row as Map))
         .toList();
+
+    // Merge restored/older history from the on-device vault.
+    final vaultKey = 'club:$conversationId';
+    try {
+      final stored = await ChatStore.instance.load(vaultKey);
+      final serverIds =
+          messages.map((m) => m['id']?.toString() ?? '').toSet();
+      final older = stored
+          .where((m) => !serverIds.contains(m['id']?.toString() ?? ''))
+          .toList();
+      if (older.isNotEmpty) {
+        messages = [...older, ...messages]..sort((a, b) {
+            final at = DateTime.tryParse(a['createdAt']?.toString() ?? '');
+            final bt = DateTime.tryParse(b['createdAt']?.toString() ?? '');
+            if (at == null || bt == null) return 0;
+            return at.compareTo(bt);
+          });
+      }
+    } catch (_) {}
 
     // Resolve sender names/avatars (cosmetic — never blocks the chat).
     final senderIds = messages
@@ -137,6 +158,15 @@ class _ChatScreenState extends State<ChatScreen> {
       _messages = messages;
       _loading = false;
     });
+
+    // Vault: keep the club's history encrypted on this device.
+    try {
+      await ChatStore.instance.setMeta(vaultKey, {
+        'type': 'club',
+        'title': widget.title,
+      });
+      await ChatStore.instance.replace(vaultKey, messages);
+    } catch (_) {}
 
     // Real read receipts: everything from others is marked read while
     // this chat is open.

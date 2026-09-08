@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../components/chat_kit.dart';
+import '../../../services/chat_store.dart';
 import '../../components/report_sheet.dart';
 import '../chat/media_viewer_screen.dart';
 import '../../components/booknest_emojis.dart';
@@ -76,6 +77,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
   void dispose() {
     _poll?.cancel();
     _scroll.dispose();
+    ChatStore.instance.flush();
     super.dispose();
   }
 
@@ -96,6 +98,30 @@ class _DMChatScreenState extends State<DMChatScreen> {
     }
   }
 
+  /// This conversation's key in the on-device vault.
+  String get _vaultKey {
+    final conversationId = _conversationId;
+    return (conversationId == null || conversationId.isEmpty)
+        ? 'peer:${widget.peerId}'
+        : 'dm:$conversationId';
+  }
+
+  Future<void> _rememberInVault(List<Map<String, dynamic>> messages) async {
+    try {
+      await ChatStore.instance.setMeta(_vaultKey, {
+        'type': 'dm',
+        'peerId': widget.peerId,
+        'title': widget.title,
+      });
+      await ChatStore.instance.replace(_vaultKey, messages);
+      // The conversation earned its real id after the first send — move
+      // any peer-keyed history over.
+      if (_conversationId != null && _vaultKey.startsWith('dm:')) {
+        await ChatStore.instance.rename('peer:${widget.peerId}', _vaultKey);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _load() async {
     final conversationId = _conversationId;
     if (conversationId == null) {
@@ -111,18 +137,40 @@ class _DMChatScreenState extends State<DMChatScreen> {
       }
       return;
     }
-    final messages = (res['messages'] as List? ?? [])
+    var messages = (res['messages'] as List? ?? [])
         .map((row) => Map<String, dynamic>.from(row as Map))
         .toList();
-    final grew = messages.length > _lastCount && _lastCount >= 0;
-    _lastCount = messages.length;
+    final serverCount = messages.length;
+    // Merge the on-device vault: restored or older history appears above
+    // the server's sync window — WhatsApp-style.
+    try {
+      final stored = await ChatStore.instance.load(_vaultKey);
+      final serverIds =
+          messages.map((m) => m['id']?.toString() ?? '').toSet();
+      final older = stored
+          .where((m) => !serverIds.contains(m['id']?.toString() ?? ''))
+          .toList();
+      if (older.isNotEmpty) {
+        messages = [...older, ...messages]..sort((a, b) {
+            final at = DateTime.tryParse(a['createdAt']?.toString() ?? '');
+            final bt = DateTime.tryParse(b['createdAt']?.toString() ?? '');
+            if (at == null || bt == null) return 0;
+            return at.compareTo(bt);
+          });
+      }
+    } catch (_) {}
+    final grew = serverCount > _lastCount && _lastCount >= 0;
+    _lastCount = serverCount;
     // Real read receipts: everything from the peer is marked read while
     // this chat is open.
     if (conversationId != null) BackendApi.instance.markDmRead(conversationId);
-    setState(() {
-      _messages = messages;
-      _loading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _messages = messages;
+        _loading = false;
+      });
+    }
+    _rememberInVault(messages);
     if (grew || _scroll.hasClients) _jumpToBottom();
   }
 

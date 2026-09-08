@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../components/chat_kit.dart';
+import '../../../services/chat_store.dart';
+import '../../../services/chat_backup_service.dart';
 import '../../components/booknest_ui.dart';
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
@@ -30,6 +32,8 @@ class _DMListScreenState extends State<DMListScreen> {
   bool _loading = true;
   bool _cloudReady = false;
   List<Map<String, dynamic>> _conversations = [];
+  final List<Map<String, dynamic>> _restored = [];
+  bool _restoreAvailable = false;
   Map<String, Map<String, dynamic>> _people = {};
   Future<List<Map<String, dynamic>>>? _directory;
 
@@ -38,6 +42,10 @@ class _DMListScreenState extends State<DMListScreen> {
     super.initState();
     _directory = _loadDirectory();
     _load();
+    // WhatsApp-style housekeeping: run a due backup silently, then surface
+    // any restored-only history and a cloud backup (if one exists).
+    ChatBackupService.instance.maybeRunScheduled().catchError((_) => null);
+    _scanVault();
   }
 
   Future<List<Map<String, dynamic>>> _loadDirectory() async {
@@ -90,12 +98,144 @@ class _DMListScreenState extends State<DMListScreen> {
         }
       } catch (_) {}
     }
-    setState(() {
-      _conversations = conversations;
-      _people = people;
-      _cloudReady = true;
-      _loading = false;
+    // Fold in conversations that live only in this device's vault (they
+    // are older than the server's sync window — restored from backup).
+    final serverIds = conversations
+        .map((c) => c['id']?.toString() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final restoredOnly = <Map<String, dynamic>>[];
+    final extraPeers = <String>{};
+    for (final key in ChatStore.instance.conversationIds) {
+      if (!key.startsWith('dm:')) continue;
+      final id = key.substring(3);
+      if (serverIds.contains(id)) continue;
+      final meta = ChatStore.instance.meta(key) ?? const {};
+      final peerId = meta['peerId']?.toString() ?? '';
+      final last = ChatStore.instance.lastMessage(key);
+      if (last == null) continue;
+      restoredOnly.add({
+        'id': id,
+        'peerId': peerId,
+        'restored': true,
+        'lastMessage': {
+          'senderId': last['senderId']?.toString() ?? '',
+          'type': last['type']?.toString() ?? 'text',
+          'text': last['text']?.toString() ?? '',
+          'createdAt': last['createdAt']?.toString() ?? '',
+        },
+        'updatedAt': last['createdAt']?.toString() ?? '',
+      });
+      if (peerId.isNotEmpty) extraPeers.add(peerId);
+    }
+    if (extraPeers.isNotEmpty) {
+      try {
+        final rows = await SupabaseService()
+            .client
+            .from('profiles')
+            .select('id, username, display_name, avatar_url')
+            .inFilter('id', extraPeers.toList());
+        for (final row in rows as List) {
+          final person = Map<String, dynamic>.from(row as Map);
+          people[person['id']?.toString() ?? ''] = person;
+        }
+      } catch (_) {}
+    }
+    restoredOnly.sort((a, b) {
+      final at = DateTime.tryParse(a['updatedAt'] ?? '');
+      final bt = DateTime.tryParse(b['updatedAt'] ?? '');
+      if (at == null || bt == null) return 0;
+      return bt.compareTo(at);
     });
+    if (mounted) {
+      setState(() {
+        _conversations = conversations;
+        _people = people;
+        _cloudReady = true;
+        _loading = false;
+        _restored
+          ..clear()
+          ..addAll(restoredOnly);
+      });
+    }
+  }
+
+  /// Shows the restore banner on a fresh install when a Google backup
+  /// exists and this device's vault is still empty.
+  Future<void> _scanVault() async {
+    try {
+      if (ChatStore.instance.conversationIds.isNotEmpty) return;
+      final info = await ChatBackupService.instance.peekDriveBackup();
+      if (info != null && mounted) {
+        setState(() => _restoreAvailable = true);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _restoreFromBanner() async {
+    final passphrase = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: const Text('Restore your chats?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                  'Your backup is sealed with your passphrase. Enter it to '
+                  'bring your history back to this phone.',
+                  style: TextStyle(fontSize: 13.5, height: 1.45)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                obscureText: true,
+                autofocus: true,
+                onSubmitted: (v) => Navigator.pop(dialogContext, v.trim()),
+                decoration:
+                    const InputDecoration(labelText: 'Passphrase'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Later')),
+            TextButton(
+                onPressed: () =>
+                    Navigator.pop(dialogContext, controller.text.trim()),
+                child: const Text('Restore',
+                    style: TextStyle(
+                        color: BookNestColors.cyan,
+                        fontWeight: FontWeight.bold))),
+          ],
+        );
+      },
+    );
+    if (passphrase == null || passphrase.isEmpty || !mounted) return;
+    try {
+      final count =
+          await ChatBackupService.instance.restoreFromDrive(passphrase);
+      if (!mounted) return;
+      setState(() => _restoreAvailable = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(count > 0
+              ? 'Restored $count message${count == 1 ? '' : 's'} — welcome '
+                  'back to your history.'
+              : 'The backup was empty — nothing to restore.')));
+      _load();
+    } on BackupPassphraseWrong {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'That passphrase does not open this backup — check for typos.')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'The restore could not complete — try again from Chat backup '
+              'in Settings.')));
+    }
   }
 
   String _displayName(String peerId) {
@@ -224,10 +364,28 @@ class _DMListScreenState extends State<DMListScreen> {
     }
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-      itemCount: _conversations.length,
+      itemCount: _conversations.length +
+          (_restoreAvailable ? 1 : 0) +
+          _restored.length,
       separatorBuilder: (_, __) => const SizedBox(height: 2),
       itemBuilder: (context, index) {
-        final conversation = _conversations[index];
+        if (_restoreAvailable && index == 0) {
+          return _RestoreBanner(onRestore: _restoreFromBanner);
+        }
+        final adjusted = index - (_restoreAvailable ? 1 : 0);
+        if (adjusted >= _conversations.length) {
+          return _buildConversationTile(
+              theme, dark, _restored[adjusted - _conversations.length]);
+        }
+        final conversation = _conversations[adjusted];
+        return _buildConversationTile(theme, dark, conversation);
+      },
+    );
+  }
+
+  /// One chat row — used by both live and restored conversations.
+  Widget _buildConversationTile(
+      ThemeData theme, bool dark, Map<String, dynamic> conversation) {
         final peerId = conversation['peerId']?.toString() ?? '';
         final last = conversation['lastMessage'];
         final unreadish = last != null && last['senderId']?.toString() != viewerId;
@@ -261,8 +419,6 @@ class _DMListScreenState extends State<DMListScreen> {
           ),
           onTap: () => context.push('/chat/${conversation['id']}?peer=$peerId'),
         );
-      },
-    );
   }
 
   Widget _buildFallback(ThemeData theme, bool dark) {
@@ -507,6 +663,57 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The WhatsApp moment: a fresh install with a backup waiting in your
+/// Google account.
+class _RestoreBanner extends StatelessWidget {
+  final VoidCallback onRestore;
+  const _RestoreBanner({required this.onRestore});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: BookNestColors.cyan.withOpacity(.1),
+        border: Border.all(color: BookNestColors.cyan.withOpacity(.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_download_rounded,
+              color: BookNestColors.cyan),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Restore your chats?',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 14)),
+                const SizedBox(height: 3),
+                Text(
+                  'A backup is waiting in your Google account.',
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      color: Theme.of(context).hintColor),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: onRestore,
+            child: const Text('Restore',
+                style: TextStyle(
+                    color: BookNestColors.cyan,
+                    fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }

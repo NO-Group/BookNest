@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.6.0+18 — 2026-09-07 · The WhatsApp recipe for messaging
+
+- **Chats now live encrypted on your phone**: every conversation is its
+  own AES-256-GCM vault file, keyed on the device in secure storage —
+  chats open instantly and your history never depends on our servers.
+- **Backup to your Google account**: the whole vault is sealed with your
+  own passphrase (without it the backup is unreadable to anyone,
+  including BookNest) and stored in a hidden folder in your Google
+  Drive. Back up on demand or Daily / Weekly / Monthly.
+- **Restore, WhatsApp-style**: reinstall or move phones and the chats
+  screen asks "Restore your chats?" — your passphrase brings every
+  message back. Everywhere else, the same encrypted backup travels as a
+  file you keep.
+- **Servers stay tiny**: messages live on BookNest's servers only for a
+  30-day sync window, then they're purged for good — each chat keeps
+  just a one-line preview. This is the storage recipe WhatsApp uses.
+- Account deletion now wipes the local chat vault and backup keys too.
+
 ## 2.5.0+17 — 2026-09-07 · Launch readiness
 
 - **Delete your account for real**: Settings now carries the full account

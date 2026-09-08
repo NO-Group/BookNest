@@ -1,7 +1,7 @@
 name: booknest
 description: BookNest by N.O Group - The Digital Library Ecosystem for Bookworms
 publish_to: 'none'
-version: 2.5.0+17
+version: 2.6.0+18
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -37,6 +37,11 @@ dependencies:
   pdfx: ^2.11.0
   speech_to_text: ^7.4.0
   record: ^7.1.1
+  # WhatsApp-style chat storage: encrypted local store + Google Drive backup.
+  pointycastle: ^3.9.1
+  path_provider: ^2.1.2
+  flutter_secure_storage: ^9.2.2
+  google_sign_in: ^6.2.1
 
 dependency_overrides:
   # jni 1.0.1 is retracted and its Android Gradle file is broken

@@ -542,6 +542,61 @@ async function buildReplyPreview(
   };
 }
 
+// ── WhatsApp-style storage law ──────────────────────────────────────────────
+// Messages live on BookNest's servers only while they are useful for
+// syncing — 30 days. Everything older is purged for good; each chat keeps
+// only a tiny last-message preview on its conversation document, so the
+// chat list stays alive. Readers keep their full history encrypted on
+// their device and in their Google-account backup.
+const MESSAGE_RETENTION_DAYS = 30;
+let lastRetentionSweepAt = 0;
+
+async function sweepOldMessages(): Promise<void> {
+  const now = Date.now();
+  if (now - lastRetentionSweepAt < 60 * 60 * 1000) return; // hourly
+  lastRetentionSweepAt = now;
+  try {
+    const d = await dbFor('chats');
+    const boundary = ObjectId.createFromTime(
+      Math.floor((now - MESSAGE_RETENTION_DAYS * 24 * 3600 * 1000) / 1000));
+    // The newest slice of expiry-bound messages, so every affected
+    // conversation can keep a last-message preview.
+    const dying = await d.collection('messages')
+      .find({ _id: { $lt: boundary } })
+      .sort({ _id: -1 })
+      .limit(20000)
+      .project({ conversationId: 1, senderId: 1, type: 1, text: 1,
+        fileName: 1, bookTitle: 1 })
+      .toArray();
+    const previews = new Map<string, Record<string, unknown>>();
+    for (const m of dying) {
+      const key = String(m.conversationId);
+      if (previews.has(key)) continue; // first hit = newest (sorted desc)
+      const type = String(m.type ?? 'text');
+      const text = type === 'text' ? String(m.text ?? '')
+        : type === 'image' ? '📷 Photo'
+        : type === 'video' ? '🎬 Video'
+        : type === 'voice' ? '🎤 Voice message'
+        : type === 'emoji' ? 'Emote'
+        : type === 'book_share' ? String(m.bookTitle ?? 'Book')
+        : String(m.fileName ?? 'File');
+      previews.set(key, {
+        text: text.slice(0, 140), type, senderId: String(m.senderId ?? ''),
+        createdAt: boundary, expired: true,
+      });
+    }
+    for (const [key, preview] of previews) {
+      try {
+        await d.collection('conversations').updateOne(
+          { _id: new ObjectId(key) },
+          { $set: { lastMessage: preview } });
+      } catch { /* conversation already gone */ }
+    }
+    await d.collection('messages').deleteMany({ _id: { $lt: boundary } });
+  } catch { // the sweep never blocks a chat action
+  }
+}
+
 /** The reader ids [uid] has blocked. */
 async function blockedSet(uid: string): Promise<Set<string>> {
   const rows = await (await dbFor('moderation')).collection('blocks')
@@ -1995,6 +2050,7 @@ Deno.serve(async (req: Request) => {
       case 'dm.list': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
+        void sweepOldMessages();
         const rows = await (await dbFor('chats')).collection('conversations')
           .find({ memberIds: uid, clubKey: { $exists: false } })
           .sort({ updatedAt: -1 })
@@ -2006,6 +2062,7 @@ Deno.serve(async (req: Request) => {
       case 'dm.messages': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
+        void sweepOldMessages();
         const conversationId = typeof p.conversationId === 'string' ? p.conversationId : '';
         if (!isHexId(conversationId)) return fail('A valid conversationId is required');
         const d = await dbFor('chats');
@@ -2118,6 +2175,7 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'chat.messages': {
+        void sweepOldMessages();
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         const d = await dbFor('chats');
@@ -2148,6 +2206,7 @@ Deno.serve(async (req: Request) => {
       // ── message toolkit: react / delete / read receipts ──────────────────
       case 'chats.list': {
         const uid = await currentUserId(req);
+        void sweepOldMessages();
         if (!uid) return fail('Sign in required', 401);
         const d = await dbFor('chats');
         const rows = await d.collection('conversations')

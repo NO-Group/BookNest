@@ -44,6 +44,7 @@ import '../presentation/screens/onboarding/onboarding_screen.dart';
 import '../presentation/screens/auth/profile_setup_screen.dart';
 import '../presentation/screens/support/privacy_screen.dart';
 import '../presentation/screens/support/terms_screen.dart';
+import '../presentation/screens/settings/chat_backup_screen.dart';
 import '../presentation/screens/support/about_screen.dart';
 import '../presentation/screens/support/connection_status_screen.dart';
 import '../presentation/screens/support/permissions_screen.dart';
@@ -292,6 +293,9 @@ final GoRouter appRouter = GoRouter(
     // ── Support ──
     GoRoute(path: '/privacy', builder: (context, state) => const PrivacyScreen()),
     GoRoute(path: '/terms', builder: (context, state) => const TermsScreen()),
+    GoRoute(
+        path: '/settings/chat-backup',
+        builder: (context, state) => const ChatBackupScreen()),
     GoRoute(path: '/about', builder: (context, state) => const AboutScreen()),
     // Telegram-style chat, opened full-screen (nav bar hidden).
     // `/chat/<conversationId>` continues a chat; `/chat/peer/<peerId>`
