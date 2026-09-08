@@ -111,7 +111,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
       await ChatStore.instance.setMeta(_vaultKey, {
         'type': 'dm',
         'peerId': widget.peerId,
-        'title': widget.title,
+        'title': _peerName,
       });
       await ChatStore.instance.replace(_vaultKey, messages);
       // The conversation earned its real id after the first send — move

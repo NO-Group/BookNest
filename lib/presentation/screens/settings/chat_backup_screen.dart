@@ -199,7 +199,7 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
     String? filePath;
     if (!ChatBackupService.instance.driveSupported) {
       final picked = await FilePicker.platform.pickFiles(
-        type: 'any',
+        type: FileType.any,
         dialogTitle: 'Choose your BookNest backup file (.bnbk)',
       );
       filePath = picked?.files.single.path;
