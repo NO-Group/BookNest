@@ -148,7 +148,8 @@ class ChatBackupService {
     final sealed = Uint8List.sublistView(blob, 33);
     final derived = _deriveSync(passphrase, salt);
     final cipher = GCMBlockCipher(AESEngine())
-      ..init(false, AeadParameters(KeyParameter(derived), 128, iv));
+      ..init(false, AEADParameters(KeyParameter(derived), 128, iv,
+          Uint8List(0)));
     try {
       final plain = cipher.process(sealed);
       final decoded = jsonDecode(utf8.decode(plain));
