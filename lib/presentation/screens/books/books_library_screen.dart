@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/genre_service.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart' show BookNestLoader, TagChip, kBookNestGenres;
 
@@ -15,31 +16,6 @@ class BooksLibraryScreen extends StatefulWidget {
 }
 
 class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
-  /// The 22 BookNest genres, in the exact requested order.
-  static const List<String> genres = [
-    'Romance',
-    'Science Fiction',
-    'Thriller & Suspense',
-    'Fantasy',
-    'Mystery & Crime',
-    'Horror',
-    'Historical Fiction',
-    'Literary Fiction',
-    'Westerns',
-    'Biographies & Memoirs',
-    'True Crime',
-    'Self-Help & Wellness',
-    'History & Politics',
-    'Young Adult (YA)',
-    'STEM',
-    'Humanities & Social Sciences',
-    'Languages & Linguistics',
-    'Finance & Economics',
-    'Professional Certification',
-    'Lexicons',
-    'Research & Citation Tools',
-    'Compendiums',
-  ];
 
   final TextEditingController _search = TextEditingController();
   List<Map<String, dynamic>> _books = const [];
@@ -51,6 +27,9 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
     super.initState();
     _load();
     _search.addListener(() => setState(() {}));
+    GenreService.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -120,9 +99,9 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
               Expanded(
                 child: ListView.builder(
                   controller: scrollController,
-                  itemCount: genres.length,
+                  itemCount: GenreService.instance.bookGenres.length,
                   itemBuilder: (_, index) {
-                    final genre = genres[index];
+                    final genre = GenreService.instance.bookGenres[index];
                     return CheckboxListTile(
                       value: next.contains(genre),
                       activeColor: BookNestColors.cyan,
@@ -219,17 +198,17 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // The 22 BookNest genres — tap to browse a genre shelf.
+                  // The live genre shelves — tap to browse one.
                   SizedBox(
                     height: 36,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      itemCount: kBookNestGenres.length,
+                      itemCount: GenreService.instance.bookGenres.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (context, index) => TagChip(
-                        label: kBookNestGenres[index],
-                        onTap: () => context.push(
-                            '/genre?name=${Uri.encodeComponent(kBookNestGenres[index])}'),
+                        label: GenreService.instance.bookGenres[index],
+                        onTap: () => context.push('/genre?name='
+                            '${Uri.encodeComponent(GenreService.instance.bookGenres[index])}'),
                       ),
                     ),
                   ),

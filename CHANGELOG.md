@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.9.0+21 — 2026-09-09 · Genres the moderator owns
+
+- **Genres are no longer hardcoded**: both taxonomies — the 22 book
+  shelves and the club genres — now live on the server, curated by the
+  overall moderator from a new **Genres** tab in the moderation console.
+- Adding a genre puts it in every picker and shelf on every device;
+  removing one retires it from the pickers while books already on the
+  shelf keep their label (browsing an old shelf still works).
+- Every screen — onboarding, library, book studio, book management,
+  club creation — reads the same live lists, with the classic defaults
+  as an offline fallback so the app never shows an empty picker.
+
 ## 2.8.0+20 — 2026-09-07 · Production: push, power, and sealed words
 
 - **Push notifications are live-ready (FCM)**: direct messages and club

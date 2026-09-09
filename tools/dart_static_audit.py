@@ -223,7 +223,12 @@ def check_file(path, packages, violations):
     if re.search(r'\bBookNestColors\b|\bBookNestTheme\b', code) and \
             os.path.basename(path) != 'theme.dart' and not theme_import_ok(path, src):
         violations.append(f'{rel}: uses BookNestColors without theme.dart import')
-    if path != os.path.join(ROOT, 'lib', 'presentation', 'components', 'booknest_ui.dart') \
+    kit_definers = (
+        os.path.join(ROOT, 'lib', 'presentation', 'components',
+                     'booknest_ui.dart'),
+        os.path.join(ROOT, 'lib', 'services', 'genre_service.dart'),
+    )
+    if path not in kit_definers \
             and KIT_NEED.search(code) and not ui_import_ok(path, src, 'booknest_ui.dart'):
         violations.append(f'{rel}: uses UI kit without booknest_ui import')
 

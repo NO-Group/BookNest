@@ -60,6 +60,7 @@ export const DB_NAMES = {
   feed: 'booknest_feed', // feed posts (cutover complete: was transitional SQL)
   moderation: 'booknest_moderation', // UGC reports from the community
   groups: 'booknest_groups', // clubs, communities, organizations, schools
+  genres: 'booknest_genres', // moderator-curated book + club genre shelves
 } as const;
 
 type Domain = keyof typeof DB_NAMES;
@@ -160,8 +161,9 @@ async function ensureIndexes(
           database.collection('push_tokens').createIndex({ userId: 1 }),
         ]);
         break;
-      case 'moderation':
-        await database.collection('reports').createIndex({ status: 1, createdAt: -1 });
+      case 'genres':
+        await database.collection('genres')
+          .createIndex({ kind: 1, nameLower: 1 }, { unique: true });
         break;
     }
   } catch (error) {
@@ -219,6 +221,38 @@ async function logAdmin(
   } catch {
     // The log never blocks the action.
   }
+}
+
+// ── dynamic genres: the moderator curates both shelves ─────────────────────
+const DEFAULT_BOOK_GENRES = [
+  'Romance', 'Science Fiction', 'Thriller & Suspense', 'Fantasy',
+  'Mystery & Crime', 'Horror', 'Historical Fiction', 'Literary Fiction',
+  'Westerns', 'Biographies & Memoirs', 'True Crime', 'Self-Help & Wellness',
+  'History & Politics', 'Young Adult (YA)', 'STEM',
+  'Humanities & Social Sciences', 'Languages & Linguistics',
+  'Finance & Economics', 'Professional Certification', 'Lexicons',
+  'Research & Citation Tools', 'Compendiums',
+];
+const DEFAULT_CLUB_GENRES = [
+  'Fiction', 'Non-Fiction', 'Sci-Fi', 'Classics', 'African Lit', 'Romance',
+  'Thriller', 'Poetry', 'Academic', 'WAEC Prep',
+];
+
+/** First moderator touch copies the defaults in, so a removal can stick. */
+async function ensureGenresMaterialized(): Promise<void> {
+  const col = (await dbFor('genres')).collection('genres');
+  if ((await col.countDocuments({})) > 0) return;
+  const t = Date.now();
+  await col.insertMany([
+    ...DEFAULT_BOOK_GENRES.map((name, i) => ({
+      kind: 'book', name, nameLower: name.toLowerCase(),
+      createdAt: new Date(t + i),
+    })),
+    ...DEFAULT_CLUB_GENRES.map((name, i) => ({
+      kind: 'club', name, nameLower: name.toLowerCase(),
+      createdAt: new Date(t + 1000 + i),
+    })),
+  ]);
 }
 
 // ── FCM push (HTTP v1 with a service account from the dashboard env) ───────
@@ -3633,6 +3667,70 @@ Deno.serve(async (req: Request) => {
             createdAt: r.createdAt,
           })),
         });
+      }
+
+      // ── dynamic genres: the moderator curates the shelves ────────────────
+      case 'genres.list': {
+        const rows = await (await dbFor('genres')).collection('genres')
+          .find({}).sort({ createdAt: 1 }).toArray();
+        if (rows.length === 0) {
+          return ok({
+            bookGenres: DEFAULT_BOOK_GENRES,
+            clubGenres: DEFAULT_CLUB_GENRES,
+          });
+        }
+        const bookGenres: string[] = [];
+        const clubGenres: string[] = [];
+        let sawBook = false;
+        let sawClub = false;
+        for (const g of rows) {
+          if (g.kind === 'club') {
+            sawClub = true;
+            clubGenres.push(String(g.name));
+          } else {
+            sawBook = true;
+            bookGenres.push(String(g.name));
+          }
+        }
+        if (!sawBook) bookGenres.push(...DEFAULT_BOOK_GENRES);
+        if (!sawClub) clubGenres.push(...DEFAULT_CLUB_GENRES);
+        return ok({ bookGenres, clubGenres });
+      }
+
+      case 'admin.genre.add': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can add genres', 403);
+        const name = String(p.name ?? '').replace(/\s+/g, ' ').trim();
+        const kind = p.kind === 'club' ? 'club' : 'book';
+        if (name.length < 2 || name.length > 40) {
+          return fail('Genre names are 2-40 characters');
+        }
+        const col = (await dbFor('genres')).collection('genres');
+        await ensureGenresMaterialized();
+        const nameLower = name.toLowerCase();
+        if (await col.findOne({ kind, nameLower })) {
+          return fail('That genre is already in the list');
+        }
+        await col.insertOne({ kind, name, nameLower, createdAt: new Date() });
+        await logAdmin(uid, 'genre.add', { kind, name });
+        return ok({ added: name });
+      }
+
+      case 'admin.genre.remove': {
+        const uid = await adminUserId(req);
+        if (!uid) {
+          return fail('Only the overall moderator can remove genres', 403);
+        }
+        const name = String(p.name ?? '').trim();
+        const kind = p.kind === 'club' ? 'club' : 'book';
+        if (!name) return fail('A genre name is required');
+        const col = (await dbFor('genres')).collection('genres');
+        await ensureGenresMaterialized();
+        const res = await col
+          .deleteOne({ kind, nameLower: name.toLowerCase() });
+        if (res.deletedCount === 0) return fail('No such genre in the list');
+        await logAdmin(uid, 'genre.remove', { kind, name });
+        return ok({ removed: name });
       }
 
       // ── server-side link previews (phones are blocked by bot shields) ──

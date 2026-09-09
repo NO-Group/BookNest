@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/genre_service.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
@@ -43,7 +44,19 @@ class _ManageBookScreenState extends State<ManageBookScreen> {
     super.dispose();
   }
 
+  /// Live genre shelf; an existing book's legacy genre always stays
+  /// visible even after the moderator retires it.
+  List<String> get _genreChoices {
+    final list = GenreService.instance.bookGenres;
+    final current = _genre;
+    if (current != null && current.isNotEmpty && !list.contains(current)) {
+      return <String>[current, ...list];
+    }
+    return list;
+  }
+
   Future<void> _load() async {
+    await GenreService.instance.load();
     try {
       final res = await BackendApi.instance.fetchBook(widget.bookId);
       final row = res?['book'];
@@ -53,7 +66,7 @@ class _ManageBookScreenState extends State<ManageBookScreen> {
         _title.text = _book?['title']?.toString() ?? '';
         _description.text = _book?['description']?.toString() ?? '';
         final genre = _book?['genre']?.toString();
-        _genre = kBookNestGenres.contains(genre) ? genre : null;
+        _genre = (genre == null || genre.isEmpty) ? null : genre;
         _loading = false;
       });
     } catch (_) {
@@ -215,11 +228,11 @@ class _ManageBookScreenState extends State<ManageBookScreen> {
               label: 'Genre',
               child: DropdownButtonFormField<String>(
                 value: _genre,
-                hint: const Text('Pick one of the 22 BookNest genres'),
+                hint: const Text('Pick a shelf for this book'),
                 isExpanded: true,
                 decoration: _inputDecoration(theme),
                 dropdownColor: theme.colorScheme.surface,
-                items: kBookNestGenres
+                items: _genreChoices
                     .map((g) => DropdownMenuItem(value: g, child: Text(g)))
                     .toList(),
                 onChanged: (value) => setState(() => _genre = value),

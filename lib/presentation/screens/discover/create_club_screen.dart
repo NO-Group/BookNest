@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../config/theme.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/supabase_service.dart';
+import '../../../services/genre_service.dart';
 
 class CreateClubScreen extends StatefulWidget {
   const CreateClubScreen({super.key});
@@ -24,20 +25,24 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
   bool _isPrivate = false;
   bool _isLoading = false;
 
-  final List<String> _genres = [
-    'Fiction',
-    'Non-Fiction',
-    'Sci-Fi',
-    'Classics',
-    'African Lit',
-    'Romance',
-    'Thriller',
-    'Poetry',
-    'Academic',
-    'WAEC Prep',
-  ];
+  /// Live club taxonomy — the moderator curates it from the console.
+  List<String> _genres = List<String>.from(GenreService.instance.clubGenres);
 
   Uint8List? _coverBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    GenreService.instance.load().then((_) {
+      if (!mounted) return;
+      setState(() {
+        _genres = List<String>.from(GenreService.instance.clubGenres);
+        if (_genres.isNotEmpty && !_genres.contains(_selectedGenre)) {
+          _selectedGenre = _genres.first;
+        }
+      });
+    });
+  }
 
   Future<void> _pickCover() async {
     try {
@@ -79,7 +84,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
       await SupabaseService().writeRow('clubs', {
         'name': _nameController.text.trim(),
         'description': _descriptionController.text.trim(),
-        'genre_tags': [_selectedGenre],
+        'genre_tags': [_genres.isEmpty ? 'General' : _selectedGenre],
         'is_private': _isPrivate,
         'owner_id': userId,
         'vice_moderator_id': null,

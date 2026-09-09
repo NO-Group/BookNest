@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/genre_service.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 
@@ -13,7 +14,7 @@ class ModerationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: Colors.transparent,
@@ -28,14 +29,16 @@ class ModerationScreen extends StatelessWidget {
               Tab(icon: Icon(Icons.people_rounded, size: 18), text: 'Readers'),
               Tab(icon: Icon(Icons.monitor_heart_outlined, size: 18),
                   text: 'Pulse'),
+              Tab(icon: Icon(Icons.category_rounded, size: 18), text: 'Genres'),
             ],
           ),
         ),
-        body: const TabBarView(
+        body: TabBarView(
           children: [
             _ReportsTab(),
             _ReadersTab(),
             _StatsTab(),
+            _GenresTab(),
           ],
         ),
       ),
@@ -884,6 +887,200 @@ class _StatsTabState extends State<_StatsTab>
             }),
         ],
       ),
+    );
+  }
+}
+
+// ── Genres ─────────────────────────────────────────────────────────────────
+
+/// The moderator curates both genre shelves. Changes go to the backend and
+/// every device picks them up — books already on a retired shelf keep their
+/// label, they just stop being pickable for new work.
+class _GenresTab extends StatefulWidget {
+  const _GenresTab();
+
+  @override
+  State<_GenresTab> createState() => _GenresTabState();
+}
+
+class _GenresTabState extends State<_GenresTab>
+    with AutomaticKeepAliveClientMixin {
+  final TextEditingController _bookCtrl = TextEditingController();
+  final TextEditingController _clubCtrl = TextEditingController();
+  List<String> _bookGenres = const [];
+  List<String> _clubGenres = const [];
+  bool _loading = true;
+  bool _busy = false;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _bookCtrl.dispose();
+    _clubCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    await GenreService.instance.load(force: true);
+    if (!mounted) return;
+    setState(() {
+      _bookGenres = List<String>.from(GenreService.instance.bookGenres);
+      _clubGenres = List<String>.from(GenreService.instance.clubGenres);
+      _loading = false;
+    });
+  }
+
+  void _notice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _add(bool isClub) async {
+    if (_busy) return;
+    final ctrl = isClub ? _clubCtrl : _bookCtrl;
+    final name = ctrl.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _busy = true);
+    final res = await BackendApi.instance.call('admin.genre.add', {
+      'name': name,
+      'kind': isClub ? 'club' : 'book',
+    });
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (res == null) {
+      _notice('Could not add "$name" — try again once the cloud is connected.');
+      return;
+    }
+    ctrl.clear();
+    _notice('"$name" added — readers get it automatically.');
+    _load();
+  }
+
+  Future<void> _remove(bool isClub, String name) async {
+    if (_busy) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove genre?'),
+        content: Text(
+            '"$name" disappears from the pickers and shelves. Books already '
+            'on it keep their label.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text('Remove',
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _busy = true);
+    final res = await BackendApi.instance.call('admin.genre.remove', {
+      'name': name,
+      'kind': isClub ? 'club' : 'book',
+    });
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (res == null) {
+      _notice('Could not remove "$name" — try again.');
+      return;
+    }
+    _notice('"$name" removed.');
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final theme = Theme.of(context);
+    if (_loading) {
+      return const Center(child: BookNestLoader(size: 54));
+    }
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      children: [
+        _genreSection(theme, isClub: false),
+        const SizedBox(height: 26),
+        _genreSection(theme, isClub: true),
+      ],
+    );
+  }
+
+  Widget _genreSection(ThemeData theme, {required bool isClub}) {
+    final genres = isClub ? _clubGenres : _bookGenres;
+    final ctrl = isClub ? _clubCtrl : _bookCtrl;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(isClub ? 'Club genres' : 'Book genres',
+            style: theme.textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        Text(
+          isClub
+              ? 'The tags readers choose when they start a club.'
+              : 'The shelves every book lives on. Changes reach all devices.',
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.onSurface.withOpacity(.6)),
+        ),
+        const SizedBox(height: 12),
+        if (genres.isEmpty)
+          Text('Nothing here yet — add the first one below.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withOpacity(.5)))
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: genres
+                .map((genre) => InputChip(
+                      label: Text(genre),
+                      onDeleted: _busy ? null : () => _remove(isClub, genre),
+                    ))
+                .toList(),
+          ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: ctrl,
+                textCapitalization: TextCapitalization.words,
+                maxLength: 40,
+                enabled: !_busy,
+                decoration: InputDecoration(
+                  hintText: isClub ? 'New club genre…' : 'New book genre…',
+                  counterText: '',
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                ),
+                onSubmitted: (_) => _add(isClub),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filled(
+              onPressed: _busy ? null : () => _add(isClub),
+              icon: const Icon(Icons.add_rounded),
+              tooltip: 'Add genre',
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

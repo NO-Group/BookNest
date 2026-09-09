@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/genre_service.dart';
 import '../../components/booknest_ui.dart';
 
 /// First-run genre picker — personalizes the library. Best-effort sync to
@@ -16,6 +17,14 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final Set<String> _selected = {};
+
+  @override
+  void initState() {
+    super.initState();
+    GenreService.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +95,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   child: Wrap(
                     spacing: 9,
                     runSpacing: 9,
-                    children: kBookNestGenres
+                    children: GenreService.instance.bookGenres
                         .map((genre) => TagChip(
                               label: genre,
                               selected: _selected.contains(genre),

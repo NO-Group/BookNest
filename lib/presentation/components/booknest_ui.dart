@@ -9,6 +9,8 @@ import '../../config/app_state.dart';
 
 import '../../config/theme.dart';
 
+export '../../services/genre_service.dart' show kBookNestGenres;
+
 /// Shared BookNest UI kit — one visual language across all screens:
 /// navy/cyan gradients, glass surfaces, soft cyan glows, honest empty states.
 
@@ -837,27 +839,3 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-const List<String> kBookNestGenres = [
-  'Romance',
-  'Science Fiction',
-  'Thriller & Suspense',
-  'Fantasy',
-  'Mystery & Crime',
-  'Horror',
-  'Historical Fiction',
-  'Literary Fiction',
-  'Westerns',
-  'Biographies & Memoirs',
-  'True Crime',
-  'Self-Help & Wellness',
-  'History & Politics',
-  'Young Adult (YA)',
-  'STEM',
-  'Humanities & Social Sciences',
-  'Languages & Linguistics',
-  'Finance & Economics',
-  'Professional Certification',
-  'Lexicons',
-  'Research & Citation Tools',
-  'Compendiums',
-];

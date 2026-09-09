@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../config/theme.dart';
 import '../../components/manuscript_embeds.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/genre_service.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/supabase_service.dart';
 
@@ -94,30 +95,16 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   final ValueNotifier<int> _words = ValueNotifier<int>(0);
   Timer? _wordTimer;
 
-  static const List<String> genres = [
-    'Romance',
-    'Science Fiction',
-    'Thriller & Suspense',
-    'Fantasy',
-    'Mystery & Crime',
-    'Horror',
-    'Historical Fiction',
-    'Literary Fiction',
-    'Westerns',
-    'Biographies & Memoirs',
-    'True Crime',
-    'Self-Help & Wellness',
-    'History & Politics',
-    'Young Adult (YA)',
-    'STEM',
-    'Humanities & Social Sciences',
-    'Languages & Linguistics',
-    'Finance & Economics',
-    'Professional Certification',
-    'Lexicons',
-    'Research & Citation Tools',
-    'Compendiums',
-  ];
+  /// Live genre shelf — the moderator curates it; an existing book's
+  /// legacy genre always stays visible even after it is retired.
+  List<String> get _genreChoices {
+    final list = GenreService.instance.bookGenres;
+    final current = _genre;
+    if (current != null && current.isNotEmpty && !list.contains(current)) {
+      return <String>[current, ...list];
+    }
+    return list;
+  }
 
   _Chapter get chapter => _chapters[_currentChapter];
 
@@ -128,6 +115,9 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
     _words.value = 0;
     _maybeLoadExistingBook();
     _listenForCounts();
+    GenreService.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   void _listenForCounts() {
@@ -699,7 +689,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
           value: _genre,
           hint: const Text('Choose the shelf this book lives on'),
           isExpanded: true,
-          items: genres
+          items: _genreChoices
               .map((g) => DropdownMenuItem<String>(
                     value: g,
                     child: Text(g, overflow: TextOverflow.ellipsis),
