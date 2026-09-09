@@ -70,7 +70,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
     super.initState();
     _loadTheme();
     // Sealed messaging: identity + the peer's public key, silently.
-    if (widget.peerId.isNotEmpty) {
+    if ((widget.peerId ?? '').isNotEmpty) {
       DmCrypto.instance.ensureIdentity();
     }
     ReaderProfile.ensureLoaded();
@@ -245,19 +245,22 @@ class _DMChatScreenState extends State<DMChatScreen> {
     // fake lock).
     var wireText = text;
     String? previewText;
-    try {
-      final sealed = await DmCrypto.instance.seal(widget.peerId, text);
-      if (sealed != null) {
-        wireText = sealed;
-        previewText = '🔒 Encrypted message';
-      }
-    } catch (_) {}
+    final sealPeer = widget.peerId;
+    if (sealPeer != null && sealPeer.isNotEmpty) {
+      try {
+        final sealed = await DmCrypto.instance.seal(sealPeer, text);
+        if (sealed != null) {
+          wireText = sealed;
+          previewText = '🔒 Encrypted message';
+        }
+      } catch (_) {}
+    }
     final res = await BackendApi.instance.sendMessage(
       conversationId: _conversationId,
       peerId: widget.peerId,
       type: 'text',
       text: wireText,
-      if (previewText != null) 'previewText': previewText,
+      previewText: previewText,
       replyToId:
           replying != null && !replying['id'].toString().startsWith('local-')
               ? replying['id'].toString()

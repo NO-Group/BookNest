@@ -115,11 +115,12 @@ class DmCrypto {
       if (peerPoint == null) return null;
 
       final agreement = ECDHBasicAgreement()
-        ..init(PrivateKeyParameter<ECPrivateKey>(
-            ECPrivateKey(oneShotPriv, params)));
-      final shared = _bigIntTo32(
-          agreement.calculateAgreement(
-              PublicKeyParameter<ECPublicKey>(ECPublicKey(peerPoint, params))));
+        ..init(ECPrivateKey(oneShotPriv, params));
+      final shared =
+          _bigIntTo32(agreement.calculateAgreement(ECPublicKey(
+        peerPoint,
+        params,
+      )));
 
       final key = _hkdf(shared, utf8.encode('booknest-dm-e1'));
       final iv = _random(12);
@@ -148,11 +149,12 @@ class DmCrypto {
       final peerPoint = params.curve.decodePoint(ephPub);
       if (peerPoint == null) return null;
       final priv = ECPrivateKey(_bytesToBigInt(_priv!), params);
-      final agreement = ECDHBasicAgreement()
-        ..init(PrivateKeyParameter<ECPrivateKey>(priv));
-      final shared = _bigIntTo32(
-          agreement.calculateAgreement(
-              PublicKeyParameter<ECPublicKey>(ECPublicKey(peerPoint, params))));
+      final agreement = ECDHBasicAgreement()..init(priv);
+      final shared =
+          _bigIntTo32(agreement.calculateAgreement(ECPublicKey(
+        peerPoint,
+        params,
+      )));
       final key = _hkdf(shared, utf8.encode('booknest-dm-e1'));
       final cipher = GCMBlockCipher(AESEngine())
         ..init(false,
