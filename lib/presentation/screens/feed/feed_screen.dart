@@ -1091,7 +1091,8 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
 
   bool get _mine =>
       widget.post is Map &&
-      widget.post['created_by']?.toString() == viewerId;
+      widget.post['created_by']?.toString() ==
+          (SupabaseService().auth.currentUser?.id ?? '');
 
   Future<void> _deleteMyPost() async {
     final id = widget.post is Map && widget.post['id'] != null

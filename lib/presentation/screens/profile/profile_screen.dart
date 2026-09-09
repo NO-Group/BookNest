@@ -51,9 +51,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadMode() async {
     final res = await BackendApi.instance.call('profile.mode.get');
     final mode = res?['mode']?.toString();
-    if (mode == 'author' || mode == 'reader') {
-      if (mounted) setState(() => _mode = mode);
-    }
+    final next = mode == 'author' ? 'author' : 'reader';
+    if (mounted) setState(() => _mode = next);
   }
 
   Future<void> _switchMode() async {
