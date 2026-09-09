@@ -27,6 +27,7 @@ import '../../../services/notification_service.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/chat_backup_service.dart';
 import '../../../services/chat_store.dart';
+import '../../../services/push_service.dart';
 import '../../../services/supabase_service.dart';
 
 /// Settings — appearance (theme switcher), account shortcuts, support pages.
@@ -867,6 +868,7 @@ class _DeleteAccountButtonState extends State<_DeleteAccountButton> {
     try {
       await ChatStore.instance.wipe();
       await ChatBackupService.instance.forgetPassphraseKey();
+      await PushService.instance.tearDown();
     } catch (_) {}
     try {
       final prefs = await SharedPreferences.getInstance();

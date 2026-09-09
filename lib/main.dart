@@ -7,6 +7,7 @@ import 'config/app_state.dart';
 import 'config/router.dart';
 import 'config/theme.dart';
 import 'services/home_widgets_service.dart';
+import 'services/push_service.dart';
 import 'services/notification_service.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
@@ -25,6 +26,7 @@ Future<void> main() async {
     await SupabaseService().ensureProfile();
   }
   unawaited(_startupAftercare());
+  unawaited(PushService.instance.warmUp());
   runApp(const BookNestApp());
 }
 

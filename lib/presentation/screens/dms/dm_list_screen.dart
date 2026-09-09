@@ -247,6 +247,11 @@ class _DMListScreenState extends State<DMListScreen> {
   String _preview(Map<String, dynamic> conversation) {
     final last = conversation['lastMessage'];
     if (last is! Map) return 'Say hello 👋';
+    final rawText = last['text']?.toString() ?? '';
+    if (rawText.startsWith('e1|')) {
+      return (last['senderId']?.toString() == viewerId ? 'You: ' : '') +
+          '🔒 Message';
+    }
     final mine = last['senderId']?.toString() == viewerId;
     final prefix = mine ? 'You: ' : '';
     final type = last['type']?.toString() ?? 'text';

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.8.0+20 — 2026-09-07 · Production: push, power, and sealed words
+
+- **Push notifications are live-ready (FCM)**: direct messages and club
+  messages reach your phone when BookNest is closed — sent from our own
+  servers with a service account, never with keys inside the app.
+- **Your words are sealed**: one-to-one messages are now end-to-end
+  encrypted on the sending device — fresh one-time keys per message, so
+  not even BookNest can read them, and a stolen key can't unseal the
+  past. (Clubs and attachments remain unsealed — stated plainly.)
+- **The moderator's arsenal**: suspend/reinstate readers, adjust gems
+  with a full ledger entry, delete any book with its chapters, spotlight
+  books for Discover, a live pulse dashboard (readers, books, posts,
+  messages today, open reports, suspensions), and a complete audit log
+  of every moderation action.
+- Suspended readers can read but not write — the app tells them plainly.
+
 ## 2.7.0+19 — 2026-09-07 · The sweep + the powers
 
 - **Every delete now deletes for real**: deleting your own post (new!)

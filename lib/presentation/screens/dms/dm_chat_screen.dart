@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../config/theme.dart';
 import '../../components/chat_kit.dart';
 import '../../../services/chat_store.dart';
+import '../../../services/dm_crypto.dart';
 import '../../components/report_sheet.dart';
 import '../chat/media_viewer_screen.dart';
 import '../../components/booknest_emojis.dart';
@@ -68,6 +69,10 @@ class _DMChatScreenState extends State<DMChatScreen> {
   void initState() {
     super.initState();
     _loadTheme();
+    // Sealed messaging: identity + the peer's public key, silently.
+    if (widget.peerId.isNotEmpty) {
+      DmCrypto.instance.ensureIdentity();
+    }
     ReaderProfile.ensureLoaded();
     _loadPeerBadges();
     _conversationId = widget.conversationId;
@@ -163,6 +168,18 @@ class _DMChatScreenState extends State<DMChatScreen> {
     var messages = (res['messages'] as List? ?? [])
         .map((row) => Map<String, dynamic>.from(row as Map))
         .toList();
+    // Open sealed envelopes — the words never existed on our servers.
+    for (var i = 0; i < messages.length; i++) {
+      final raw = messages[i]['text']?.toString() ?? '';
+      if (DmCrypto.isEnvelope(raw)) {
+        final opened = DmCrypto.instance.open(raw);
+        messages[i] = {
+          ...messages[i],
+          'text': opened ?? '🔒 Sealed message',
+          'sealed': opened != null,
+        };
+      }
+    }
     final serverCount = messages.length;
     // Merge the on-device vault: restored or older history appears above
     // the server's sync window — WhatsApp-style.
@@ -224,11 +241,23 @@ class _DMChatScreenState extends State<DMChatScreen> {
     _jumpToBottom();
 
     final replying = _replyTo;
+    // Seal when both sides support it — otherwise send plainly (never a
+    // fake lock).
+    var wireText = text;
+    String? previewText;
+    try {
+      final sealed = await DmCrypto.instance.seal(widget.peerId, text);
+      if (sealed != null) {
+        wireText = sealed;
+        previewText = '🔒 Encrypted message';
+      }
+    } catch (_) {}
     final res = await BackendApi.instance.sendMessage(
       conversationId: _conversationId,
       peerId: widget.peerId,
       type: 'text',
-      text: text,
+      text: wireText,
+      if (previewText != null) 'previewText': previewText,
       replyToId:
           replying != null && !replying['id'].toString().startsWith('local-')
               ? replying['id'].toString()

@@ -92,6 +92,30 @@ class NotificationService {
     return next;
   }
 
+  /// Immediate display — used by foreground FCM deliveries.
+  Future<void> showInstant(
+      {required int id, required String title, required String body}) async {
+    try {
+      await _plugin.show(
+        id,
+        title,
+        body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'chat',
+            'Messages',
+            channelDescription: 'Messages from readers and clubs',
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@drawable/ic_notification',
+            color: Color(0xFF00E5FF),
+            colorized: true,
+          ),
+        ),
+      );
+    } catch (_) {}
+  }
+
   Future<void> _scheduleDaily({
     required int id,
     required String channelId,

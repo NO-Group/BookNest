@@ -290,6 +290,7 @@ class BackendApi {
     bool forwarded = false,
     bool animated = false,
     String? replyToId,
+    String? previewText,
   }) =>
       call('dm.send', <String, dynamic>{
         if (conversationId != null) 'conversationId': conversationId,
@@ -297,6 +298,7 @@ class BackendApi {
         'type': type,
         'text': text,
         if (replyToId != null) 'replyToId': replyToId,
+        if (previewText != null) 'previewText': previewText,
         if (bookId != null) 'bookId': bookId,
         if (bookTitle != null) 'bookTitle': bookTitle,
         if (mediaUrl != null) 'mediaUrl': mediaUrl,

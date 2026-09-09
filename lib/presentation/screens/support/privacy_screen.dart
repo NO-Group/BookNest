@@ -35,6 +35,13 @@ class PrivacyScreen extends StatelessWidget {
                   'reviews and chats are stored in BookNest\'s document database '
                   '(MongoDB) and are only visible to you unless you publish or '
                   'share them.'),
+          _Card(theme: theme, icon: Icons.lock_rounded, title: 'Sealed messages',
+              body:
+                  'When both readers use a current BookNest, one-to-one messages '
+                  'are sealed end-to-end on the sender\'s device — our servers '
+                  'carry only sealed text and could not read them even if we '
+                  'wanted to. Your backup stays sealed with your own '
+                  'passphrase, which we never see.'),
           _Card(theme: theme, icon: Icons.flag_rounded, title: 'Reporting',
               body:
                   'See something wrong? Long-press any book or tap the report '

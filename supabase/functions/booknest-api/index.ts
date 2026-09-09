@@ -60,7 +60,6 @@ export const DB_NAMES = {
   feed: 'booknest_feed', // feed posts (cutover complete: was transitional SQL)
   moderation: 'booknest_moderation', // UGC reports from the community
   groups: 'booknest_groups', // clubs, communities, organizations, schools
-  moderation: 'booknest_moderation', // reports
 } as const;
 
 type Domain = keyof typeof DB_NAMES;
@@ -109,6 +108,8 @@ async function ensureIndexes(
           database.collection('reports').createIndex({ reporterId: 1, createdAt: -1 }),
           database.collection('reports').createIndex({ status: 1, createdAt: -1 }),
           database.collection('blocks').createIndex({ userId: 1, blockedId: 1 }, { unique: true }),
+          database.collection('bans').createIndex({ userId: 1 }, { unique: true }),
+          database.collection('admin_log').createIndex({ createdAt: -1 }),
         ]);
         break;
       case 'books':
@@ -154,6 +155,9 @@ async function ensureIndexes(
         await Promise.all([
           database.collection('user_prefs').createIndex({ userId: 1 }, { unique: true }),
           database.collection('profile_extras').createIndex({ userId: 1 }, { unique: true }),
+          database.collection('dm_keys').createIndex({ userId: 1 }, { unique: true }),
+          database.collection('push_tokens').createIndex({ token: 1 }, { unique: true }),
+          database.collection('push_tokens').createIndex({ userId: 1 }),
         ]);
         break;
       case 'moderation':
@@ -191,6 +195,141 @@ async function adminUserId(req: Request): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** Whether a reader is currently suspended by the moderator. */
+async function isBanned(uid: string): Promise<boolean> {
+  try {
+    const ban = await (await dbFor('moderation')).collection('bans')
+      .findOne({ userId: uid, active: true });
+    return !!ban;
+  } catch {
+    return false;
+  }
+}
+
+/** Every admin power is accountable: this log is viewable in the console. */
+async function logAdmin(
+  uid: string, action: string, detail: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await (await dbFor('moderation')).collection('admin_log').insertOne({
+      adminId: uid, action, detail, createdAt: new Date(),
+    });
+  } catch {
+    // The log never blocks the action.
+  }
+}
+
+// ── FCM push (HTTP v1 with a service account from the dashboard env) ───────
+let fcmTokenCache: { token: string, until: number } | null = null;
+
+function strToBytes(v: string): Uint8Array {
+  const out = new Uint8Array(v.length);
+  for (let i = 0; i < v.length; i++) out[i] = v.charCodeAt(i);
+  return out;
+}
+
+function bytesToB64Url(bytes: Uint8Array): string {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function firebaseAccessToken(): Promise<string | null> {
+  if (fcmTokenCache && fcmTokenCache.until > Date.now()) {
+    return fcmTokenCache.token;
+  }
+  const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
+  if (!raw) return null;
+  try {
+    const sa = JSON.parse(raw);
+    const iat = Math.floor(Date.now() / 1000);
+    const b64 = (o: unknown) =>
+      bytesToB64Url(new TextEncoder().encode(JSON.stringify(o)));
+    const input = `${b64({ alg: 'RS256', typ: 'JWT' })}.${b64({
+      iss: sa.client_email,
+      scope: 'https://www.googleapis.com/auth/firebase.messaging',
+      aud: 'https://oauth2.googleapis.com/token',
+      iat,
+      exp: iat + 3300,
+    })}`;
+    const pem = String(sa.private_key).replace(
+      /-----[^-]+-----/g, '').replace(/\s+/g, '');
+    let bin = '';
+    const bytes = strToBytes(atob(pem));
+    for (const b of bytes) bin += String.fromCharCode(b);
+    const key = await crypto.subtle.importKey(
+      'pkcs8',
+      bytes as unknown as ArrayBuffer,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const sig = await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5',
+      key,
+      new TextEncoder().encode(input) as unknown as ArrayBuffer,
+    );
+    const jwt = `${input}.${bytesToB64Url(new Uint8Array(sig))}`;
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion: jwt,
+      }),
+    });
+    const data = await res.json();
+    const token = typeof data?.access_token === 'string'
+      ? data.access_token : null;
+    if (token) {
+      fcmTokenCache = { token, until: Date.now() + 45 * 60 * 1000 };
+    }
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+/** Sends an FCM push to every device of a reader (fire-and-forget). */
+async function sendPush(
+  userId: string, title: string, body: string,
+  data: Record<string, string> = {},
+): Promise<void> {
+  try {
+    const accessToken = await firebaseAccessToken();
+    if (!accessToken) return;
+    const col = (await dbFor('users')).collection('push_tokens');
+    const tokens = await col.find({ userId }).toArray();
+    if (tokens.length === 0) return;
+    await Promise.all(tokens.map(async (t) => {
+      try {
+        const res = await fetch(
+          'https://fcm.googleapis.com/v1/projects/' +
+          `${Deno.env.get('FIREBASE_PROJECT_ID') ?? ''}/messages:send`,
+          {
+            method: 'POST',
+            headers: {
+              'authorization': `Bearer ${accessToken}`,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              message: {
+                token: String(t.token),
+                notification: { title, body },
+                data,
+                android: { priority: 'HIGH' },
+              },
+            }),
+          },
+        );
+        if (res.status === 404 || res.status === 410) {
+          await col.deleteOne({ _id: t._id });
+        }
+      } catch { /* one device failing never blocks the rest */ }
+    }));
+  } catch { /* push is best-effort by design */ }
 }
 
 async function currentUserId(req: Request): Promise<string | null> {
@@ -461,6 +600,7 @@ function bookView(b: Record<string, unknown>) {
     is_remix: b.isRemix === true,
     boosted_until: b.boostUntil ?? null,
     added_by: b.authorId ?? null,
+    featured: b.featuredAt != null,
   };
 }
 
@@ -1160,6 +1300,12 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'posts.create': {
+        {
+          const author = await currentUserId(req);
+          if (author && await isBanned(author)) {
+            return fail('Your account is suspended — contact support');
+          }
+        }
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         const type = String(p.type ?? 'post').slice(0, 24);
@@ -1714,6 +1860,12 @@ Deno.serve(async (req: Request) => {
 
       // ── books: publish (author writes manuscript → MongoDB) ─────────────
       case 'books.publish': {
+        {
+          const publisher = await currentUserId(req);
+          if (publisher && await isBanned(publisher)) {
+            return fail('Your account is suspended — contact support');
+          }
+        }
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         const title = String(p.title ?? '').trim();
@@ -1871,6 +2023,12 @@ Deno.serve(async (req: Request) => {
 
       // ── reviews (one editable review per user per book) ──────────────────
       case 'reviews.create': {
+        {
+          const reviewer = await currentUserId(req);
+          if (reviewer && await isBanned(reviewer)) {
+            return fail('Your account is suspended — contact support');
+          }
+        }
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
@@ -1994,6 +2152,7 @@ Deno.serve(async (req: Request) => {
       case 'dm.send': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
+        if (await isBanned(uid)) return fail('Your account is suspended — contact support');
         const d = await dbFor('chats');
         const type = ['text', 'book_share', 'image', 'file', 'voice', 'emoji', 'video']
           .includes(String(p.type)) ? String(p.type) : 'text';
@@ -2051,11 +2210,16 @@ Deno.serve(async (req: Request) => {
           createdAt: now,
         };
         const inserted = await d.collection('messages').insertOne({ ...message });
-        const preview = type === 'book_share'
-          ? `📖 ${bookTitle ?? 'Shared a book'}`
-          : type === 'text'
-            ? text
-            : 'Sent an attachment';
+        // End-to-end encrypted messages arrive as sealed text — the
+        // reader's app supplies a friendly preview so the chat list stays
+        // human without us ever seeing the words.
+        const preview = typeof p.previewText === 'string' && p.previewText.trim()
+          ? p.previewText.trim()
+          : type === 'book_share'
+            ? `📖 ${bookTitle ?? 'Shared a book'}`
+            : type === 'text'
+              ? text
+              : 'Sent an attachment';
         await d.collection('conversations').updateOne(
           { _id: conversation._id },
           { $set: { updatedAt: now, lastMessage: { text: preview.slice(0, 140), senderId: uid, type, createdAt: now } } },
@@ -2071,6 +2235,15 @@ Deno.serve(async (req: Request) => {
             text: preview.slice(0, 140),
             read: false,
             createdAt: now,
+          });
+          const senderProfile = await serviceClient().from('profiles')
+            .select('display_name,username').eq('id', uid).maybeSingle();
+          const senderName = String(
+            senderProfile.data?.display_name ??
+            senderProfile.data?.username ?? 'A reader');
+          void sendPush(peer, senderName, preview.slice(0, 120), {
+            route: `/chat/${conversationId}?peer=${uid}`,
+            kind: 'dm',
           });
         }
         return ok({
@@ -2145,6 +2318,12 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'chat.send': {
+        {
+          const senderId = await currentUserId(req);
+          if (senderId && await isBanned(senderId)) {
+            return fail('Your account is suspended — contact support');
+          }
+        }
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         const d = await dbFor('chats');
@@ -2193,13 +2372,43 @@ Deno.serve(async (req: Request) => {
           createdAt: now,
         };
         const inserted = await d.collection('messages').insertOne({ ...message });
+        const clubPreview = typeof p.previewText === 'string' &&
+            p.previewText.trim()
+          ? p.previewText.trim()
+          : (type === 'text' ? text : 'Sent an attachment');
         await d.collection('conversations').updateOne(
           { _id: room._id as unknown as ObjectId },
           { $set: { updatedAt: now, lastMessage: {
-            text: (type === 'text' ? text : 'Sent an attachment').slice(0, 140),
+            text: clubPreview.slice(0, 140),
             senderId: uid, type, createdAt: now,
           } } },
         );
+        // Push the room (capped) — a club is bigger than one chat.
+        {
+          const others = ((room.memberIds as string[]) ?? [])
+            .filter((m) => m !== uid).slice(0, 20);
+          if (others.length > 0) {
+            const roomKind = String(room.kind ?? 'clubs');
+            const roomClubId = String(room.clubId ?? '');
+            const clubDoc = roomClubId
+              ? await (await dbFor('groups')).collection(roomKind)
+                  .findOne({ _id: roomClubId } as never)
+              : null;
+            const roomName = String(clubDoc?.name ?? 'Group chat');
+            const senderProfile = await serviceClient().from('profiles')
+              .select('display_name,username').eq('id', uid).maybeSingle();
+            const senderName = String(
+              senderProfile.data?.display_name ??
+              senderProfile.data?.username ?? 'A reader');
+            for (const memberId of others) {
+              void sendPush(memberId, `${senderName} · ${roomName}`,
+                clubPreview.slice(0, 120), {
+                  route: `/club-chat?kind=${roomKind}&clubId=${roomClubId}`,
+                  kind: 'club',
+                });
+            }
+          }
+        }
         return ok({
           conversationId,
           messageId: String(inserted.insertedId),
@@ -3148,6 +3357,59 @@ Deno.serve(async (req: Request) => {
         return ok({ reported: true });
       }
 
+      // ── FCM device tokens ──────────────────────────────────────────────
+      case 'push.register': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const token = String(p.token ?? '').trim().slice(0, 4096);
+        if (!token) return fail('A device token is required');
+        await (await dbFor('users')).collection('push_tokens').updateOne(
+          { token },
+          { $set: {
+            userId: uid, token,
+            platform: String(p.platform ?? 'android'),
+            updatedAt: new Date(),
+          } },
+          { upsert: true },
+        );
+        return ok({ registered: true });
+      }
+
+      case 'push.unregister': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const token = String(p.token ?? '').trim();
+        if (token) {
+          await (await dbFor('users')).collection('push_tokens')
+            .deleteOne({ token, userId: uid });
+        }
+        return ok({ removed: true });
+      }
+
+      // ── E2EE key directory (public keys only — privates never travel) ──
+      case 'keys.publish': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const pub = String(p.pub ?? '').trim().slice(0, 400);
+        if (!pub.startsWith('BNK1:')) return fail('Malformed key');
+        await (await dbFor('users')).collection('dm_keys').updateOne(
+          { userId: uid },
+          { $set: { userId: uid, pub, updatedAt: new Date() } },
+          { upsert: true },
+        );
+        return ok({ published: true });
+      }
+
+      case 'keys.fetch': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const target = String(p.userId ?? '');
+        if (!isAnyId(target)) return fail('A valid userId is required');
+        const row = await (await dbFor('users')).collection('dm_keys')
+          .findOne({ userId: target });
+        return ok({ pub: row?.pub ?? null });
+      }
+
       // ── overall moderator: the report queue and admin deletion ─────────
       case 'moderation.list': {
         const uid = await adminUserId(req);
@@ -3245,6 +3507,132 @@ Deno.serve(async (req: Request) => {
           { upsert: true },
         );
         return ok({ mode });
+      }
+
+      // ── overall moderator: readers, books, gems, stats, audit ──────────
+      case 'admin.bans': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can view bans', 403);
+        const rows = await (await dbFor('moderation')).collection('bans')
+          .find({ active: true }).sort({ at: -1 }).limit(200).toArray();
+        return ok({
+          bans: rows.map((r) => ({
+            userId: r.userId, reason: r.reason ?? '',
+            at: r.at, by: r.bannedBy ?? null,
+          })),
+        });
+      }
+
+      case 'admin.ban': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can suspend readers', 403);
+        const target = String(p.userId ?? '');
+        if (!isAnyId(target)) return fail('A valid userId is required');
+        if (target === uid) return fail('You cannot suspend yourself');
+        const reason = String(p.reason ?? '').trim().slice(0, 300);
+        await (await dbFor('moderation')).collection('bans').updateOne(
+          { userId: target },
+          { $set: {
+            userId: target, reason, active: true,
+            bannedBy: uid, at: new Date(),
+          } },
+          { upsert: true },
+        );
+        await logAdmin(uid, 'ban', { target, reason });
+        return ok({ banned: true });
+      }
+
+      case 'admin.unban': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can lift suspensions', 403);
+        const target = String(p.userId ?? '');
+        if (!isAnyId(target)) return fail('A valid userId is required');
+        await (await dbFor('moderation')).collection('bans').updateOne(
+          { userId: target },
+          { $set: { active: false, unbannedBy: uid, unbannedAt: new Date() } },
+        );
+        await logAdmin(uid, 'unban', { target });
+        return ok({ banned: false });
+      }
+
+      case 'admin.gems': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can adjust gems', 403);
+        const target = String(p.userId ?? '');
+        if (!isAnyId(target)) return fail('A valid userId is required');
+        const delta = Math.max(-10_000, Math.min(10_000,
+          Math.round(Number(p.delta ?? 0))));
+        if (!delta) return fail('An amount is required');
+        const reason = String(p.reason ?? 'moderator adjustment')
+          .trim().slice(0, 120);
+        const balance = await grantGems(target, delta, `admin:${reason}`);
+        await logAdmin(uid, 'gems', { target, delta, reason });
+        return ok({ balance });
+      }
+
+      case 'admin.deleteBook': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can delete books', 403);
+        const id = String(p.bookId ?? '');
+        if (!isHexId(id)) return fail('A valid bookId is required');
+        const booksDb = await dbFor('books');
+        const book = await booksDb.collection('books')
+          .findOne({ _id: new ObjectId(id) });
+        if (!book) return fail('Book not found', 404);
+        await booksDb.collection('chapters').deleteMany({ bookId: id });
+        await booksDb.collection('books').deleteOne({ _id: new ObjectId(id) });
+        await logAdmin(uid, 'deleteBook', { id, title: book.title ?? '' });
+        return ok({ deleted: true });
+      }
+
+      case 'admin.feature': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can feature books', 403);
+        const id = String(p.bookId ?? '');
+        if (!isHexId(id)) return fail('A valid bookId is required');
+        const on = p.on !== false;
+        await (await dbFor('books')).collection('books').updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { featuredAt: on ? new Date() : null } },
+        );
+        await logAdmin(uid, on ? 'feature' : 'unfeature', { id });
+        return ok({ featured: on });
+      }
+
+      case 'admin.stats': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can view stats', 403);
+        const dayAgo = ObjectId.createFromTime(
+          Math.floor((Date.now() - 24 * 3600 * 1000) / 1000));
+        const [openReports, activeBans, books, posts, messages24h] =
+          await Promise.all([
+            (await dbFor('moderation')).collection('reports')
+              .countDocuments({ status: 'open' }),
+            (await dbFor('moderation')).collection('bans')
+              .countDocuments({ active: true }),
+            (await dbFor('books')).collection('books').countDocuments({}),
+            (await dbFor('feed')).collection('posts').countDocuments({}),
+            (await dbFor('chats')).collection('messages')
+              .countDocuments({ _id: { $gte: dayAgo } }),
+          ]);
+        let readers = 0;
+        try {
+          const profs = await serviceClient().from('profiles')
+            .select('id', { count: 'exact', head: true });
+          readers = profs.count ?? 0;
+        } catch { /* stats stay partial */ }
+        const audit = await (await dbFor('moderation')).collection('admin_log')
+          .find({}).sort({ createdAt: -1 }).limit(40).toArray();
+        return ok({
+          stats: { openReports, activeBans, books, posts, messages24h, readers },
+          audit: audit.map((r) => ({
+            id: String(r._id),
+            action: r.action,
+            detail: r.detail ?? {},
+            adminId: r.adminId,
+            createdAt: r.createdAt,
+          })),
+        });
       }
 
       // ── server-side link previews (phones are blocked by bot shields) ──
