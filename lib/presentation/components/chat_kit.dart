@@ -2370,3 +2370,511 @@ Future<String?> uploadChatImage(Uint8List bytes, String extension) {
 
 /// Convenience: the signed-in reader's id ('' when signed out).
 String get viewerId => SupabaseService().auth.currentUser?.id ?? '';
+
+// ── Chat themes: WhatsApp-style wallpapers for every conversation ──────────
+
+enum ChatWallPattern {
+  none,
+  dots,
+  lines,
+  grid,
+  stars,
+  hearts,
+  waves,
+  rings,
+  sparkles,
+  crosses,
+  books,
+}
+
+class ChatVisualTheme {
+  final String id;
+  final String name;
+  final int baseLight;
+  final int baseDark;
+  final int patternLight;
+  final int patternDark;
+  final ChatWallPattern pattern;
+
+  const ChatVisualTheme({
+    required this.id,
+    required this.name,
+    required this.baseLight,
+    required this.baseDark,
+    required this.patternLight,
+    required this.patternDark,
+    required this.pattern,
+  });
+
+  Color base(bool dark) => dark ? Color(baseDark) : Color(baseLight);
+  Color patternColor(bool dark) =>
+      dark ? Color(patternDark) : Color(patternLight);
+}
+
+/// Twelve designed wallpapers — the BookNest palette first, tasteful
+/// companions after. 'classic' keeps the original watermark look.
+const List<ChatVisualTheme> kChatThemes = [
+  ChatVisualTheme(
+      id: 'classic',
+      name: 'Classic',
+      baseLight: 0xFFFFFFFF,
+      baseDark: 0xFF0A1220,
+      patternLight: 0x00000000,
+      patternDark: 0x00000000,
+      pattern: ChatWallPattern.none),
+  ChatVisualTheme(
+      id: 'midnight',
+      name: 'Midnight',
+      baseLight: 0xFFE8EDF5,
+      baseDark: 0xFF0B1626,
+      patternLight: 0x229EB8D8,
+      patternDark: 0x221E3A5C,
+      pattern: ChatWallPattern.dots),
+  ChatVisualTheme(
+      id: 'mist',
+      name: 'Cyan Mist',
+      baseLight: 0xFFEAF6FA,
+      baseDark: 0xFF0D1F2D,
+      patternLight: 0x33B9E2F2,
+      patternDark: 0x26274349,
+      pattern: ChatWallPattern.lines),
+  ChatVisualTheme(
+      id: 'paper',
+      name: 'Paper',
+      baseLight: 0xFFFBFBF6,
+      baseDark: 0xFF14202E,
+      patternLight: 0x2E9DB8CD,
+      patternDark: 0x26334A63,
+      pattern: ChatWallPattern.lines),
+  ChatVisualTheme(
+      id: 'sepia',
+      name: 'Sepia',
+      baseLight: 0xFFF6EFE3,
+      baseDark: 0xFF211D16,
+      patternLight: 0x30C4A87A,
+      patternDark: 0x264A4132,
+      pattern: ChatWallPattern.dots),
+  ChatVisualTheme(
+      id: 'slate',
+      name: 'Slate',
+      baseLight: 0xFFEDF0F4,
+      baseDark: 0xFF131C26,
+      patternLight: 0x2A93A3B5,
+      patternDark: 0x262C3B4D,
+      pattern: ChatWallPattern.grid),
+  ChatVisualTheme(
+      id: 'forest',
+      name: 'Forest',
+      baseLight: 0xFFE9F2EA,
+      baseDark: 0xFF0E1F19,
+      patternLight: 0x337FAF8B,
+      patternDark: 0x262B4A3C,
+      pattern: ChatWallPattern.crosses),
+  ChatVisualTheme(
+      id: 'ocean',
+      name: 'Ocean',
+      baseLight: 0xFFE7F0F8,
+      baseDark: 0xFF0A1826,
+      patternLight: 0x307FB2D9,
+      patternDark: 0x26284663,
+      pattern: ChatWallPattern.waves),
+  ChatVisualTheme(
+      id: 'plum',
+      name: 'Plum',
+      baseLight: 0xFFF3EBF4,
+      baseDark: 0xFF1E1524,
+      patternLight: 0x30B39AC0,
+      patternDark: 0x26463A52,
+      pattern: ChatWallPattern.rings),
+  ChatVisualTheme(
+      id: 'rose',
+      name: 'Rose',
+      baseLight: 0xFFF9EEF1,
+      baseDark: 0xFF241318,
+      patternLight: 0x33E3AEC1,
+      patternDark: 0x26543A44,
+      pattern: ChatWallPattern.hearts),
+  ChatVisualTheme(
+      id: 'ink',
+      name: 'Ink',
+      baseLight: 0xFFEEF0F2,
+      baseDark: 0xFF0D0F12,
+      patternLight: 0x2AA9B4BE,
+      patternDark: 0x22323A44,
+      pattern: ChatWallPattern.sparkles),
+  ChatVisualTheme(
+      id: 'meadow',
+      name: 'Meadow',
+      baseLight: 0xFFEFF4EA,
+      baseDark: 0xFF141E12,
+      patternLight: 0x30A4C08A,
+      patternDark: 0x26374A32,
+      pattern: ChatWallPattern.books),
+];
+
+/// Paints a chat wallpaper: base color + a gentle tiled pattern, dimmed
+/// (WhatsApp-style) in the dark or by the reader's dim slider.
+class ChatWallpaper extends StatelessWidget {
+  final String themeId;
+  final bool dark;
+  final double dim;
+  const ChatWallpaper(
+      {super.key, required this.themeId, required this.dark, this.dim = 0});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = kChatThemes.firstWhere(
+      (t) => t.id == themeId,
+      orElse: () => kChatThemes.first,
+    );
+    final base = theme.base(dark);
+    final pattern = theme.patternColor(dark);
+    return ColoredBox(
+      color: base,
+      child: theme.pattern == ChatWallPattern.none
+          ? null
+          : Opacity(
+              opacity: (1 - dim).clamp(0.25, 1.0),
+              child: CustomPaint(
+                painter: _WallPainter(theme.pattern, pattern),
+                size: Size.infinite,
+              ),
+            ),
+    );
+  }
+}
+
+class _WallPainter extends CustomPainter {
+  final ChatWallPattern pattern;
+  final Color color;
+  _WallPainter(this.pattern, this.color);
+
+  static const double _tile = 46;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+    final cols = (size.width / _tile).ceil() + 1;
+    final rows = (size.height / _tile).ceil() + 1;
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        final x = c * _tile + (r.isOdd ? _tile / 2 : 0);
+        final y = r * _tile;
+        final center = Offset(x, y);
+        switch (pattern) {
+          case ChatWallPattern.none:
+            break;
+          case ChatWallPattern.dots:
+            canvas.drawCircle(center, 1.6, paint);
+          case ChatWallPattern.lines:
+            canvas.drawLine(
+                Offset(x - 8, y + 8), Offset(x + 8, y - 8), stroke);
+          case ChatWallPattern.grid:
+            canvas.drawLine(
+                Offset(x - _tile / 2, y), Offset(x + _tile / 2, y), stroke);
+            canvas.drawLine(
+                Offset(x, y - _tile / 2), Offset(x, y + _tile / 2), stroke);
+          case ChatWallPattern.stars:
+            _star(canvas, center, 3.4, paint);
+          case ChatWallPattern.hearts:
+            _heart(canvas, center, 3.2, paint);
+          case ChatWallPattern.waves:
+            final path = Path()
+              ..moveTo(x - 10, y)
+              ..quadraticBezierTo(x - 5, y - 4, x, y)
+              ..quadraticBezierTo(x + 5, y + 4, x + 10, y);
+            canvas.drawPath(path, stroke);
+          case ChatWallPattern.rings:
+            canvas.drawCircle(center, 4.5, stroke);
+          case ChatWallPattern.sparkles:
+            canvas.drawLine(Offset(x - 4, y), Offset(x + 4, y), stroke);
+            canvas.drawLine(Offset(x, y - 4), Offset(x, y + 4), stroke);
+          case ChatWallPattern.crosses:
+            canvas.drawLine(Offset(x - 4, y - 4), Offset(x + 4, y + 4), stroke);
+            canvas.drawLine(Offset(x + 4, y - 4), Offset(x - 4, y + 4), stroke);
+          case ChatWallPattern.books:
+            canvas.drawRect(Rect.fromCenter(center: center, width: 9, height: 6),
+                stroke);
+        }
+      }
+    }
+  }
+
+  void _star(Canvas canvas, Offset c, double r, Paint paint) {
+    final path = Path();
+    for (var i = 0; i < 5; i++) {
+      final outer = c + Offset.fromDirection(-1.5708 + i * 1.2566, r);
+      final inner =
+          c + Offset.fromDirection(-1.5708 + i * 1.2566 + .6283, r * .45);
+      if (i == 0) {
+        path.moveTo(outer.dx, outer.dy);
+      } else {
+        path.lineTo(outer.dx, outer.dy);
+      }
+      path.lineTo(inner.dx, inner.dy);
+    }
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  void _heart(Canvas canvas, Offset c, double r, Paint paint) {
+    final path = Path()
+      ..moveTo(c.dx, c.dy + r)
+      ..cubicTo(c.dx - r * 1.6, c.dy - r * .2, c.dx - r * .5, c.dy - r * 1.3,
+          c.dx, c.dy - r * .4)
+      ..cubicTo(c.dx + r * .5, c.dy - r * 1.3, c.dx + r * 1.6, c.dy - r * .2,
+          c.dx, c.dy + r)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_WallPainter old) =>
+      old.pattern != pattern || old.color != color;
+}
+
+// ── theme persistence ───────────────────────────────────────────────────────
+
+/// Per-chat wallpaper choice with a global default — WhatsApp's exact
+/// model: pick for this chat, or set for all chats.
+class ChatThemePrefs {
+  static const _defaultKey = 'chat.theme.default';
+  static const _dimKey = 'chat.theme.dim';
+
+  static Future<String> defaultId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_defaultKey) ?? 'classic';
+  }
+
+  static Future<String> forConversation(String conversationKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('chat.theme.$conversationKey') ??
+        await defaultId();
+  }
+
+  static Future<void> setForConversation(
+      String? conversationKey, String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (conversationKey == null) {
+      await prefs.setString(_defaultKey, id);
+      // A new default clears per-chat overrides so "all chats" is true.
+      final keys = prefs.getKeys();
+      for (final key in keys) {
+        if (key.startsWith('chat.theme.') && key != _defaultKey) {
+          await prefs.remove(key);
+        }
+      }
+    } else {
+      await prefs.setString('chat.theme.$conversationKey', id);
+    }
+  }
+
+  static Future<double> dim() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_dimKey) ?? 0;
+  }
+
+  static Future<void> setDim(double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_dimKey, value.clamp(0, .8));
+  }
+}
+
+/// The wallpaper picker: previews of every theme, a dim slider, and the
+/// "apply to all chats" switch.
+Future<void> showChatThemePicker(
+  BuildContext context, {
+  String? conversationKey,
+}) async {
+  final changed = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (sheetContext) => _ChatThemeSheet(
+        conversationKey: conversationKey),
+  );
+  if (changed == true) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Chat theme updated.')));
+  }
+}
+
+class _ChatThemeSheet extends StatefulWidget {
+  final String? conversationKey;
+  const _ChatThemeSheet({this.conversationKey});
+  @override
+  State<_ChatThemeSheet> createState() => _ChatThemeSheetState();
+}
+
+class _ChatThemeSheetState extends State<_ChatThemeSheet> {
+  String _selected = 'classic';
+  bool _forAll = false;
+  double _dim = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final id = await ChatThemePrefs.forConversation(
+        widget.conversationKey ?? '');
+    final dim = await ChatThemePrefs.dim();
+    if (mounted) {
+      setState(() {
+        _selected = id;
+        _dim = dim;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom),
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * .8,
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              Text('Chat theme',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text(
+                widget.conversationKey == null
+                    ? 'The wallpaper for all of your chats'
+                    : 'The wallpaper for this chat',
+                style: TextStyle(
+                    fontSize: 12.5,
+                    color: Theme.of(context).hintColor),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: .9,
+                  ),
+                  itemCount: kChatThemes.length,
+                  itemBuilder: (context, i) {
+                    final theme = kChatThemes[i];
+                    final selected = theme.id == _selected;
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () {
+                        ChatThemePrefs.setForConversation(
+                            _forAll ? null : widget.conversationKey,
+                            theme.id);
+                        setState(() => _selected = theme.id);
+                        Navigator.pop(context, true);
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            width: selected ? 2.4 : 1,
+                            color: selected
+                                ? BookNestColors.cyan
+                                : Theme.of(context)
+                                    .dividerColor
+                                    .withOpacity(.6),
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: ChatWallpaper(
+                                    themeId: theme.id, dark: dark),
+                              ),
+                              Positioned(
+                                left: 6,
+                                bottom: 6,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(10),
+                                    color: Colors.black45,
+                                  ),
+                                  child: Text(theme.name,
+                                      style: const TextStyle(
+                                          fontSize: 9.5,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700)),
+                                ),
+                              ),
+                              if (selected)
+                                const Positioned(
+                                  top: 6,
+                                  right: 6,
+                                  child: Icon(Icons.check_circle_rounded,
+                                      size: 18,
+                                      color: BookNestColors.cyan),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
+                child: Row(
+                  children: [
+                    const Icon(Icons.contrast_rounded,
+                        size: 18, color: BookNestColors.cyan),
+                    const SizedBox(width: 10),
+                    const Text('Dim wallpaper in the dark',
+                        style: TextStyle(fontSize: 13.5)),
+                    Expanded(
+                      child: Slider(
+                        value: _dim,
+                        max: .8,
+                        divisions: 8,
+                        activeColor: BookNestColors.cyan,
+                        onChanged: (value) {
+                          ChatThemePrefs.setDim(value);
+                          setState(() => _dim = value);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SwitchListTile(
+                dense: true,
+                title: const Text('Also set for all chats',
+                    style: TextStyle(fontSize: 13.5)),
+                value: _forAll,
+                activeColor: BookNestColors.cyan,
+                onChanged: (value) => setState(() => _forAll = value),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

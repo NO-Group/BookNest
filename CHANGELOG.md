@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.7.0+19 — 2026-09-07 · The sweep + the powers
+
+- **Every delete now deletes for real**: deleting your own post (new!)
+  removes its comments, likes, views and reshares server-side too — and
+  account deletion now catches feed posts correctly. Verified end to end:
+  chapters, messages, announcements, reviews, posts, blocks, everything.
+- **Link previews work again**: previews are fetched by BookNest's
+  servers (websites block direct phone requests), with a clean tappable
+  link chip whenever a site offers nothing — never a stuck spinner.
+  Views, likes, comments and reshares now sit under every post type.
+- **The overall moderator**: n.ogroup@yahoo.com carries the shield — a
+  full moderation console (reports queue, content deletion, resolve and
+  dismiss), visible only to that account, enforced server-side.
+- **Author mode**: Facebook-style profile switch — flip between Reader
+  and Author. Author mode brings the writing tools front and centre and
+  marks your public profile with the Author badge. Nothing is lost
+  switching back and forth.
+- **Chat themes**: twelve designed wallpapers (Midnight, Cyan Mist,
+  Paper, Sepia, Slate, Forest, Ocean, Plum, Rose, Ink, Meadow + Classic)
+  with a dim slider, per-chat or apply-to-all — a palette button in every
+  chat.
+- **Emotes, redesigned feature by feature**: open filled smiles with a
+  tongue peek, the classic :3 cat mouth, curled tongues, rosy cheeks on
+  every face, twinkling star eyes, outlined heart eyes.
+- About footer shows the real version everywhere.
+
 ## 2.6.0+18 — 2026-09-07 · The WhatsApp recipe for messaging
 
 - **Chats now live encrypted on your phone**: every conversation is its

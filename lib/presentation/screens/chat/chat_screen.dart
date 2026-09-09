@@ -41,6 +41,8 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   Map<String, dynamic>? _replyTo;
+  String _themeId = 'classic';
+  double _themeDim = 0;
 
   final ScrollController _scroll = ScrollController();
 
@@ -63,6 +65,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     ReaderProfile.ensureLoaded();
     if (widget.isMember) {
+    _loadTheme();
       _openRoom();
     } else {
       setState(() {
@@ -101,6 +104,24 @@ class _ChatScreenState extends State<ChatScreen> {
     _conversationId = conversation['id']?.toString();
     await _load();
     _poll = Timer.periodic(const Duration(seconds: 4), (_) => _load());
+  }
+
+  String get _conversationKey => 'club:${widget.clubId}:${widget.kind}';
+
+  Future<void> _loadTheme() async {
+    final id = await ChatThemePrefs.forConversation(_conversationKey);
+    final dim = await ChatThemePrefs.dim();
+    if (mounted) {
+      setState(() {
+        _themeId = id;
+        _themeDim = dim;
+      });
+    }
+  }
+
+  Future<void> _editTheme() async {
+    await showChatThemePicker(context, conversationKey: _conversationKey);
+    _loadTheme();
   }
 
   Future<void> _load() async {
@@ -442,6 +463,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
     final rows = withDaySeparators(_messages);
 
     return Scaffold(
@@ -449,6 +471,13 @@ class _ChatScreenState extends State<ChatScreen> {
         elevation: 0,
         leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
+        actions: [
+          IconButton(
+            tooltip: 'Chat theme',
+            icon: const Icon(Icons.palette_outlined, size: 21),
+            onPressed: _editTheme,
+          ),
+        ],
         titleSpacing: 0,
         title: Row(
           children: [
@@ -531,10 +560,18 @@ class _ChatScreenState extends State<ChatScreen> {
                                       ],
                                     ),
                                   )
-                                : GestureDetector(
-                                    onTap: () =>
-                                        FocusScope.of(context).unfocus(),
-                                    child: ListView.builder(
+                                : Stack(
+                                    children: [
+                                      Positioned.fill(
+                                        child: ChatWallpaper(
+                                            themeId: _themeId,
+                                            dark: dark,
+                                            dim: _themeDim),
+                                      ),
+                                      GestureDetector(
+                                        onTap: () =>
+                                            FocusScope.of(context).unfocus(),
+                                        child: ListView.builder(
                                       controller: _scroll,
                                       padding: const EdgeInsets.fromLTRB(
                                           14, 12, 14, 8),
@@ -609,7 +646,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                               _translateMessage(message),
                                         );
                                       },
-                                    ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                           ),
                           ChatComposer(

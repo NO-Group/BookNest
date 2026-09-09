@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../config/theme.dart';
+import '../../../config/app_config.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/supabase_service.dart';
@@ -30,6 +31,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String? get _viewerId => SupabaseService().auth.currentUser?.id;
   String get _email => SupabaseService().auth.currentUser?.email ?? '';
+  String _mode = 'reader'; // 'reader' | 'author'
+  bool _modeBusy = false;
+  /// The overall moderator's account. Display gate only — every real
+  /// power is enforced by the edge function against the signed-in email.
+  bool get _isOverallModerator =>
+      _email.toLowerCase() == 'n.ogroup@yahoo.com';
   String? _cloudStatus; // null = checking, 'online' | 'offline'
 
   @override
@@ -38,6 +45,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ReaderProfile.ensureLoaded();
     _load();
     _probeCloud();
+    _loadMode();
+  }
+
+  Future<void> _loadMode() async {
+    final res = await BackendApi.instance.call('profile.mode.get');
+    final mode = res?['mode']?.toString();
+    if (mode == 'author' || mode == 'reader') {
+      if (mounted) setState(() => _mode = mode);
+    }
+  }
+
+  Future<void> _switchMode() async {
+    if (_modeBusy) return;
+    final next = _mode == 'author' ? 'reader' : 'author';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(next == 'author'
+            ? 'Switch to Author mode?'
+            : 'Switch to Reader mode?'),
+        content: Text(next == 'author'
+            ? 'Your profile gains the Author mark and your writing tools '
+                'come to the front — studio, dashboard and analytics. Your '
+                'reads, saves and streaks stay exactly as they are.'
+            : 'Your profile returns to the reader view — your books stay '
+                'published and nothing is lost. You can switch back any '
+                'time.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text('Switch',
+                  style: const TextStyle(
+                      color: BookNestColors.cyan,
+                      fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _modeBusy = true);
+    final res = await BackendApi.instance
+        .call('profile.mode.set', {'mode': next});
+    if (!mounted) return;
+    setState(() {
+      _modeBusy = false;
+      if (res != null) _mode = next;
+    });
   }
 
   /// Terminal-free deployment check: pings the booknest-api edge function.
@@ -351,6 +407,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(width: 6),
                     const Icon(Icons.edit_rounded,
                         size: 17, color: BookNestColors.cyan),
+                    if (_mode == 'author') ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          color: BookNestColors.cyan.withOpacity(.14),
+                          border: Border.all(
+                              color: BookNestColors.cyan.withOpacity(.5)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.history_edu_rounded,
+                                size: 13, color: BookNestColors.cyan),
+                            SizedBox(width: 4),
+                            Text('Author',
+                                style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: BookNestColors.cyan)),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -362,6 +444,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
             Text(_email, style: TextStyle(color: theme.hintColor, fontSize: 13)),
+            if (_isOverallModerator) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: BookNestColors.cyan.withOpacity(.14),
+                  border: Border.all(
+                      color: BookNestColors.cyan.withOpacity(.5)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.shield_rounded,
+                        size: 15, color: BookNestColors.cyan),
+                    const SizedBox(width: 6),
+                    const Text('Overall moderator',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: BookNestColors.cyan)),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 18),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
@@ -384,7 +492,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 10),
+            // The Author / Reader switch — BookNest's answer to Facebook's
+            // profile-mode toggle.
+            InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: _modeBusy ? null : _switchMode,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: dark
+                      ? Colors.white.withOpacity(.05)
+                      : BookNestColors.navyDeep.withOpacity(.04),
+                  border:
+                      Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: BookNestColors.cyan.withOpacity(.15),
+                      ),
+                      child: Icon(
+                        _mode == 'author'
+                            ? Icons.history_edu_rounded
+                            : Icons.auto_stories_rounded,
+                        color: BookNestColors.cyan,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _mode == 'author'
+                                ? 'Author mode is on'
+                                : 'Reader mode is on',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _mode == 'author'
+                                ? 'Writing tools lead your profile — tap to '
+                                    'switch back to Reader'
+                                : 'Switch to Author to put your books, '
+                                    'studio and stats front and centre',
+                            style: TextStyle(
+                                fontSize: 12,
+                                height: 1.35,
+                                color: theme.hintColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        color: BookNestColors.cyan,
+                      ),
+                      child: _modeBusy
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: BookNestColors.navyDeep))
+                          : Text(
+                              _mode == 'author' ? 'Reader' : 'Author',
+                              style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: BookNestColors.navyDeep),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 26),
+            // Author mode leads with the writing tools.
+            if (_mode == 'author') ...[
+              _ProfileAction(
+                icon: Icons.edit_note_rounded,
+                label: 'New book',
+                subtitle: 'Open the manuscript studio',
+                onTap: () => context.push('/editor'),
+              ),
+              _ProfileAction(
+                icon: Icons.dashboard_rounded,
+                label: 'Writer dashboard',
+                subtitle: 'Your books at a glance',
+                onTap: () => context.push('/dashboard'),
+              ),
+              _ProfileAction(
+                icon: Icons.insights_rounded,
+                label: 'Reviews hub',
+                subtitle: 'What readers say about your books',
+                onTap: () => context.push('/reviews-hub'),
+              ),
+            ],
             _ProfileAction(
               icon: Icons.forum_rounded,
               label: 'Messages',
@@ -397,12 +612,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               subtitle: 'Books you love and write',
               onTap: () => context.go('/library'),
             ),
-            _ProfileAction(
-              icon: Icons.dashboard_rounded,
-              label: 'Writer dashboard',
-              subtitle: 'Manage your books and chapters',
-              onTap: () => context.push('/dashboard'),
-            ),
+            if (_mode != 'author')
+              _ProfileAction(
+                icon: Icons.dashboard_rounded,
+                label: 'Writer dashboard',
+                subtitle: 'Manage your books and chapters',
+                onTap: () => context.push('/dashboard'),
+              ),
             _ProfileAction(
               icon: Icons.person_outline_rounded,
               label: 'My public profile',
@@ -439,6 +655,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               subtitle: 'Messages and activity',
               onTap: () => context.push('/notifications'),
             ),
+            if (_isOverallModerator)
+              _ProfileAction(
+                icon: Icons.admin_panel_settings_rounded,
+                label: 'Moderation console',
+                subtitle: 'Reports, deletions, community safety',
+                onTap: () => context.push('/moderation'),
+              ),
             _ProfileAction(
               icon: Icons.settings_rounded,
               label: 'Settings',
@@ -459,7 +682,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 14),
             Text(
-              'BookNest v1.1 · by N.O Group',
+              'BookNest ${AppConfig.appVersion} · by N.O Group',
               style: TextStyle(color: theme.hintColor, fontSize: 12),
             ),
           ],

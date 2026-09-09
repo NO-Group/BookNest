@@ -478,8 +478,12 @@ class BookNestEmojiPainter extends CustomPainter {
           }
         case EmojiEyes.star:
           _drawStar(canvas, Offset(x, eyeY), eyeR * 2.2, ink);
+          canvas.drawCircle(Offset(x + eyeR * .4, eyeY - eyeR * .5),
+              eyeR * .28, Paint()..color = Colors.white.withOpacity(.95));
         case EmojiEyes.heart:
-          _drawHeart(canvas, Offset(x, eyeY), eyeR * 2.4, BookNestEmojiPalette.blushPink);
+          _drawHeart(canvas, Offset(x, eyeY), eyeR * 2.4,
+              BookNestEmojiPalette.blushPink,
+              outline: BookNestEmojiPalette.navyDeep.withOpacity(.55));
         case EmojiEyes.sunglasses:
           break; // drawn as the accessory band below
         case EmojiEyes.glasses:
@@ -534,9 +538,41 @@ class BookNestEmojiPainter extends CustomPainter {
       ..color = ink;
     switch (def.mouth!) {
       case EmojiMouth.smile:
-        canvas.drawArc(Rect.fromCenter(center: Offset(rect.center.dx, mouthY - mw * .3), width: mw, height: mw), .35, 2.45, false, mp);
+        // Open smile: a filled half-moon with a hint of tongue — warm at
+        // every size, from keyboard thumb to bubble.
+        final smilePath = Path()
+          ..moveTo(rect.center.dx - mw * .42, mouthY - mw * .16)
+          ..quadraticBezierTo(
+              rect.center.dx, mouthY + mw * .78, rect.center.dx + mw * .42, mouthY - mw * .16)
+          ..quadraticBezierTo(
+              rect.center.dx, mouthY + mw * .1, rect.center.dx - mw * .42, mouthY - mw * .16)
+          ..close();
+        canvas.drawPath(smilePath, Paint()..color = ink);
+        canvas.save();
+        canvas.clipPath(smilePath);
+        canvas.drawOval(
+          Rect.fromCenter(
+              center: Offset(rect.center.dx, mouthY + mw * .52),
+              width: mw * .5,
+              height: mw * .42),
+          Paint()..color = BookNestEmojiPalette.blushPink,
+        );
+        canvas.restore();
       case EmojiMouth.catSmile:
-        canvas.drawArc(Rect.fromCenter(center: Offset(rect.center.dx, mouthY - mw * .45), width: mw * .8, height: mw * .8), .5, 2.15, false, mp);
+        // The classic :3 — two bumps meeting at the centre, whisker-tipped.
+        final w = mw * .52;
+        canvas.drawArc(
+            Rect.fromCenter(
+                center: Offset(rect.center.dx - w, mouthY - w * .55),
+                width: w * 2,
+                height: w * 2),
+            .45, 2.25, false, mp);
+        canvas.drawArc(
+            Rect.fromCenter(
+                center: Offset(rect.center.dx + w, mouthY - w * .55),
+                width: w * 2,
+                height: w * 2),
+            .45, 2.25, false, mp);
       case EmojiMouth.grin:
         final path = Path()
           ..moveTo(rect.center.dx - mw / 2, mouthY - mw * .2)
@@ -558,10 +594,43 @@ class BookNestEmojiPainter extends CustomPainter {
           Rect.fromCenter(center: Offset(rect.center.dx + mw * .1, mouthY + mw * .18), width: mw * .5, height: mw * .55),
           Paint()..color = BookNestEmojiPalette.blushPink,
         );
+        // The crease gives the tongue its curl.
+        canvas.drawLine(
+          Offset(rect.center.dx + mw * .1, mouthY + mw * .12),
+          Offset(rect.center.dx + mw * .1, mouthY + mw * .42),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = mw * .05
+            ..strokeCap = StrokeCap.round
+            ..color = BookNestEmojiPalette.blushPink
+                .withRed((BookNestEmojiPalette.blushPink.red * .6).round()),
+        );
       case EmojiMouth.flat:
         canvas.drawLine(Offset(rect.center.dx - mw * .4, mouthY), Offset(rect.center.dx + mw * .4, mouthY), mp);
       case EmojiMouth.frown:
         canvas.drawArc(Rect.fromCenter(center: Offset(rect.center.dx, mouthY + mw * .45), width: mw, height: mw), 3.55, 2.3, false, mp);
+    }
+
+    // Rosy cheeks — the signature of every BookNest face.
+    if (def.eyes != null) {
+      final blushY = rect.center.dy + rect.height * .1;
+      final blushPaint = Paint()
+        ..color = BookNestEmojiPalette.blushPink
+            .withOpacity(dark ? .5 : .42);
+      canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(rect.center.dx - rect.width * .27, blushY),
+            width: rect.width * .17,
+            height: rect.height * .08),
+        blushPaint,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(rect.center.dx + rect.width * .27, blushY),
+            width: rect.width * .17,
+            height: rect.height * .08),
+        blushPaint,
+      );
     }
 
     // accessories
@@ -922,7 +991,8 @@ class BookNestEmojiPainter extends CustomPainter {
     canvas.drawPath(path, Paint()..color = color);
   }
 
-  void _drawHeart(Canvas canvas, Offset c, double size, Color color) {
+  void _drawHeart(Canvas canvas, Offset c, double size, Color color,
+      {Color? outline}) {
     final path = Path()
       ..moveTo(c.dx, c.dy + size * .38)
       ..cubicTo(c.dx - size * .62, c.dy - size * .06, c.dx - size * .3,
@@ -931,6 +1001,14 @@ class BookNestEmojiPainter extends CustomPainter {
           c.dy - size * .06, c.dx, c.dy + size * .38)
       ..close();
     canvas.drawPath(path, Paint()..color = color);
+    if (outline != null) {
+      canvas.drawPath(
+          path,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = size * .07
+            ..color = outline);
+    }
   }
 
   void _circleOutline(Canvas canvas, Offset c, double r, Color color, double w) {

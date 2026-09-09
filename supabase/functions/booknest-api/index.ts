@@ -151,7 +151,10 @@ async function ensureIndexes(
           .createIndex({ userId: 1, createdAt: -1 });
         break;
       case 'users':
-        await database.collection('user_prefs').createIndex({ userId: 1 }, { unique: true });
+        await Promise.all([
+          database.collection('user_prefs').createIndex({ userId: 1 }, { unique: true }),
+          database.collection('profile_extras').createIndex({ userId: 1 }, { unique: true }),
+        ]);
         break;
       case 'moderation':
         await database.collection('reports').createIndex({ status: 1, createdAt: -1 });
@@ -167,6 +170,29 @@ async function ensureIndexes(
 // (deployed with verify_jwt = false so anonymous READS work; every WRITE
 //  still requires a valid user below — enforced right here.)
 // ---------------------------------------------------------------------------
+// The overall owner and moderator of BookNest.
+const ADMIN_EMAILS = new Set(['n.ogroup@yahoo.com']);
+
+/** Resolves the signed-in user when they are the overall moderator. */
+async function adminUserId(req: Request): Promise<string | null> {
+  const token = (req.headers.get('Authorization') ?? '')
+    .replace(/^Bearer\s+/i, '')
+    .trim();
+  if (!token) return null;
+  try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+    );
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) return null;
+    const email = (data.user.email ?? '').toLowerCase();
+    return ADMIN_EMAILS.has(email) ? data.user.id : null;
+  } catch {
+    return null;
+  }
+}
+
 async function currentUserId(req: Request): Promise<string | null> {
   const token = (req.headers.get('Authorization') ?? '')
     .replace(/^Bearer\s+/i, '')
@@ -1161,10 +1187,17 @@ Deno.serve(async (req: Request) => {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         const id = String(p.postId ?? '');
-        if (!id) return fail('A valid postId is required');
-        const res = await (await dbFor('feed')).collection('posts')
-          .deleteOne({ _id: id, createdBy: uid } as never);
+        if (!isHexId(id)) return fail('A valid postId is required');
+        const feedDb = await dbFor('feed');
+        const res = await feedDb.collection('posts')
+          .deleteOne({ _id: new ObjectId(id), createdBy: uid } as never);
         if (res.deletedCount === 0) return fail('Post not found (or not yours)', 404);
+        // Delete means delete: every trace of the post goes too.
+        await feedDb.collection('post_comments').deleteMany({ postId: id });
+        await feedDb.collection('post_views').deleteMany({ postId: id });
+        await feedDb.collection('post_reshares').deleteMany({ postId: id });
+        await (await dbFor('social')).collection('post_likes')
+          .deleteMany({ postId: id });
         return ok({ deleted: true });
       }
 
@@ -3115,6 +3148,173 @@ Deno.serve(async (req: Request) => {
         return ok({ reported: true });
       }
 
+      // ── overall moderator: the report queue and admin deletion ─────────
+      case 'moderation.list': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can view reports', 403);
+        const status = String(p.status ?? 'open');
+        const rows = await (await dbFor('moderation')).collection('reports')
+          .find({ status: status === 'resolved' ? 'resolved' : 'open' })
+          .sort({ createdAt: -1 }).limit(Math.min(Number(p.limit ?? 100) || 100, 200))
+          .toArray();
+        return ok({
+          reports: rows.map((r) => ({
+            id: String(r._id),
+            kind: r.kind,
+            targetId: r.targetId,
+            reason: r.reason,
+            details: r.details ?? '',
+            reporterId: r.reporterId,
+            status: r.status ?? 'open',
+            createdAt: r.createdAt,
+          })),
+        });
+      }
+
+      case 'moderation.resolve': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can resolve reports', 403);
+        const id = String(p.reportId ?? '');
+        if (!isHexId(id)) return fail('A valid reportId is required');
+        const outcome = p.outcome === 'dismissed' ? 'dismissed' : 'resolved';
+        const res = await (await dbFor('moderation')).collection('reports').updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status: 'resolved', outcome,
+            resolvedBy: uid, resolvedAt: new Date() } },
+        );
+        if (res.matchedCount === 0) return fail('Report not found', 404);
+        return ok({ resolved: true, outcome });
+      }
+
+      case 'admin.deleteContent': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can delete content', 403);
+        const kind = String(p.kind ?? '');
+        const id = String(p.targetId ?? '');
+        if (!isHexId(id)) return fail('A valid targetId is required');
+        const feedDb = await dbFor('feed');
+        if (kind === 'post') {
+          await feedDb.collection('posts').deleteOne({ _id: new ObjectId(id) });
+          await feedDb.collection('post_comments').deleteMany({ postId: id });
+          await feedDb.collection('post_views').deleteMany({ postId: id });
+          await feedDb.collection('post_reshares').deleteMany({ postId: id });
+          await (await dbFor('social')).collection('post_likes').deleteMany({ postId: id });
+          return ok({ deleted: true, kind });
+        }
+        if (kind === 'message') {
+          await (await dbFor('chats')).collection('messages')
+            .deleteOne({ _id: new ObjectId(id) });
+          return ok({ deleted: true, kind });
+        }
+        if (kind === 'review') {
+          await (await dbFor('reviews')).collection('reviews')
+            .deleteOne({ _id: new ObjectId(id) });
+          return ok({ deleted: true, kind });
+        }
+        if (kind === 'comment') {
+          const c = await feedDb.collection('post_comments')
+            .findOne({ _id: new ObjectId(id) });
+          await feedDb.collection('post_comments').deleteOne({ _id: new ObjectId(id) });
+          if (c) {
+            await feedDb.collection('posts').updateOne(
+              { _id: String(c.postId) } as never,
+              { $inc: { commentCount: -1 } });
+          }
+          return ok({ deleted: true, kind });
+        }
+        return fail('Unknown content kind');
+      }
+
+      // ── reader / author mode (Facebook-style profile switch) ────────────
+      case 'profile.mode.get': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const target = typeof p.userId === 'string' && p.userId ? p.userId : uid;
+        const row = await (await dbFor('users')).collection('profile_extras')
+          .findOne({ userId: target });
+        return ok({ mode: String(row?.mode ?? 'reader') });
+      }
+
+      case 'profile.mode.set': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const mode = p.mode === 'author' ? 'author' : 'reader';
+        await (await dbFor('users')).collection('profile_extras').updateOne(
+          { userId: uid },
+          { $set: { userId: uid, mode, updatedAt: new Date() } },
+          { upsert: true },
+        );
+        return ok({ mode });
+      }
+
+      // ── server-side link previews (phones are blocked by bot shields) ──
+      case 'link.preview': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const raw = String(p.url ?? '').trim();
+        let target: URL;
+        try {
+          target = new URL(raw);
+        } catch {
+          return fail('A valid URL is required');
+        }
+        if (target.protocol !== 'https:' && target.protocol !== 'http:') {
+          return fail('Only http and web links can be previewed');
+        }
+        const host = target.hostname.toLowerCase();
+        if (host === 'localhost' || host.endsWith('.internal') ||
+            host.endsWith('.local') || /^127\./.test(host) ||
+            /^10\./.test(host) || /^192\.168\./.test(host) ||
+            /^169\.254\./.test(host) || /^0\./.test(host) ||
+            /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)) {
+          return fail('That link cannot be previewed');
+        }
+        try {
+          const res = await fetch(target.toString(), {
+            headers: {
+              'user-agent': 'Mozilla/5.0 (compatible; BookNestBot/1.0; +https://booknest.app)',
+              'accept': 'text/html,application/xhtml+xml',
+            },
+            redirect: 'follow',
+            signal: AbortSignal.timeout(6000),
+          });
+          const contentType = res.headers.get('content-type') ?? '';
+          if (!res.ok || !contentType.includes('text/html')) {
+            return ok({ preview: null });
+          }
+          const body = (await res.text()).slice(0, 400_000);
+          const decode = (v: string) => v
+            .replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+            .replace(/&#0?39;|&#x27;|&apos;/g, "'").replace(/&nbsp;/g, ' ')
+            .replace(/\s+/g, ' ').trim();
+          const meta = (prop: string): string | null => {
+            const patterns = [
+              new RegExp('property=["\']' + prop + '["\'][^>]*content=["\']([^"\']+)', 'i'),
+              new RegExp('content=["\']([^"\']+)["\'][^>]*property=["\']' + prop + '["\']', 'i'),
+              new RegExp('name=["\']' + prop + '["\'][^>]*content=["\']([^"\']+)', 'i'),
+            ];
+            for (const re of patterns) {
+              const m = body.match(re);
+              if (m && m[1]) return decode(m[1]).slice(0, 300);
+            }
+            return null;
+          };
+          const titleTag = body.match(/<title[^>]*>([^<]*)<\/title>/i);
+          const preview = {
+            url: res.url || target.toString(),
+            title: meta('og:title') ?? meta('twitter:title') ??
+              (titleTag ? decode(titleTag[1]).slice(0, 200) : null) ?? host,
+            description: meta('og:description') ?? meta('description'),
+            imageUrl: meta('og:image') ?? meta('twitter:image'),
+            host,
+          };
+          return ok({ preview });
+        } catch {
+          return ok({ preview: null });
+        }
+      }
+
       // ── launch: community safety — reports, blocks, account deletion ──
       case 'moderation.report': {
         const uid = await currentUserId(req);
@@ -3201,7 +3401,7 @@ Deno.serve(async (req: Request) => {
         await counts('user_stats', social.collection('user_stats').deleteMany({ userId: uid }));
         await counts('follows', social.collection('follows').deleteMany({ $or: [{ followerId: uid }, { followeeId: uid }] }));
         await counts('post_likes', social.collection('post_likes').deleteMany({ userId: uid }));
-        await counts('posts', feed.collection('posts').deleteMany({ authorId: uid }));
+        await counts('posts', feed.collection('posts').deleteMany({ createdBy: uid }));
         await counts('post_views', feed.collection('post_views').deleteMany({ userId: uid }));
         await counts('post_reshares', feed.collection('post_reshares').deleteMany({ userId: uid }));
         await counts('post_comments', feed.collection('post_comments').deleteMany({ userId: uid }));

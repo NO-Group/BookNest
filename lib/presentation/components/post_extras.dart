@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/theme.dart';
+import '../../services/backend_api.dart';
 
 /// Expandable post body — long stories collapse behind a "Read more"
 /// control so the feed stays scannable, and expand fully on demand.
@@ -100,82 +101,31 @@ final RegExp _urlPattern = RegExp(
 
 final Map<String, Future<_LinkData?>> _linkCache = {};
 
-/// Fetches and caches the OpenGraph preview for the first link in [text].
-/// Degrades to a simple link chip when a site refuses to preview.
+/// Previews are fetched by the BookNest edge function — websites block
+/// direct phone requests (bot shields), but trust our servers. A failed
+/// preview still resolves, so cards show a clean link chip instead of
+/// spinning forever.
 Future<_LinkData?> _fetchLink(String url) {
   return _linkCache.putIfAbsent(url, () async {
-    try {
-      final res = await http.get(
-        Uri.parse(url),
-        headers: {
-          'User-Agent':
-              'Mozilla/5.0 (compatible; BookNestBot/1.0; +https://booknest.app)',
-          'Accept': 'text/html',
-        },
-      ).timeout(const Duration(seconds: 7));
-      if (res.statusCode != 200 || res.bodyBytes.length > 3 * 1024 * 1024) {
-        return _LinkData(
-            url: url, title: url, host: Uri.parse(url).host);
-      }
-      final body = res.body;
-      String? meta(String property) {
-        final patterns = [
-          RegExp(
-            'property=["\']$property["\'][^>]*content=["\']([^"\']+)["\']',
-            caseSensitive: false,
-          ),
-          RegExp(
-            'content=["\']([^"\']+)["\'][^>]*property=["\']$property["\']',
-            caseSensitive: false,
-          ),
-        ];
-        for (final p in patterns) {
-          final m = p.firstMatch(body);
-          if (m != null) return _decode(m.group(1) ?? '');
-        }
-        return null;
-      }
-
-      String? decodeEntities(String? input) => input == null ? null : _decode(input);
-      final title = decodeEntities(meta('og:title')) ??
-          decodeEntities(meta('title')) ??
-          _titleTag(body) ??
-          url;
-      final description = decodeEntities(meta('og:description')) ??
-          decodeEntities(meta('description'));
-      final image = decodeEntities(meta('og:image'));
-      return _LinkData(
-        url: url,
-        title: title.trim().isEmpty ? url : title.trim(),
-        description: description?.trim(),
-        imageUrl: image,
-        host: Uri.parse(url).host.replaceFirst('www.', ''),
-      );
-    } catch (_) {
-      return _LinkData(url: url, title: url, host: Uri.parse(url).host);
-    }
+    final res = await BackendApi.instance.call('link.preview', {'url': url});
+    final preview = res?['preview'];
+    if (preview is! Map) return null;
+    final host = Uri.parse(url).host;
+    final title = preview['title']?.toString() ?? '';
+    return _LinkData(
+      url: preview['url']?.toString() ?? url,
+      title: title.isEmpty ? host : title,
+      description: preview['description']?.toString(),
+      imageUrl: (preview['imageUrl']?.toString() ?? '').isEmpty
+          ? null
+          : preview['imageUrl']?.toString(),
+      host: preview['host']?.toString().isNotEmpty == true
+          ? preview['host'].toString()
+          : host,
+    );
   });
 }
 
-String _decode(String input) => const HtmlEscape().convert(
-      input
-          .replaceAll('&amp;', '&')
-          .replaceAll('&quot;', '"')
-          .replaceAll('&#39;', "'")
-          .replaceAll('&apos;', "'")
-          .replaceAll('&lt;', '<')
-          .replaceAll('&gt;', '>')
-          .replaceAll('&nbsp;', ' '),
-    );
-
-String? _titleTag(String body) {
-  final m = RegExp(r'<title[^>]*>([^<]+)</title>', caseSensitive: false)
-      .firstMatch(body);
-  return m?.group(1)?.trim();
-}
-
-/// The link preview card shown beneath a post that contains a link:
-/// picture, headline, excerpt and host — tap to open in the browser.
 class LinkPreviewCard extends StatelessWidget {
   final String content;
 
@@ -189,19 +139,48 @@ class LinkPreviewCard extends StatelessWidget {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
 
+    final host = Uri.tryParse(url)?.host ?? url;
     return FutureBuilder<_LinkData?>(
       future: _fetchLink(url),
       builder: (context, snapshot) {
         final data = snapshot.data;
         if (data == null) {
-          return const SizedBox(
-            height: 44,
-            child: Center(
-              child: SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: BookNestColors.cyan),
+          // Loading (briefly) or the site offers no preview: a clean,
+          // tappable link chip — never an endless spinner.
+          return GestureDetector(
+            onTap: () =>
+                launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+            child: Container(
+              margin: const EdgeInsets.only(top: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: dark
+                    ? Colors.white.withOpacity(.04)
+                    : BookNestColors.lightSurface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: BookNestColors.cyan.withOpacity(.28)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.link_rounded,
+                      size: 16, color: BookNestColors.cyan),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(host,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: dark
+                                ? BookNestColors.darkTextPrimary
+                                : BookNestColors.navyDeep)),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(Icons.open_in_new_rounded,
+                      size: 14, color: theme.hintColor),
+                ],
               ),
             ),
           );

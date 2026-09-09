@@ -38,6 +38,8 @@ class _DMChatScreenState extends State<DMChatScreen> {
   Map<String, dynamic>? _peer;
   List<Map<String, dynamic>> _messages = [];
   Map<String, dynamic>? _replyTo;
+  String _themeId = 'classic';
+  double _themeDim = 0;
   Timer? _poll;
   bool _loading = true;
   bool _cloudOfflineAnnounced = false;
@@ -65,6 +67,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
   @override
   void initState() {
     super.initState();
+    _loadTheme();
     ReaderProfile.ensureLoaded();
     _loadPeerBadges();
     _conversationId = widget.conversationId;
@@ -96,6 +99,26 @@ class _DMChatScreenState extends State<DMChatScreen> {
     } catch (_) {
       // Peer profile is cosmetic — the chat still works without it.
     }
+  }
+
+  String get _conversationKey =>
+      'dm:${_conversationId ?? widget.conversationId ?? widget.peerId}';
+
+  Future<void> _loadTheme() async {
+    final id =
+        await ChatThemePrefs.forConversation(_conversationKey);
+    final dim = await ChatThemePrefs.dim();
+    if (mounted) {
+      setState(() {
+        _themeId = id;
+        _themeDim = dim;
+      });
+    }
+  }
+
+  Future<void> _editTheme() async {
+    await showChatThemePicker(context, conversationKey: _conversationKey);
+    _loadTheme();
   }
 
   /// This conversation's key in the on-device vault.
@@ -511,6 +534,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
     final rows = withDaySeparators(_messages);
 
     return Scaffold(
@@ -518,6 +542,13 @@ class _DMChatScreenState extends State<DMChatScreen> {
         elevation: 0,
         leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
+        actions: [
+          IconButton(
+            tooltip: 'Chat theme',
+            icon: const Icon(Icons.palette_outlined, size: 21),
+            onPressed: _editTheme,
+          ),
+        ],
         titleSpacing: 0,
         title: InkWell(
           borderRadius: BorderRadius.circular(10),
@@ -591,9 +622,17 @@ class _DMChatScreenState extends State<DMChatScreen> {
                             ],
                           ),
                         )
-                      : GestureDetector(
-                          onTap: () => FocusScope.of(context).unfocus(),
-                          child: ListView.builder(
+                      : Stack(
+                          children: [
+                            Positioned.fill(
+                              child: ChatWallpaper(
+                                  themeId: _themeId,
+                                  dark: dark,
+                                  dim: _themeDim),
+                            ),
+                            GestureDetector(
+                              onTap: () => FocusScope.of(context).unfocus(),
+                              child: ListView.builder(
                             controller: _scroll,
                             padding:
                                 const EdgeInsets.fromLTRB(14, 12, 14, 8),
@@ -650,6 +689,8 @@ class _DMChatScreenState extends State<DMChatScreen> {
                               );
                             },
                           ),
+                            ),
+                          ],
                         ),
             ),
             ChatComposer(

@@ -45,6 +45,7 @@ import '../presentation/screens/auth/profile_setup_screen.dart';
 import '../presentation/screens/support/privacy_screen.dart';
 import '../presentation/screens/support/terms_screen.dart';
 import '../presentation/screens/settings/chat_backup_screen.dart';
+import '../presentation/screens/moderation/moderation_screen.dart';
 import '../presentation/screens/support/about_screen.dart';
 import '../presentation/screens/support/connection_status_screen.dart';
 import '../presentation/screens/support/permissions_screen.dart';
@@ -291,6 +292,7 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const GlobalSearchScreen(),
     ),
     // ── Support ──
+    GoRoute(path: '/moderation', builder: (context, state) => const ModerationScreen()),
     GoRoute(path: '/privacy', builder: (context, state) => const PrivacyScreen()),
     GoRoute(path: '/terms', builder: (context, state) => const TermsScreen()),
     GoRoute(

@@ -117,6 +117,17 @@ class _FeedScreenState extends State<FeedScreen>
     }
   }
 
+  void _removePostLocally(int index) {
+    if (index < 0 || index >= _filteredPosts.length) return;
+    final id = _filteredPosts[index]['id']?.toString();
+    setState(() {
+      _filteredPosts.removeAt(index);
+      if (id != null) {
+        _posts.removeWhere((p) => p['id']?.toString() == id);
+      }
+    });
+  }
+
   void _filterPosts(String filter) {
     setState(() {
       _activeFilter = filter;
@@ -261,7 +272,11 @@ class _FeedScreenState extends State<FeedScreen>
                                 itemBuilder: (context, index) {
                                   return Entrance(
                                     index: index,
-                                    child: _PostCard(post: _filteredPosts[index]),
+                                    child: _PostCard(
+                                      post: _filteredPosts[index],
+                                      onDeleted: () =>
+                                          _removePostLocally(index),
+                                    ),
                                   );
                                 },
                               ),
@@ -429,8 +444,9 @@ class _PostType {
 // Stylus custom painter (matches your image, tilted)
 class _PostCard extends StatelessWidget {
   final dynamic post;
+  final VoidCallback? onDeleted;
 
-  const _PostCard({required this.post});
+  const _PostCard({required this.post, this.onDeleted});
 
   @override
   Widget build(BuildContext context) {
@@ -439,17 +455,17 @@ class _PostCard extends StatelessWidget {
 
     switch (type) {
       case 'quote':
-        return _QuotePostCard(post: post, author: author);
+        return _QuotePostCard(post: post, author: author, onDeleted: onDeleted);
       case 'news':
-        return _NewsPostCard(post: post, author: author);
+        return _NewsPostCard(post: post, author: author, onDeleted: onDeleted);
       case 'poll':
-        return _PollPostCard(post: post, author: author);
+        return _PollPostCard(post: post, author: author, onDeleted: onDeleted);
       case 'event':
-        return _EventPostCard(post: post, author: author);
+        return _EventPostCard(post: post, author: author, onDeleted: onDeleted);
       case 'article':
-        return _ArticlePostCard(post: post, author: author);
+        return _ArticlePostCard(post: post, author: author, onDeleted: onDeleted);
       default:
-        return _DefaultPostCard(post: post, author: author);
+        return _DefaultPostCard(post: post, author: author, onDeleted: onDeleted);
     }
   }
 }
@@ -457,9 +473,10 @@ class _PostCard extends StatelessWidget {
 // Quote post: "Content" — Author
 class _QuotePostCard extends StatelessWidget {
   final dynamic post;
+  final VoidCallback? onDeleted;
   final String author;
 
-  const _QuotePostCard({required this.post, required this.author});
+  const _QuotePostCard({required this.post, required this.author, this.onDeleted});
 
   @override
   Widget build(BuildContext context) {
@@ -582,9 +599,10 @@ class _QuotePostCard extends StatelessWidget {
 // News post
 class _NewsPostCard extends StatelessWidget {
   final dynamic post;
+  final VoidCallback? onDeleted;
   final String author;
 
-  const _NewsPostCard({required this.post, required this.author});
+  const _NewsPostCard({required this.post, required this.author, this.onDeleted});
 
   @override
   Widget build(BuildContext context) {
@@ -666,6 +684,16 @@ class _NewsPostCard extends StatelessWidget {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+            child: Row(
+              children: [
+                const Spacer(),
+                _PostActionButtons(
+                    post: post, onDeleted: onDeleted),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -675,9 +703,10 @@ class _NewsPostCard extends StatelessWidget {
 // Poll post
 class _PollPostCard extends StatelessWidget {
   final dynamic post;
+  final VoidCallback? onDeleted;
   final String author;
 
-  const _PollPostCard({required this.post, required this.author});
+  const _PollPostCard({required this.post, required this.author, this.onDeleted});
 
   @override
   Widget build(BuildContext context) {
@@ -756,6 +785,16 @@ class _PollPostCard extends StatelessWidget {
               fontSize: 12,
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+            child: Row(
+              children: [
+                const Spacer(),
+                _PostActionButtons(
+                    post: post, onDeleted: onDeleted),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -765,9 +804,10 @@ class _PollPostCard extends StatelessWidget {
 // Event post
 class _EventPostCard extends StatelessWidget {
   final dynamic post;
+  final VoidCallback? onDeleted;
   final String author;
 
-  const _EventPostCard({required this.post, required this.author});
+  const _EventPostCard({required this.post, required this.author, this.onDeleted});
 
   @override
   Widget build(BuildContext context) {
@@ -844,6 +884,16 @@ class _EventPostCard extends StatelessWidget {
               child: const Text('RSVP'),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+            child: Row(
+              children: [
+                const Spacer(),
+                _PostActionButtons(
+                    post: post, onDeleted: onDeleted),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -853,9 +903,10 @@ class _EventPostCard extends StatelessWidget {
 // Article post
 class _ArticlePostCard extends StatelessWidget {
   final dynamic post;
+  final VoidCallback? onDeleted;
   final String author;
 
-  const _ArticlePostCard({required this.post, required this.author});
+  const _ArticlePostCard({required this.post, required this.author, this.onDeleted});
 
   @override
   Widget build(BuildContext context) {
@@ -926,6 +977,16 @@ class _ArticlePostCard extends StatelessWidget {
               ),
             ],
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+            child: Row(
+              children: [
+                const Spacer(),
+                _PostActionButtons(
+                    post: post, onDeleted: onDeleted),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -935,9 +996,10 @@ class _ArticlePostCard extends StatelessWidget {
 // Default fallback post
 class _DefaultPostCard extends StatelessWidget {
   final dynamic post;
+  final VoidCallback? onDeleted;
   final String author;
 
-  const _DefaultPostCard({required this.post, required this.author});
+  const _DefaultPostCard({required this.post, required this.author, this.onDeleted});
 
   @override
   Widget build(BuildContext context) {
@@ -958,6 +1020,16 @@ class _DefaultPostCard extends StatelessWidget {
             style: TextStyle(color: Theme.of(context).colorScheme.onSurface, height: 1.45),
           ),
           LinkPreviewCard(content: post['content']?.toString() ?? ''),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+            child: Row(
+              children: [
+                const Spacer(),
+                _PostActionButtons(
+                    post: post, onDeleted: onDeleted),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -967,7 +1039,8 @@ class _DefaultPostCard extends StatelessWidget {
 /// Like (optimistic, local until posts sync to the cloud) + real share sheet.
 class _PostActionButtons extends StatefulWidget {
   final dynamic post;
-  const _PostActionButtons({required this.post});
+  final VoidCallback? onDeleted;
+  const _PostActionButtons({required this.post, this.onDeleted});
 
   @override
   State<_PostActionButtons> createState() => _PostActionButtonsState();
@@ -1014,6 +1087,50 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
     } finally {
       _busy = false;
     }
+  }
+
+  bool get _mine =>
+      widget.post is Map &&
+      widget.post['created_by']?.toString() == viewerId;
+
+  Future<void> _deleteMyPost() async {
+    final id = widget.post is Map && widget.post['id'] != null
+        ? widget.post['id'].toString()
+        : null;
+    if (id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this post?'),
+        content: const Text(
+            'It disappears for every reader, along with its comments, likes '
+            'and reshares. This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Delete',
+                  style: TextStyle(
+                      color: Color(0xFFD06A6A),
+                      fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final res = await BackendApi.instance
+        .call('posts.delete', {'postId': id});
+    if (!mounted) return;
+    if (res == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'The post could not be deleted — please try again.')));
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post deleted.')));
+    widget.onDeleted?.call();
   }
 
   late int _views = widget.post is Map
@@ -1143,10 +1260,19 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
             ),
           ),
         ),
-        IconButton(
-          icon: Icon(Icons.flag_outlined,
-              color: muted.withOpacity(.7), size: 18),
-          tooltip: 'Report post',
+        if (_mine)
+          IconButton(
+            icon: Icon(Icons.delete_outline_rounded,
+                color: muted.withOpacity(.7), size: 18),
+            tooltip: 'Delete post',
+            visualDensity: VisualDensity.compact,
+            onPressed: _deleteMyPost,
+          )
+        else
+          IconButton(
+            icon: Icon(Icons.flag_outlined,
+                color: muted.withOpacity(.7), size: 18),
+            tooltip: 'Report post',
           visualDensity: VisualDensity.compact,
           onPressed: () {
             final id = widget.post is Map && widget.post['id'] != null

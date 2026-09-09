@@ -26,6 +26,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
   bool _followBusy = false;
   int _followerDelta = 0;
   bool _blocked = false;
+  bool _isAuthor = false;
 
   String? get _viewerId => SupabaseService().auth.currentUser?.id;
   bool get _isMe => _viewerId == widget.userId;
@@ -35,6 +36,15 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
     super.initState();
     _load();
     _loadBlocked();
+    _loadMode();
+  }
+
+  Future<void> _loadMode() async {
+    final res = await BackendApi.instance
+        .call('profile.mode.get', {'userId': widget.userId});
+    if (res?['mode']?.toString() == 'author' && mounted) {
+      setState(() => _isAuthor = true);
+    }
   }
 
   Future<void> _loadBlocked() async {
@@ -112,8 +122,42 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text(_name,
-            style: const TextStyle(fontWeight: FontWeight.w800)),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(_name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
+            ),
+            if (_isAuthor) ...[
+              const SizedBox(width: 7),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: BookNestColors.cyan.withOpacity(.14),
+                  border:
+                      Border.all(color: BookNestColors.cyan.withOpacity(.5)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.history_edu_rounded,
+                        size: 11, color: BookNestColors.cyan),
+                    SizedBox(width: 3),
+                    Text('Author',
+                        style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: BookNestColors.cyan)),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
           if (!_isMe && !_loading)
             PopupMenuButton<String>(
