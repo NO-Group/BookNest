@@ -159,6 +159,8 @@ async function ensureIndexes(
           database.collection('dm_keys').createIndex({ userId: 1 }, { unique: true }),
           database.collection('push_tokens').createIndex({ token: 1 }, { unique: true }),
           database.collection('push_tokens').createIndex({ userId: 1 }),
+          database.collection('link_passes').createIndex({ passId: 1 }, { unique: true }),
+          database.collection('link_passes').createIndex({ userId: 1 }),
         ]);
         break;
       case 'genres':
@@ -207,6 +209,21 @@ async function isBanned(uid: string): Promise<boolean> {
     return !!ban;
   } catch {
     return false;
+  }
+}
+
+/** Resolves the device holding a background-link pass (no Google push). */
+async function userIdFromLinkPass(raw: unknown): Promise<string | null> {
+  const passId = String(raw ?? '').trim();
+  if (!/^[a-f0-9]{64}$/.test(passId)) return null;
+  try {
+    const pass = await (await dbFor('users')).collection('link_passes')
+      .findOne({ passId });
+    if (!pass || pass.revoked) return null;
+    if (new Date(String(pass.expiresAt)).getTime() < Date.now()) return null;
+    return String(pass.userId);
+  } catch {
+    return null;
   }
 }
 
@@ -2288,7 +2305,8 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'dm.list': {
-        const uid = await currentUserId(req);
+        const uid =
+          (await currentUserId(req)) ?? await userIdFromLinkPass(p.linkPass);
         if (!uid) return fail('Sign in required', 401);
         void sweepOldMessages();
         const rows = await (await dbFor('chats')).collection('conversations')
@@ -2481,7 +2499,8 @@ Deno.serve(async (req: Request) => {
 
       // ── message toolkit: react / delete / read receipts ──────────────────
       case 'chats.list': {
-        const uid = await currentUserId(req);
+        const uid =
+          (await currentUserId(req)) ?? await userIdFromLinkPass(p.linkPass);
         void sweepOldMessages();
         if (!uid) return fail('Sign in required', 401);
         const d = await dbFor('chats');
@@ -3734,6 +3753,59 @@ Deno.serve(async (req: Request) => {
         return ok({ removed: name });
       }
 
+      // ── background link (no Google): revocable device passes ─────────────
+      case 'link.pass': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const col = (await dbFor('users')).collection('link_passes');
+        const now = new Date();
+        const existing = await col.findOne(
+          { userId: uid, revoked: false, expiresAt: { $gt: now } },
+          { sort: { createdAt: -1 } },
+        );
+        if (existing) return ok({ pass: existing.passId, me: uid });
+        const bytes = crypto.getRandomValues(new Uint8Array(32));
+        const passId =
+          [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+        await col.insertOne({
+          passId,
+          userId: uid,
+          revoked: false,
+          createdAt: now,
+          expiresAt: new Date(now.getTime() + 30 * 24 * 3600 * 1000),
+        });
+        return ok({ pass: passId, me: uid });
+      }
+
+      case 'link.revoke': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        await (await dbFor('users')).collection('link_passes')
+          .updateMany({ userId: uid }, { $set: { revoked: true } });
+        return ok({ revoked: true });
+      }
+
+      case 'link.names': {
+        const uid =
+          (await currentUserId(req)) ?? await userIdFromLinkPass(p.linkPass);
+        if (!uid) return fail('Sign in required', 401);
+        const ids = Array.isArray(p.ids)
+          ? p.ids.map(String).filter(isHexId).slice(0, 60)
+          : [];
+        const names: Record<string, string> = {};
+        if (ids.length > 0) {
+          try {
+            const { data: rows } = await serviceClient().from('profiles')
+              .select('id, display_name, username').in('id', ids);
+            for (const row of rows ?? []) {
+              names[String(row.id)] =
+                String(row.display_name || row.username || '');
+            }
+          } catch { /* names stay empty; the banner still works */ }
+        }
+        return ok({ names });
+      }
+
       // ── server-side link previews (phones are blocked by bot shields) ──
       case 'link.preview': {
         const uid = await currentUserId(req);
@@ -3873,6 +3945,10 @@ Deno.serve(async (req: Request) => {
         const chats = await dbFor('chats');
         const users = await dbFor('users');
         const moderation = await dbFor('moderation');
+        try {
+          await users.collection('link_passes')
+            .updateMany({ userId: uid }, { $set: { revoked: true } });
+        } catch { /* passes may not exist yet */ }
         // Chapters hang off the books — collect ids before the books go.
         const owned = await booksDb.collection('books')
           .find({ authorId: uid }, { projection: { _id: 1 } }).toArray();

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.11.0+23 — 2026-09-10 · The background link (no Google, still)
+
+- **Stay connected — with nobody but BookNest**: an optional slim
+  foreground service keeps messages arriving even after other apps close
+  BookNest or the phone restarts. No Firebase, no OneSignal, no third
+  party — the link runs straight to our own servers on a revocable,
+  30-day pass that never touches your login session.
+- Found in Settings → **Connection → Stay connected (no Google
+  services)**, with honest battery wording and a hint for phones
+  (Tecno/Infinix/Samsung) that need "Auto-start" allowed.
+- While the app is open the app banners messages as before; when it's
+  swiped away, the persistent "BookNest is connected" notification takes
+  over and carries the news.
+- Edge update: `link.pass` / `link.revoke` / `link.names` + pass support
+  on the message-queue reads (covered by the usual index.ts re-paste).
+
 ## 2.10.0+22 — 2026-09-10 · Notifications without anyone's permission
 
 - **Zero-external notifications**: while BookNest is running — in hand or

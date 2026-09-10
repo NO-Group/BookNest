@@ -13,6 +13,11 @@
         android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <!-- BookNest's own background link (foreground service, no Google).
+         remoteMessaging has no Android 15 dataSync time cap. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING"/>
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <application
         android:label="BookNest"
         android:name="${applicationName}"
@@ -49,6 +54,12 @@
                 <data android:scheme="booknest"/>
             </intent-filter>
         </activity>
+        <!-- flutter_foreground_task: the background-link service.
+             Warning: do not change this service name. -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="remoteMessaging"
+            android:exported="false" />
         <!-- ── Home-screen widgets (five beautiful options) ── -->
         <receiver
             android:name=".WordOfDayWidgetProvider"

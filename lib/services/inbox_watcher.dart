@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'backend_api.dart';
+import 'background_link.dart';
 import 'notification_service.dart';
 import 'supabase_service.dart';
 
@@ -56,6 +57,9 @@ class InboxWatcher {
     } catch (_) {
       // Never let the watcher crash the loop; next tick tries again.
     } finally {
+      // Prove the app is alive, so the background link stays quiet and
+      // leaves the banners to us.
+      LinkService.instance.ping();
       _sweeping = false;
       _schedule();
     }

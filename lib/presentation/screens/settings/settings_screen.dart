@@ -25,6 +25,7 @@ import '../../../config/app_config.dart';
 import '../../../config/theme.dart';
 import '../../../services/notification_service.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/background_link.dart';
 import '../../../services/chat_backup_service.dart';
 import '../../../services/chat_store.dart';
 import '../../../services/push_service.dart';
@@ -42,11 +43,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _clearingCache = false;
   bool _dailyWordOn = false;
   bool _streakReminderOn = false;
+  bool _backgroundLinkOn = LinkService.instance.preferred;
 
   @override
   void initState() {
     super.initState();
     ReaderProfile.ensureLoaded();
+    LinkService.instance.ensureStartedIfPreferred().then((_) {
+      if (mounted) setState(() => _backgroundLinkOn = LinkService.instance.preferred);
+    });
     NotificationService.instance.dailyWordEnabled().then((v) {
       if (mounted) setState(() => _dailyWordOn = v);
     });
@@ -387,6 +392,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 if (mounted) setState(() => _streakReminderOn = v);
               },
             ),
+          ]),
+
+          const SizedBox(height: 24),
+
+          const _SectionLabel('CONNECTION'),
+          const SizedBox(height: 10),
+          _SettingsGroup(children: [
+            SwitchListTile(
+              secondary: const Icon(Icons.link_rounded,
+                  size: 21, color: BookNestColors.cyan),
+              title: const Text('Stay connected (no Google services)',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 14.5)),
+              subtitle: const Text(
+                  'BookNest keeps its own quiet link, so messages still arrive '
+                  'after other apps close it or the phone restarts. Uses a '
+                  'little more battery.',
+                  style: TextStyle(fontSize: 12)),
+              value: _backgroundLinkOn,
+              activeColor: BookNestColors.cyan,
+              onChanged: (v) async {
+                final ok = await LinkService.instance.setEnabled(v);
+                if (mounted) {
+                  setState(() => _backgroundLinkOn = ok ? v : _backgroundLinkOn);
+                  ScaffoldMessenger.of(context)
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(SnackBar(
+                        content: Text(ok && v
+                            ? 'BookNest will stay connected — no Google services involved.'
+                            : 'Background link off.')));
+                }
+              },
+            ),
+            if (_backgroundLinkOn)
+              const ListTile(
+                dense: true,
+                leading: Icon(Icons.tips_and_updates_outlined,
+                    size: 20, color: BookNestColors.cyan),
+                title: Text('Allow "Auto-start" for BookNest',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 13.5)),
+                subtitle: Text(
+                    'Phones like Tecno, Infinix and Samsung add their own '
+                    'battery switches. Allow BookNest there so the link '
+                    'survives restarts.',
+                    style: TextStyle(fontSize: 12)),
+              ),
           ]),
 
           const SizedBox(height: 24),
