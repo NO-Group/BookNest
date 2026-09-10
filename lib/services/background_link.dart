@@ -54,7 +54,7 @@ class LinkService {
       if (!_preferred) return;
       if (SupabaseService().auth.currentUser == null) return;
       await _provisionPass();
-      await _initService();
+      _initService();
       _started = await _startService();
     } catch (_) {
       // The link is a courtesy; never let it disturb startup.
@@ -86,7 +86,7 @@ class LinkService {
             }
           } catch (_) {}
           await _provisionPass();
-          await _initService();
+          _initService();
           _started = await _startService();
         }
       } else {
