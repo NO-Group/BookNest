@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.10.0+22 — 2026-09-10 · Notifications without anyone's permission
+
+- **Zero-external notifications**: while BookNest is running — in hand or
+  in recents — new direct and club messages surface as native banners via
+  a light 30-second sweep of the delivery queue. No Firebase, no
+  OneSignal, no third party, nothing to configure, ever.
+- Banners carry the sender's name (or the club's), a clean preview, and
+  replace per conversation instead of stacking; the conversation you're
+  actually looking at never buzzes.
+- Club room listings now include each room's last message (edge update —
+  covered by the usual index.ts re-paste).
+- Sealed messages preview as "🔒 Encrypted message" here too, honestly.
+
 ## 2.9.0+21 — 2026-09-09 · Genres the moderator owns
 
 - **Genres are no longer hardcoded**: both taxonomies — the 22 book

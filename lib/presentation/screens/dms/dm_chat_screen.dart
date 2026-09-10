@@ -13,6 +13,7 @@ import '../chat/media_viewer_screen.dart';
 import '../../components/booknest_emojis.dart';
 import '../../../services/reader_profile.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/inbox_watcher.dart';
 import '../../../services/supabase_service.dart';
 
 /// 1:1 chat on the BookNest watermark canvas — glass bubbles, delivery
@@ -76,6 +77,8 @@ class _DMChatScreenState extends State<DMChatScreen> {
     ReaderProfile.ensureLoaded();
     _loadPeerBadges();
     _conversationId = widget.conversationId;
+    final openConv = _conversationId;
+    if (openConv != null) InboxWatcher.instance.enter(openConv);
     _loadPeer();
     _load();
     _poll = Timer.periodic(const Duration(seconds: 4), (_) => _load());
@@ -83,6 +86,8 @@ class _DMChatScreenState extends State<DMChatScreen> {
 
   @override
   void dispose() {
+    final openConv = _conversationId;
+    if (openConv != null) InboxWatcher.instance.leave(openConv);
     _poll?.cancel();
     _scroll.dispose();
     ChatStore.instance.flush();

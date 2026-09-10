@@ -8,6 +8,7 @@ import 'config/router.dart';
 import 'config/theme.dart';
 import 'services/home_widgets_service.dart';
 import 'services/push_service.dart';
+import 'services/inbox_watcher.dart';
 import 'services/notification_service.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
@@ -27,6 +28,9 @@ Future<void> main() async {
   }
   unawaited(_startupAftercare());
   unawaited(PushService.instance.warmUp());
+    // Zero-external notifications while the app is alive (no Firebase
+    // needed): a light sweep of the message queue every 30 seconds.
+    InboxWatcher.instance.start();
   runApp(const BookNestApp());
 }
 

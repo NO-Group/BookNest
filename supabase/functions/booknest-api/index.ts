@@ -2507,6 +2507,7 @@ Deno.serve(async (req: Request) => {
             kind: String(r.kind ?? 'clubs'),
             clubId: String(r.clubId ?? ''),
             title: names.get(String(r.clubId ?? '')) ?? 'Group chat',
+            lastMessage: r.lastMessage ?? null,
           })),
         });
       }

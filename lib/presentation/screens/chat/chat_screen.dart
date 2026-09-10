@@ -13,6 +13,7 @@ import '../../components/booknest_ui.dart';
 import '../../components/report_sheet.dart';
 import '../../../services/reader_profile.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/inbox_watcher.dart';
 import '../../../services/supabase_service.dart';
 
 /// Club / community / organization / school group chat — membership-gated
@@ -76,7 +77,10 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   @override
+  @override
   void dispose() {
+    final openConv = _conversationId;
+    if (openConv != null) InboxWatcher.instance.leave(openConv);
     _poll?.cancel();
     _scroll.dispose();
     ChatStore.instance.flush();
@@ -102,6 +106,8 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     _conversationId = conversation['id']?.toString();
+    final openConv = _conversationId;
+    if (openConv != null) InboxWatcher.instance.enter(openConv);
     await _load();
     _poll = Timer.periodic(const Duration(seconds: 4), (_) => _load());
   }
