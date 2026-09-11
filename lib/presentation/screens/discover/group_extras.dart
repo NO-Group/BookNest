@@ -45,7 +45,7 @@ class _GroupChannelsSectionState extends State<GroupChannelsSection> {
   bool _loading = true;
   bool _busy = false;
 
-  GroupBaseScreenState get _state => widget.state;
+  GroupContext get _state => widget.state;
 
   @override
   void initState() {
@@ -259,7 +259,7 @@ class _GroupEventsSectionState extends State<GroupEventsSection> {
   bool _busy = false;
   Timer? _ticker;
 
-  GroupBaseScreenState get _state => widget.state;
+  GroupContext get _state => widget.state;
 
   @override
   void initState() {
