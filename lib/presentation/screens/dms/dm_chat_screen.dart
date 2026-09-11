@@ -831,12 +831,12 @@ class _DMChatScreenState extends State<DMChatScreen> {
               onSendEmote: _sendEmote,
               replyTo: _replyTo,
               onCancelReply: () => setState(() => _replyTo = null),
+              onTyping: () =>
+                  TypingBroadcaster.instance.iAmTyping(_peerName),
             ),
           ],
         ),
       ),
-    
-            onTyping: () => TypingBroadcaster.instance
-                .iAmTyping(_peerName),);
+    );
   }
 }

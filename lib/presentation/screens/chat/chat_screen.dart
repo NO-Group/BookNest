@@ -856,14 +856,13 @@ class _ChatScreenState extends State<ChatScreen> {
                             onSendVideo: _sendVideo,
                             replyTo: _replyTo,
                             onCancelReply: () => setState(() => _replyTo = null),
+                            onTyping: () =>
+                                TypingBroadcaster.instance.iAmTyping('Member'),
                           ),
                         ],
                       ),
       ),
-    
-                          onTyping: () =>
-                              TypingBroadcaster.instance
-                                  .iAmTyping('Member'),);
+    );
   }
 
   Widget _buildNotice({
