@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'supabase_service.dart';
 
@@ -242,7 +244,7 @@ class CallService {
         break;
       case 'ice':
         try {
-          await _pc?.addIceCandidate(RTCIceCandidate(
+          await _pc?.addCandidate(RTCIceCandidate(
             payload['candidate']?.toString() ?? '',
             payload['sdpMid']?.toString(),
             (payload['sdpMLineIndex'] as num?)?.toInt(),
@@ -348,7 +350,7 @@ typedef RealtimeEvent = void Function(String event, Map<dynamic, dynamic> payloa
 class RealtimeChannelPair {
   RealtimeChannelPair({required this.client, required this.channelName});
 
-  final SupabaseService client;
+  final SupabaseClient client;
   final String channelName;
   dynamic _channel;
   RealtimeEvent? _onEvent;
@@ -390,7 +392,7 @@ class RealtimePersonal {
     required this.onRing,
   });
 
-  final SupabaseService client;
+  final SupabaseClient client;
   final String channelName;
   final void Function(Map<dynamic, dynamic> payload) onRing;
   dynamic _channel;
