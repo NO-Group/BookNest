@@ -24,6 +24,10 @@ class ChatScreen extends StatefulWidget {
   final String kind;
   final String title;
 
+  /// Sub-room scoping: a department chat (unitId) or a named channel.
+  final String unitId;
+  final String channelName;
+
   /// Club detail already knows whether the viewer belongs to the group —
   /// passing it avoids a rejected server round-trip for non-members.
   final bool isMember;
@@ -33,6 +37,8 @@ class ChatScreen extends StatefulWidget {
     required this.clubId,
     this.kind = 'clubs',
     this.title = 'Group chat',
+    this.unitId = '',
+    this.channelName = '',
     this.isMember = true,
   });
 
@@ -88,7 +94,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _openRoom() async {
-    final res = await BackendApi.instance.ensureClubChat(widget.kind, widget.clubId);
+    final res = await BackendApi.instance.ensureClubChat(
+        widget.kind, widget.clubId,
+        unitId: widget.unitId, name: widget.channelName);
     if (!mounted) return;
     if (res == null) {
       setState(() {

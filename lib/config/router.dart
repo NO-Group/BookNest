@@ -339,6 +339,8 @@ final GoRouter appRouter = GoRouter(
         clubId: state.uri.queryParameters['id'] ?? '',
         kind: state.uri.queryParameters['kind'] ?? 'clubs',
         title: state.uri.queryParameters['title'] ?? 'Group chat',
+        unitId: state.uri.queryParameters['unit'] ?? '',
+        channelName: state.uri.queryParameters['chan'] ?? '',
       ),
     ),
     GoRoute(

@@ -1062,6 +1062,23 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
                                   fontWeight: FontWeight.w800,
                                   color: BookNestColors.cyan)),
                         ),
+                      if (_isJoined(unit))
+                        IconButton(
+                          tooltip: 'Department chat',
+                          icon: const Icon(Icons.forum_outlined,
+                              size: 18, color: BookNestColors.cyan),
+                          onPressed: () {
+                            final groupName =
+                                _state.group?['name']?.toString() ?? '';
+                            final unitName = unit['name']?.toString() ?? '';
+                            context.push(
+                              '/club-chat?id=${_state.groupId}'
+                              '&kind=${_state.kind}'
+                              '&unit=${unit['id']?.toString() ?? ''}'
+                              '&title=${Uri.encodeComponent('$unitName · $groupName')}',
+                            );
+                          },
+                        ),
                     ]),
                   ),
                 ),

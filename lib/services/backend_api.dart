@@ -319,8 +319,14 @@ class BackendApi {
 
   // ── Club group chat ─────────────────────────────────────────────────────
   /// Opens (or reuses) the membership-gated room for a group.
-  Future<Map<String, dynamic>?> ensureClubChat(String kind, String clubId) =>
-      call('chat.ensure', <String, dynamic>{'kind': kind, 'clubId': clubId});
+  Future<Map<String, dynamic>?> ensureClubChat(String kind, String clubId,
+          {String unitId = '', String name = ''}) =>
+      call('chat.ensure', <String, dynamic>{
+        'kind': kind,
+        'clubId': clubId,
+        if (unitId.isNotEmpty) 'unitId': unitId,
+        if (name.isNotEmpty) 'name': name,
+      });
 
   Future<Map<String, dynamic>?> sendClubMessage({
     required String conversationId,

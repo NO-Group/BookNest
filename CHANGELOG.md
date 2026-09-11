@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.16.0+28 — 2026-09-11 · Department chats, events & the community strike
+
+- **Department chat rooms**: every organization department now has its
+  own **members-only chat** — join the department, tap the 💬 icon, and
+  talk to that team alone. Fully enforced at the edge: no unit membership,
+  no messages.
+- **Events with RSVPs** (organizations **and** communities): owners and
+  deputies schedule happenings — title, details, date & time (or "to be
+  announced"). Members respond **Going** or **Interested** with live
+  counts, live countdowns ("In 2 d 4h" → "Happening now"), and hosts can
+  remove events with their RSVPs.
+- **Community channels**: communities get named, members-only topic chat
+  rooms (#poetry, #launches, #help…) — created by owners/deputies, open to
+  every member from the community page, in the same polished chat.
+- **House rules**: a numbered rules panel for communities — owners and
+  deputies write them (one per line, up to 12), every member sees them.
+- Everything rides on the same hardened chat stack: sub-room membership
+  is now enforced across send, read, react, delete and read receipts.
+
 ## 2.15.0+27 — 2026-09-11 · The organization impact round
 
 - **Organizations, rebuilt for real structure**:

@@ -686,24 +686,39 @@ async function ensureClubRoom(
   kind: string,
   clubId: string,
   uid: string,
+  unitId = '',
+  chanName = '',
 ): Promise<Record<string, unknown> | null> {
   const d = await dbFor('chats');
   const col = d.collection('conversations');
   try {
     await col.createIndex({ clubKey: 1 }, { unique: true });
   } catch { /* index exists */ }
-  const clubKey = `${kind}:${clubId}`;
+  const clubKey = unitId
+    ? `${kind}:${clubId}:unit:${unitId}`
+    : chanName
+      ? `${kind}:${clubId}:chan:${chanName.toLowerCase()}`
+      : `${kind}:${clubId}`;
   const found = await col.findOne({ clubKey });
   if (found) return found;
   const club = await (await dbFor('groups')).collection(kind)
     .findOne({ _id: clubId } as never);
+  let title = String((club?.name as string) ?? 'Group chat').slice(0, 120);
+  if (unitId) {
+    const unit = await (await dbFor('groups')).collection('units')
+      .findOne({ _id: new ObjectId(unitId) } as never);
+    if (unit) title = `${String(unit.name).slice(0, 60)} · ${title}`.slice(0, 120);
+  } else if (chanName) {
+    title = `${chanName.slice(0, 60)} · ${title}`.slice(0, 120);
+  }
   const now = new Date();
   const doc = {
     type: 'club',
     clubKey,
     clubId,
     kind,
-    title: String((club?.name as string) ?? 'Group chat').slice(0, 120),
+    unitId: unitId || null,
+    title,
     memberIds: [uid],
     createdAt: now,
     updatedAt: now,
@@ -721,6 +736,22 @@ async function ensureClubRoom(
 async function isClubMember(kind: string, clubId: string, uid: string): Promise<boolean> {
   const members = (await dbFor('groups')).collection(`${kind}_members`);
   return (await members.countDocuments({ groupId: clubId, userId: uid })) > 0;
+}
+
+async function isUnitMember(unitId: string, uid: string): Promise<boolean> {
+  const members = (await dbFor('groups')).collection('unit_members');
+  return (await members.countDocuments({ unitId, userId: uid })) > 0;
+}
+
+/** Sub-rooms (departments, named channels) gate on their own roster. */
+async function isRoomMember(
+  room: Record<string, unknown> | null,
+  uid: string,
+): Promise<boolean> {
+  if (!room) return false;
+  const unitId = String(room.unitId ?? '');
+  if (unitId) return isUnitMember(unitId, uid);
+  return isClubMember(String(room.kind), String(room.clubId), uid);
 }
 
 // ── chat message toolkit: reactions, deletes, read receipts ────────────────
@@ -2376,7 +2407,15 @@ Deno.serve(async (req: Request) => {
         if (!(await isClubMember(kind, clubId, uid))) {
           return fail('Join this group to open its chat', 403);
         }
-        const room = await ensureClubRoom(kind, clubId, uid);
+        const unitId = typeof p.unitId === 'string' ? p.unitId : '';
+        const chanName = typeof p.name === 'string' ? p.name.trim().slice(0, 48) : '';
+        if (unitId) {
+          if (!isHexId(unitId)) return fail('A valid unitId is required');
+          if (!(await isUnitMember(unitId, uid))) {
+            return fail('Join this department to open its chat', 403);
+          }
+        }
+        const room = await ensureClubRoom(kind, clubId, uid, unitId, chanName);
         if (!room) return fail('Could not open the chat — please try again', 503);
         return ok({ conversation: {
           id: String(room._id),
@@ -2400,7 +2439,7 @@ Deno.serve(async (req: Request) => {
         const room = await d.collection('conversations')
           .findOne({ _id: new ObjectId(conversationId) });
         if (!room || room.type !== 'club') return fail('Conversation not found', 404);
-        if (!(await isClubMember(String(room.kind), String(room.clubId), uid))) {
+        if (!(await isRoomMember(room, uid))) {
           return fail('Join this group to chat', 403);
         }
         const type = ['text', 'image', 'file', 'voice', 'emoji', 'video']
@@ -2494,7 +2533,7 @@ Deno.serve(async (req: Request) => {
         const room = await d.collection('conversations')
           .findOne({ _id: new ObjectId(conversationId) });
         if (!room || room.type !== 'club') return fail('Conversation not found', 404);
-        if (!(await isClubMember(String(room.kind), String(room.clubId), uid))) {
+        if (!(await isRoomMember(room, uid))) {
           return fail('Join this group to read the chat', 403);
         }
         const limit = Math.min(Number(p.limit ?? 60) || 60, 100);
@@ -2572,7 +2611,7 @@ Deno.serve(async (req: Request) => {
           const room = await (await dbFor('chats')).collection('conversations')
             .findOne({ _id: m.conversationId as unknown as ObjectId });
           if (!room || room.type !== 'club') return false;
-          return isClubMember(String(room.kind), String(room.clubId), uid);
+          return isRoomMember(room, uid);
         });
       }
 
@@ -2597,7 +2636,7 @@ Deno.serve(async (req: Request) => {
           const room = await (await dbFor('chats')).collection('conversations')
             .findOne({ _id: m.conversationId as unknown as ObjectId });
           if (!room || room.type !== 'club') return false;
-          return isClubMember(String(room.kind), String(room.clubId), uid);
+          return isRoomMember(room, uid);
         });
       }
 
@@ -2622,7 +2661,7 @@ Deno.serve(async (req: Request) => {
           const room = await (await dbFor('chats')).collection('conversations')
             .findOne({ _id: new ObjectId(conversationId) });
           if (!room || room.type !== 'club') return false;
-          return isClubMember(String(room.kind), String(room.clubId), uid);
+          return isRoomMember(room, uid);
         });
       }
 
@@ -4019,6 +4058,197 @@ Deno.serve(async (req: Request) => {
         await (await dbFor('groups')).collection(kind)
           .updateOne({ _id: groupId } as never, { $set: { verified } });
         return ok({ verified });
+      }
+
+      // ── Community / organization channels ────────────────────────────
+      case 'groups.channels.create': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'communities');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        if (!groupId) return fail('A valid groupId is required');
+        const name = String(p.name ?? '').trim().slice(0, 48);
+        if (!name) return fail('A channel name is required');
+        const group = await (await dbFor('groups')).collection(kind)
+          .findOne({ _id: groupId } as never,
+            { projection: { ownerId: 1, viceModeratorId: 1 } });
+        if (!group) return fail('Group not found', 404);
+        if (group.ownerId !== uid && group.viceModeratorId !== uid) {
+          return fail('Only owners and deputies can add channels', 403);
+        }
+        const channels = (await dbFor('groups')).collection('channels');
+        const nameKey = name.toLowerCase();
+        if (await channels.findOne({ groupId, nameKey })) {
+          return fail('A channel with that name already exists');
+        }
+        const doc = { groupId, kind, name, nameKey, createdAt: new Date() };
+        const inserted = await channels.insertOne({ ...doc });
+        return ok({ channel: { id: String(inserted.insertedId), ...doc } });
+      }
+
+      case 'groups.channels.list': {
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        if (!groupId) return fail('A valid groupId is required');
+        const rows = await (await dbFor('groups')).collection('channels')
+          .find({ groupId }).sort({ createdAt: 1 }).limit(60).toArray();
+        return ok({ channels: rows.map((c) => ({
+          id: String(c._id),
+          name: c.name ?? '',
+          createdAt: c.createdAt ?? null,
+        })) });
+      }
+
+      case 'groups.channels.remove': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'communities');
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        const channelId = typeof p.channelId === 'string' ? p.channelId : '';
+        if (!groupId || !isHexId(channelId)) return fail('A valid channelId is required');
+        const group = await (await dbFor('groups')).collection(kind)
+          .findOne({ _id: groupId } as never,
+            { projection: { ownerId: 1, viceModeratorId: 1 } });
+        if (!group) return fail('Group not found', 404);
+        if (group.ownerId !== uid && group.viceModeratorId !== uid) {
+          return fail('Only owners and deputies can remove channels', 403);
+        }
+        await (await dbFor('groups')).collection('channels')
+          .deleteOne({ _id: new ObjectId(channelId) } as never);
+        return ok({ deleted: true });
+      }
+
+      // ── Group events with RSVPs ──────────────────────────────────────
+      case 'groups.events.create': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'organizations');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        if (!groupId) return fail('A valid groupId is required');
+        const title = String(p.title ?? '').trim().slice(0, 120);
+        const body = String(p.body ?? '').trim().slice(0, 600);
+        if (!title) return fail('An event title is required');
+        const group = await (await dbFor('groups')).collection(kind)
+          .findOne({ _id: groupId } as never,
+            { projection: { ownerId: 1, viceModeratorId: 1 } });
+        if (!group) return fail('Group not found', 404);
+        if (group.ownerId !== uid && group.viceModeratorId !== uid) {
+          return fail('Only owners and deputies can schedule events', 403);
+        }
+        let at: Date | null = null;
+        if (typeof p.at === 'string' && p.at.trim()) {
+          const parsed = new Date(p.at);
+          if (!Number.isNaN(parsed.getTime())) at = parsed;
+        }
+        const doc = { groupId, kind, title, body, at, createdBy: uid, createdAt: new Date() };
+        const inserted = await (await dbFor('groups'))
+          .collection('events').insertOne({ ...doc });
+        return ok({ event: { id: String(inserted.insertedId), ...doc } });
+      }
+
+      case 'groups.events.list': {
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        if (!groupId) return fail('A valid groupId is required');
+        const uid = await currentUserId(req);
+        const events = (await dbFor('groups')).collection('events');
+        const rows = await events
+          .find({ groupId }).sort({ createdAt: -1 }).limit(50).toArray();
+        const rsvps = (await dbFor('groups')).collection('event_rsvps');
+        const out = [];
+        for (const e of rows) {
+          const eventId = String(e._id);
+          const going = await rsvps.countDocuments({ eventId, status: 'going' });
+          const interested = await rsvps.countDocuments({ eventId, status: 'interested' });
+          let myStatus: string | null = null;
+          if (uid) {
+            const mine = await rsvps.findOne({ eventId, userId: uid });
+            myStatus = mine ? String(mine.status ?? 'none') : null;
+          }
+          out.push({
+            id: eventId,
+            title: e.title ?? '',
+            body: e.body ?? '',
+            at: e.at ?? null,
+            going,
+            interested,
+            myStatus,
+          });
+        }
+        return ok({ events: out });
+      }
+
+      case 'groups.events.rsvp': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const eventId = typeof p.eventId === 'string' ? p.eventId : '';
+        if (!isHexId(eventId)) return fail('A valid eventId is required');
+        const event = await (await dbFor('groups')).collection('events')
+          .findOne({ _id: new ObjectId(eventId) } as never);
+        if (!event) return fail('Event not found', 404);
+        const kind = String(event.kind ?? 'organizations');
+        if (!(await isClubMember(kind, String(event.groupId), uid))) {
+          return fail('Join the group to respond', 403);
+        }
+        const status = ['going', 'interested', 'none'].includes(String(p.status))
+          ? String(p.status)
+          : 'none';
+        const rsvps = (await dbFor('groups')).collection('event_rsvps');
+        if (status === 'none') {
+          await rsvps.deleteOne({ eventId, userId: uid } as never);
+        } else {
+          await rsvps.updateOne({ eventId, userId: uid } as never,
+            { $set: { eventId, userId: uid, status, updatedAt: new Date() } },
+            { upsert: true });
+        }
+        return ok({ status });
+      }
+
+      case 'groups.events.remove': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const eventId = typeof p.eventId === 'string' ? p.eventId : '';
+        if (!isHexId(eventId)) return fail('A valid eventId is required');
+        const events = (await dbFor('groups')).collection('events');
+        const event = await events
+          .findOne({ _id: new ObjectId(eventId) } as never);
+        if (!event) return fail('Event not found', 404);
+        const kind = String(event.kind ?? 'organizations');
+        const group = await (await dbFor('groups')).collection(kind)
+          .findOne({ _id: String(event.groupId) } as never,
+            { projection: { ownerId: 1, viceModeratorId: 1 } });
+        const allowed = group?.ownerId === uid ||
+          group?.viceModeratorId === uid ||
+          String(event.createdBy) === uid;
+        if (!allowed) return fail('Only owners, deputies or the host can remove this event', 403);
+        await events.deleteOne({ _id: event._id } as never);
+        await (await dbFor('groups')).collection('event_rsvps')
+          .deleteMany({ eventId } as never);
+        return ok({ deleted: true });
+      }
+
+      // ── Group rules (owner / deputy) ─────────────────────────────────
+      case 'groups.rules.set': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'communities');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        if (!groupId) return fail('A valid groupId is required');
+        const group = await (await dbFor('groups')).collection(kind)
+          .findOne({ _id: groupId } as never,
+            { projection: { ownerId: 1, viceModeratorId: 1 } });
+        if (!group) return fail('Group not found', 404);
+        if (group.ownerId !== uid && group.viceModeratorId !== uid) {
+          return fail('Only owners and deputies can set the rules', 403);
+        }
+        const raw = (Array.isArray(p.rules) ? p.rules : [])
+          .map((r) => String(r ?? '').trim().slice(0, 280))
+          .filter((r) => r.length > 0)
+          .slice(0, 12);
+        await (await dbFor('groups')).collection(kind)
+          .updateOne({ _id: groupId } as never, { $set: { rules: raw } });
+        return ok({ rules: raw });
       }
 
       case 'books.stats': {

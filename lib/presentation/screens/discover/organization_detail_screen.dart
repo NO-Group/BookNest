@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'group_base_screen.dart';
+import 'group_extras.dart';
 
 /// The full organization experience: profile, membership, announcements,
 /// named directory with deputy management, and the members-only chat.
@@ -15,6 +16,10 @@ class OrganizationDetailScreen extends StatelessWidget {
       kind: 'organizations',
       groupId: id,
       title: 'Organization',
+      extraSections: (state) => [
+        const SizedBox(height: 16),
+        GroupEventsSection(state: state),
+      ],
     );
   }
 }
