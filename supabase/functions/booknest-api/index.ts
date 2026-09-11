@@ -3892,13 +3892,47 @@ Deno.serve(async (req: Request) => {
         const groupId = typeof p.groupId === 'string' ? p.groupId : '';
         if (!groupId) return fail('A valid groupId is required');
         const rows = await (await dbFor('groups')).collection('announcements')
-          .find({ groupId }).sort({ createdAt: -1 }).limit(50).toArray();
-        return ok({ announcements: rows.map((a) => ({
+          .find({ groupId }).sort({ createdAt: -1 }).limit(120).toArray();
+        const kindOf = String(rows[0]?.kind ?? p.kind ?? 'clubs');
+        const manager = uid
+          ? await isGroupManager(kindOf, groupId, uid)
+          : false;
+        const profiles = new Map<string, { username?: string; display_name?: string }>();
+        const authorIds = [...new Set(rows.map((r) => String(r.authorId)))];
+        if (authorIds.length) {
+          const pr = await serviceClient().from('profiles')
+            .select('id, username, display_name').in('id', authorIds);
+          for (const row of pr.data ?? []) {
+            profiles.set(String(row.id), row as { username?: string; display_name?: string });
+          }
+        }
+        const unitsCol = (await dbFor('groups')).collection('units');
+        const unitNames = new Map<string, string>();
+        const unitIds = [...new Set(rows.flatMap((r) =>
+          Array.isArray(r.audience) ? r.audience.map((x) => String(x)) : []))];
+        for (const unitId of unitIds) {
+          if (unitId === 'all' || unitNames.has(unitId)) continue;
+          const unit = isHexId(unitId)
+            ? await unitsCol.findOne({ _id: new ObjectId(unitId) } as never,
+                { projection: { name: 1 } })
+            : null;
+          if (unit) unitNames.set(unitId, String(unit.name));
+        }
+        return ok({ announcements: rows
+          .filter((a) => a.published !== false || manager)
+          .slice(0, 60)
+          .map((a) => ({
           id: String(a._id),
           title: a.title ?? '',
           body: a.body ?? '',
           authorId: a.authorId ?? null,
+          authorName: profiles.get(String(a.authorId))?.display_name
+            ?? profiles.get(String(a.authorId))?.username ?? null,
           pinned: a.pinned === true,
+          published: a.published !== false,
+          audience: Array.isArray(a.audience) ? a.audience : ['all'],
+          audienceNames: (Array.isArray(a.audience) ? a.audience : ['all'])
+            .map((x) => (x === 'all' ? 'Everyone' : unitNames.get(String(x)) ?? 'Department')),
           createdAt: a.createdAt ?? null,
         })) });
       }
@@ -3921,6 +3955,12 @@ Deno.serve(async (req: Request) => {
         const doc = {
           groupId, kind, title, body, authorId: uid,
           pinned: p.pinned === true,
+          // Drafts stay visible to managers only until published.
+          published: p.published !== false,
+          // 'all' (default) or department ids.
+          audience: Array.isArray(p.audience) && p.audience.length
+            ? p.audience.map((x) => String(x)).slice(0, 50)
+            : ['all'],
           createdAt: new Date(),
         };
         const inserted = await (await dbFor('groups'))

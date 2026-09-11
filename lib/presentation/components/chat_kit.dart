@@ -2032,6 +2032,9 @@ class ChatComposer extends StatefulWidget {
   /// duration in seconds.
   final Future<void> Function(String videoPath, int seconds)? onSendVideo;
 
+  /// The reader is typing — throttled ping for the typing indicator.
+  final VoidCallback? onTyping;
+
   /// BookNest emote tapped on our own keyboard — sends instantly,
   /// Snapchat-style.
   final Future<void> Function(EmojiDef emote)? onSendEmote;
@@ -2048,6 +2051,10 @@ class ChatComposer extends StatefulWidget {
     this.enabled = true,
     this.replyTo,
     this.onCancelReply,
+
+    /// Fired (throttled inside) while the reader types — feeds the
+    /// room's typing indicator.
+    this.onTyping,
   });
 
   @override
@@ -2102,6 +2109,7 @@ class _ChatComposerState extends State<ChatComposer> {
       }
     }
     _input.clear();
+    widget.onTyping?.call();
     await widget.onSendText(text);
   }
 
@@ -2399,6 +2407,7 @@ class _ChatComposerState extends State<ChatComposer> {
                 child: TextField(
                   controller: _input,
                   enabled: widget.enabled,
+                  onChanged: (_) => widget.onTyping?.call(),
                   minLines: 1,
                   maxLines: 4,
                   textInputAction: TextInputAction.send,

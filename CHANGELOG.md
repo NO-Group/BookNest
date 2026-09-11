@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.19.0+31 — 2026-09-11 · Typing states, media galleries & announcement power
+
+- **Typing states**: see "**typing…**" live under the chat title — in
+  **DMs** (private, italic) and in **group rooms** ("Amina and David
+  typing…"). Rides BookNest's own realtime broadcast; names appear as
+  peers type and fade away on their own. Zero new infrastructure.
+- **Shared media gallery**: a gallery button in every chat header (DMs
+  and group rooms) opens the full album of images exchanged in that
+  conversation — tap any thumbnail for the fullscreen viewer with
+  swipe-through.
+- **Announcements, levelled up**:
+  - **Audience targeting** — organizations can send an announcement to
+    **Everyone** or scope it to chosen **departments**.
+  - **Drafts** — "Save as draft" keeps it manager-only until you're
+    ready (drafts carry a visible DRAFT badge).
+  - **Attribution** — announcements now show **who posted them** and to
+    whom ("By Sarah · to Editorial, Outreach").
+  - **Full-view** — long messages clamp at four lines; tap to open the
+    complete announcement sheet.
+- **"Happens today" reminders**: events on today's calendar get their
+  own morning-of nudge from the reminder sweep, on top of the
+  24 h / 2 h / 15 min ladder.
+
 ## 2.18.0+30 — 2026-09-11 · Organization parity & chat search
 
 - **Organizations reach school parity**: the **reading list** (curated

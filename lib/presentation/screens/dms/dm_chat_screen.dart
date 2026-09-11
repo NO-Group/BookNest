@@ -16,6 +16,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/call_service.dart';
 import '../calls/call_screen.dart';
 import '../../../services/inbox_watcher.dart';
+import '../../../services/typing_broadcaster.dart';
 import '../../../services/supabase_service.dart';
 
 /// 1:1 chat on the BookNest watermark canvas — glass bubbles, delivery
@@ -83,6 +84,9 @@ class _DMChatScreenState extends State<DMChatScreen> {
     _conversationId = widget.conversationId;
     final openConv = _conversationId;
     if (openConv != null) InboxWatcher.instance.enter(openConv);
+    if (openConv != null) {
+      TypingBroadcaster.instance.enter(openConv, myId: _viewerId ?? '');
+    }
     _loadPeer();
     _load();
     _poll = Timer.periodic(const Duration(seconds: 4), (_) => _load());
@@ -92,6 +96,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
   void dispose() {
     final openConv = _conversationId;
     if (openConv != null) InboxWatcher.instance.leave(openConv);
+    TypingBroadcaster.instance.leave();
     _poll?.cancel();
     _scroll.dispose();
     _searchController.dispose();
@@ -604,6 +609,18 @@ class _DMChatScreenState extends State<DMChatScreen> {
             icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
         actions: [
           IconButton(
+            tooltip: 'Shared media',
+            icon: const Icon(Icons.photo_library_outlined, size: 21),
+            onPressed: _photoAlbum().isEmpty
+                ? null
+                : () => openChatPhoto(
+                      context,
+                      _photoAlbum().first.url,
+                      album: _photoAlbum(),
+                      initialIndex: 0,
+                    ),
+          ),
+          IconButton(
             tooltip: 'Search messages',
             icon: const Icon(Icons.search_rounded, size: 21),
             onPressed: () => setState(() {
@@ -662,11 +679,17 @@ class _DMChatScreenState extends State<DMChatScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w800)),
-                    Text(
-                      'View profile',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: BookNestColors.cyan.withOpacity(.85),
+                    ValueListenableBuilder<Map<String, String>>(
+                      valueListenable: TypingBroadcaster.instance.typingPeers,
+                      builder: (context, typing, _) => Text(
+                        typing.isEmpty ? 'View profile' : 'typing…',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontStyle: typing.isEmpty
+                              ? FontStyle.normal
+                              : FontStyle.italic,
+                          color: BookNestColors.cyan.withOpacity(.85),
+                        ),
                       ),
                     ),
                   ],
@@ -812,6 +835,8 @@ class _DMChatScreenState extends State<DMChatScreen> {
           ],
         ),
       ),
-    );
+    
+            onTyping: () => TypingBroadcaster.instance
+                .iAmTyping(_peerName),);
   }
 }

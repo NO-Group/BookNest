@@ -14,6 +14,7 @@ import '../../components/report_sheet.dart';
 import '../../../services/reader_profile.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/inbox_watcher.dart';
+import '../../../services/typing_broadcaster.dart';
 import '../../../services/supabase_service.dart';
 
 /// Club / community / organization / school group chat — membership-gated
@@ -92,6 +93,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     final openConv = _conversationId;
     if (openConv != null) InboxWatcher.instance.leave(openConv);
+    TypingBroadcaster.instance.leave();
     _poll?.cancel();
     _scroll.dispose();
     _searchController.dispose();
@@ -124,7 +126,10 @@ class _ChatScreenState extends State<ChatScreen> {
     _pinned = pinned is Map ? Map<String, dynamic>.from(pinned) : null;
     _canPin = res['canPin'] == true;
     final openConv = _conversationId;
-    if (openConv != null) InboxWatcher.instance.enter(openConv);
+    if (openConv != null) {
+      InboxWatcher.instance.enter(openConv);
+      TypingBroadcaster.instance.enter(openConv, myId: _viewerId ?? '');
+    }
     await _load();
     _poll = Timer.periodic(const Duration(seconds: 4), (_) => _load());
   }
@@ -573,6 +578,13 @@ class _ChatScreenState extends State<ChatScreen> {
     return url != null && url.startsWith('http') ? url : null;
   }
 
+  String _typingLabel(Map<String, String> typing) {
+    final names = typing.values.take(2).toList();
+    if (names.isEmpty) return '';
+    if (names.length == 1) return names.first;
+    return '${names.first} and ${names.last}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -587,6 +599,18 @@ class _ChatScreenState extends State<ChatScreen> {
         leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
         actions: [
+          IconButton(
+            tooltip: 'Shared media',
+            icon: const Icon(Icons.photo_library_outlined, size: 21),
+            onPressed: _photoAlbum().isEmpty
+                ? null
+                : () => openChatPhoto(
+                      context,
+                      _photoAlbum().first.url,
+                      album: _photoAlbum(),
+                      initialIndex: 0,
+                    ),
+          ),
           IconButton(
             tooltip: 'Search messages',
             icon: const Icon(Icons.search_rounded, size: 21),
@@ -624,11 +648,21 @@ class _ChatScreenState extends State<ChatScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.w800)),
-                  Text(
-                    'Group chat · members only',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: BookNestColors.cyan.withOpacity(.85),
+                  ValueListenableBuilder<Map<String, String>>(
+                    valueListenable: TypingBroadcaster.instance.typingPeers,
+                    builder: (context, typing, _) => Text(
+                      typing.isEmpty
+                          ? 'Group chat · members only'
+                          : '${_typingLabel(typing)} typing…',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontStyle: typing.isEmpty
+                            ? FontStyle.normal
+                            : FontStyle.italic,
+                        color: BookNestColors.cyan.withOpacity(.85),
+                      ),
                     ),
                   ),
                 ],
@@ -826,7 +860,10 @@ class _ChatScreenState extends State<ChatScreen> {
                         ],
                       ),
       ),
-    );
+    
+                          onTyping: () =>
+                              TypingBroadcaster.instance
+                                  .iAmTyping('Member'),);
   }
 
   Widget _buildNotice({

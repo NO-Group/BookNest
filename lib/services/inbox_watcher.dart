@@ -140,9 +140,15 @@ class InboxWatcher {
       final at = DateTime.tryParse(e['at']?.toString() ?? '');
       if (id.isEmpty || at == null) continue;
       final untilStart = at.difference(now);
+      final sameDay = at.year == now.year &&
+          at.month == now.month &&
+          at.day == now.day;
       String? bucket;
       if (untilStart.inMinutes <= 15 && untilStart.inMinutes > -1) {
         bucket = '15m';
+      } else if (sameDay && untilStart.inMinutes > 15) {
+        // Same-calendar-day events get their own single nudge.
+        bucket = 'today';
       } else if (untilStart.inHours <= 2 && untilStart.inMinutes > 15) {
         bucket = '2h';
       } else if (untilStart.inHours <= 24 && untilStart.inMinutes > 120) {
@@ -156,6 +162,7 @@ class InboxWatcher {
       final group = e['groupName']?.toString() ?? '';
       final when = switch (bucket) {
         '15m' => 'Starting any moment now',
+        'today' => 'Happens today',
         '2h' => 'Starts within 2 hours',
         _ => 'Starts within 24 hours',
       };

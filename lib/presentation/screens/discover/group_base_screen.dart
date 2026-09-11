@@ -160,6 +160,18 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     final titleCtrl = TextEditingController();
     final bodyCtrl = TextEditingController();
     bool pinned = false;
+    bool published = true;
+    List<Map<String, dynamic>> units = const [];
+    final Set<String> audience = {};
+    // Departments (organizations) can scope who the announcement reaches.
+    if (kind == 'organizations') {
+      final unitRes = await BackendApi.instance
+          .call('groups.units.list', {'kind': kind, 'groupId': groupId});
+      units = ((unitRes?['units'] as List?) ?? const [])
+          .whereType<Map<dynamic, dynamic>>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -188,6 +200,57 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
               value: pinned,
               onChanged: (v) => setDialog(() => pinned = v),
             ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              activeColor: BookNestColors.cyan,
+              title: Text(published
+                  ? 'Publish now'
+                  : 'Save as draft (managers only)',
+                  style: const TextStyle(fontSize: 13.5)),
+              value: published,
+              onChanged: (v) => setDialog(() => published = v),
+            ),
+            if (units.isNotEmpty) ...[
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: EdgeInsets.only(top: 6, bottom: 2),
+                  child: Text('Send to',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800)),
+                ),
+              ),
+              Wrap(
+                spacing: 6,
+                runSpacing: 2,
+                children: [
+                  FilterChip(
+                    label: const Text('Everyone',
+                        style: TextStyle(fontSize: 11.5)),
+                    selected: audience.isEmpty,
+                    onSelected: (_) =>
+                        setDialog(() => audience.clear()),
+                  ),
+                  for (final unit in units)
+                    FilterChip(
+                      label: Text(unit['name']?.toString() ?? '',
+                          style: const TextStyle(fontSize: 11.5)),
+                      selected: audience.contains(
+                          unit['id']?.toString() ?? ''),
+                      onSelected: (on) => setDialog(() {
+                        final id = unit['id']?.toString() ?? '';
+                        if (id.isEmpty) return;
+                        if (on) {
+                          audience.add(id);
+                        } else {
+                          audience.remove(id);
+                        }
+                      }),
+                    ),
+                ],
+              ),
+            ],
           ]),
           actions: [
             TextButton(
@@ -213,12 +276,16 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
       'title': title,
       'body': body,
       'pinned': pinned,
+      'published': published,
+      if (audience.isNotEmpty) 'audience': audience.toList(),
     });
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
             ? 'The announcement could not be posted — try again.'
-            : 'Announcement posted to every member.')));
+            : (published
+                ? 'Announcement sent to its audience.'
+                : 'Draft saved — managers can see it.'))));
     if (res != null) reload();
   }
 
@@ -648,15 +715,101 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                         ),
                     ]),
                     const SizedBox(height: 4),
-                    Text(a['body']?.toString() ?? '',
-                        style: TextStyle(
-                            fontSize: 12.8,
-                            height: 1.4,
-                            color: onSurface.withOpacity(.85))),
+                    if ((a['authorName']?.toString() ?? '').isNotEmpty ||
+                        a['published'] == false)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 3),
+                        child: Row(children: [
+                          if ((a['authorName']?.toString() ?? '')
+                              .isNotEmpty)
+                            Flexible(
+                              child: Text(
+                                  'By ${a['authorName']}'
+                                  '${(a['audienceNames'] as List?)?.isNotEmpty == true && (a['audienceNames'] as List).first.toString() != 'Everyone' ? ' · to ${(a['audienceNames'] as List).join(', ')}' : ''}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 10.8,
+                                      color: onSurface.withOpacity(.5))),
+                            ),
+                          if (a['published'] == false) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: BookNestColors.cyan.withOpacity(.14),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text('DRAFT',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: .6,
+                                      color: BookNestColors.cyan)),
+                            ),
+                          ],
+                        ]),
+                      ),
+                    InkWell(
+                      onTap: () => _openAnnouncement(a),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Text(a['body']?.toString() ?? '',
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 12.8,
+                              height: 1.4,
+                              color: onSurface.withOpacity(.85))),
+                    ),
                   ],
                 ),
               ),
         ]),
+      ),
+    );
+  }
+
+  void _openAnnouncement(Map<String, dynamic> a) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 4, 22, 24),
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(
+                child: Text(a['title']?.toString() ?? '',
+                    style: const TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.w800)),
+              ),
+              if (a['pinned'] == true)
+                const Icon(Icons.push_pin_rounded,
+                    size: 17, color: BookNestColors.cyan),
+            ]),
+            const SizedBox(height: 5),
+            Text(
+              '${a['authorName']?.toString() ?? 'Moderation'} · '
+              '${(a['createdAt']?.toString() ?? '').length >= 10 ? a['createdAt'].toString().substring(0, 10) : ''}'
+              '${(a['audienceNames'] as List?)?.isNotEmpty == true ? ' · to ${(a['audienceNames'] as List).join(', ')}' : ''}',
+              style: TextStyle(
+                  fontSize: 11.5,
+                  color: Theme.of(sheetContext).hintColor),
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Text(a['body']?.toString() ?? '',
+                    style: const TextStyle(fontSize: 14, height: 1.5)),
+              ),
+            ),
+          ]),
+        ),
       ),
     );
   }
