@@ -647,12 +647,13 @@ class _OrgSpotlightRail extends StatelessWidget {
                 final name = org['name']?.toString() ?? '';
                 final members = ((org['member_count'] as num?) ?? 0).toInt();
                 final verified = org['verified'] == true;
-                return GlassPanel(
-                  radius: 20,
+                return GestureDetector(
                   onTap: () => context.push('/organization/${org['id'] ?? ''}'),
-                  child: Container(
-                    width: 168,
-                    padding: const EdgeInsets.all(13),
+                  child: GlassPanel(
+                    radius: 20,
+                    child: Container(
+                      width: 168,
+                      padding: const EdgeInsets.all(13),
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -693,6 +694,7 @@ class _OrgSpotlightRail extends StatelessWidget {
                                   fontSize: 11.5,
                                   color: onSurface.withOpacity(.6))),
                         ]),
+                  ),
                   ),
                 );
               },
