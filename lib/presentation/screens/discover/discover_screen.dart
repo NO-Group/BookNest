@@ -230,6 +230,59 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
                 const SizedBox(height: 8),
 
+                // Brainstorm — the idea board
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
+                  child: GlassPanel(
+                    radius: 18,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(18),
+                      onTap: () => context.push('/brainstorm'),
+                      child: Padding(
+                        padding: const EdgeInsets.all(13),
+                        child: Row(children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(colors: [
+                                BookNestColors.navy,
+                                BookNestColors.navyDeep
+                              ]),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.lightbulb_rounded,
+                                color: BookNestColors.cyan, size: 21),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Brainstorm',
+                                      style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w800)),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                      'Idea threads — float it, build on it, ship it',
+                                      style: TextStyle(
+                                          fontSize: 11.5,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface
+                                              .withOpacity(.6))),
+                                ]),
+                          ),
+                          const Icon(Icons.chevron_right_rounded,
+                              size: 20,
+                              color: BookNestColors.cyan),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ),
+
                 // Items list
                 Expanded(
                   child: _isLoading

@@ -2637,14 +2637,41 @@ Deno.serve(async (req: Request) => {
         try {
           await col.createIndex({ userId: 1, bookId: 1 }, { unique: true });
         } catch { /* index exists */ }
+        // Optional bookmark surgery (the reader's ribbon list): replace,
+        // or add/remove a single entry when bookId carries one.
+        let bookmarks: unknown = undefined;
+        if (Array.isArray(p.bookmarks)) {
+          bookmarks = p.bookmarks.slice(0, 60).map((b) => ({
+            id: String((b as Record<string, unknown>).id ?? ''),
+            chapterNumber: Math.max(1, Math.min(
+              5000, Number((b as Record<string, unknown>).chapterNumber ?? 1) || 1)),
+            scroll: Math.max(0, Math.min(
+              1, Number((b as Record<string, unknown>).scroll ?? 0) || 0)),
+            label: String((b as Record<string, unknown>).label ?? '')
+              .slice(0, 120),
+            at: (b as Record<string, unknown>).at ?? new Date(),
+          }));
+        }
+        const setOp: Record<string, unknown> = {
+          chapterNumber, scroll, updatedAt: new Date(),
+        };
+        if (bookmarks !== undefined) setOp.bookmarks = bookmarks;
+        if (typeof p.removeBookmark === 'string' && p.removeBookmark) {
+          const existing = await col.findOne({ userId: uid, bookId });
+          const list = Array.isArray(existing?.bookmarks)
+            ? existing!.bookmarks : [];
+          setOp.bookmarks = (list as unknown[]).filter(
+            (b) => String((b as Record<string, unknown>).id) !==
+              p.removeBookmark);
+        }
         try {
           await col.updateOne(
             { userId: uid, bookId },
-            { $set: { chapterNumber, scroll, updatedAt: new Date() } },
+            { $set: setOp },
           );
         } catch {
           await col.insertOne({
-            userId: uid, bookId, chapterNumber, scroll, updatedAt: new Date(),
+            userId: uid, bookId, ...setOp,
           });
         }
         return ok({ saved: true });
@@ -3253,6 +3280,366 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── groups: announcement forum (auto-created with every group) ──────
+      // ── brainstorm: community idea threads ───────────────────────────────
+      case 'brainstorm.list': {
+        const feed = await dbFor('feed');
+        try {
+          await feed.collection('brainstorms')
+            .createIndex({ createdAt: -1 });
+        } catch { /* exists */ }
+        const rows = await feed.collection('brainstorms')
+          .find({}).sort({ createdAt: -1 }).limit(60).toArray();
+        const authorIds = [...new Set(rows.map((r) => String(r.userId)))];
+        const authors = new Map<string, Record<string, unknown>>();
+        if (authorIds.length > 0) {
+          const profs = await serviceClient().from('profiles')
+            .select('id,username,avatar_url,display_name').in('id', authorIds);
+          for (const pr of profs.data ?? []) {
+            authors.set(String(pr.id), pr as Record<string, unknown>);
+          }
+        }
+        const me = await currentUserId(req);
+        return ok({
+          ideas: rows.map((r) => ({
+            id: String(r._id),
+            title: r.title ?? '',
+            body: r.body ?? '',
+            userId: r.userId,
+            createdAt: r.createdAt,
+            likeCount: r.likeCount ?? 0,
+            replyCount: r.replyCount ?? 0,
+            liked: me != null && ((r.likedBy as string[]) ?? []).includes(me),
+            profile: authors.get(String(r.userId)) ??
+              { username: 'reader', display_name: 'Reader', avatar_url: null },
+          })),
+        });
+      }
+
+      case 'brainstorm.create': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const title = String(p.title ?? '').trim().slice(0, 160);
+        const body = String(p.body ?? '').trim().slice(0, 4000);
+        if (!title) return fail('Give the idea a title');
+        const feed = await dbFor('feed');
+        const inserted = await feed.collection('brainstorms').insertOne({
+          title, body, userId: uid, likeCount: 0, replyCount: 0,
+          likedBy: [], createdAt: new Date(),
+        });
+        const prof = await serviceClient().from('profiles')
+          .select('id,username,avatar_url,display_name').eq('id', uid).maybeSingle();
+        return ok({ idea: {
+          id: String(inserted.insertedId), title, body, userId: uid,
+          createdAt: new Date(), likeCount: 0, replyCount: 0, liked: false,
+          profile: prof.data ??
+            { username: 'reader', display_name: 'Reader', avatar_url: null },
+        } });
+      }
+
+      case 'brainstorm.like': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const id = String(p.ideaId ?? '');
+        if (!isHexId(id)) return fail('A valid ideaId is required');
+        const col = (await dbFor('feed')).collection('brainstorms');
+        const doc = await col.findOne({ _id: new ObjectId(id) });
+        if (!doc) return fail('Idea not found', 404);
+        const liked = ((doc.likedBy as string[]) ?? []).includes(uid);
+        await col.updateOne({ _id: doc._id }, liked
+          ? { $inc: { likeCount: -1 }, $pull: { likedBy: uid } }
+          : { $inc: { likeCount: 1 }, $addToSet: { likedBy: uid } });
+        return ok({ liked: !liked, likeCount: Math.max(0,
+          Number(doc.likeCount ?? 0) + (liked ? -1 : 1)) });
+      }
+
+      case 'brainstorm.reply': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const ideaId = String(p.ideaId ?? '');
+        if (!isHexId(ideaId)) return fail('A valid ideaId is required');
+        const text = String(p.text ?? '').trim().slice(0, 1000);
+        if (!text) return fail('Write something first');
+        const feed = await dbFor('feed');
+        const idea = await feed.collection('brainstorms')
+          .findOne({ _id: new ObjectId(ideaId) });
+        if (!idea) return fail('Idea not found', 404);
+        // Threads: replies flatten to the root, keeping the reply badge.
+        let parentId: string | null = null;
+        let replyToName: string | null = null;
+        if (typeof p.parentId === 'string' && isHexId(p.parentId)) {
+          const parent = await feed.collection('brainstorm_replies')
+            .findOne({ _id: new ObjectId(p.parentId), ideaId });
+          if (parent) {
+            parentId = typeof parent.parentId === 'string' && parent.parentId
+              ? String(parent.parentId)
+              : String(parent._id);
+            if (parent.replyToName) replyToName = String(parent.replyToName);
+            else {
+              const names = await namesForUsers([String(parent.userId)]);
+              replyToName = names.get(String(parent.userId)) ?? null;
+            }
+          }
+        }
+        const inserted = await feed.collection('brainstorm_replies')
+          .insertOne({ ideaId, userId: uid, text, createdAt: new Date(),
+            parentId, replyToName });
+        if (parentId) {
+          await feed.collection('brainstorm_replies')
+            .updateOne({ _id: new ObjectId(parentId) },
+              { $inc: { replyCount: 1 } });
+        }
+        await feed.collection('brainstorms')
+          .updateOne({ _id: new ObjectId(ideaId) },
+            { $inc: { replyCount: 1 } });
+        const prof = await serviceClient().from('profiles')
+          .select('id,username,avatar_url,display_name').eq('id', uid).maybeSingle();
+        return ok({ reply: {
+          id: String(inserted.insertedId), ideaId, text, userId: uid,
+          createdAt: new Date(), parentId, replyToName,
+          profile: prof.data ??
+            { username: 'reader', display_name: 'Reader', avatar_url: null },
+        } });
+      }
+
+      case 'brainstorm.replies': {
+        const ideaId = String(p.ideaId ?? '');
+        if (!isHexId(ideaId)) return fail('A valid ideaId is required');
+        const rows = await (await dbFor('feed')).collection('brainstorm_replies')
+          .find({ ideaId }).sort({ createdAt: 1 }).limit(200).toArray();
+        const authorIds = [...new Set(rows.map((r) => String(r.userId)))];
+        const authors = new Map<string, Record<string, unknown>>();
+        if (authorIds.length > 0) {
+          const profs = await serviceClient().from('profiles')
+            .select('id,username,avatar_url,display_name').in('id', authorIds);
+          for (const pr of profs.data ?? []) {
+            authors.set(String(pr.id), pr as Record<string, unknown>);
+          }
+        }
+        return ok({
+          replies: rows.map((r) => ({
+            id: String(r._id), ideaId: r.ideaId, text: r.text ?? '',
+            userId: r.userId, createdAt: r.createdAt,
+            parentId: r.parentId ?? null,
+            replyToName: r.replyToName ?? null,
+            replyCount: r.replyCount ?? 0,
+            profile: authors.get(String(r.userId)) ??
+              { username: 'reader', display_name: 'Reader', avatar_url: null },
+          })),
+        });
+      }
+
+      // ── school LMS: classes, assignments, exam countdowns ────────────────
+      case 'schools.class.create': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const schoolId = String(p.schoolId ?? '');
+        const name = String(p.name ?? '').trim().slice(0, 120);
+        if (!schoolId || !name) {
+          return fail('A school and a class name are required');
+        }
+        const school = await groupManager('schools', schoolId, uid);
+        if (!school) {
+          return fail('Only the school owner can create classes', 403);
+        }
+        const col = (await dbFor('groups')).collection('school_classes');
+        const inserted = await col.insertOne({
+          schoolId, name, teacherId: String(p.teacherId ?? '') || uid,
+          createdAt: new Date(),
+        });
+        return ok({ class: {
+          id: String(inserted.insertedId), schoolId, name,
+          teacherId: String(p.teacherId ?? '') || uid,
+        } });
+      }
+
+      case 'schools.class.list': {
+        const schoolId = String(p.schoolId ?? '');
+        if (!schoolId) return fail('A valid schoolId is required');
+        const me = await currentUserId(req);
+        const classes = await (await dbFor('groups'))
+          .collection('school_classes')
+          .find({ schoolId }).sort({ createdAt: 1 }).limit(60).toArray();
+        const ids = classes.map((c) => String(c._id));
+        const counts = new Map<string, number>();
+        const mine = new Set<string>();
+        if (ids.length > 0) {
+          const rows = await (await dbFor('groups'))
+            .collection('school_class_members')
+            .find({ classId: { $in: ids } }).limit(5000).toArray();
+          for (const row of rows) {
+            const cid = String(row.classId);
+            counts.set(cid, (counts.get(cid) ?? 0) + 1);
+            if (me && String(row.userId) === me) mine.add(cid);
+          }
+        }
+        const names = await namesForUsers(
+          classes.map((c) => String(c.teacherId)));
+        return ok({
+          classes: classes.map((c) => ({
+            id: String(c._id), name: c.name ?? '',
+            teacherId: c.teacherId ?? '',
+            teacherName: names.get(String(c.teacherId)) ?? 'Teacher',
+            members: counts.get(String(c._id)) ?? 0,
+            joined: mine.has(String(c._id)),
+          })),
+        });
+      }
+
+      case 'schools.class.join':
+      case 'schools.class.leave': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const classId = String(p.classId ?? '');
+        if (!classId) return fail('A valid classId is required');
+        const members = (await dbFor('groups'))
+          .collection('school_class_members');
+        try {
+          await members.createIndex(
+            { classId: 1, userId: 1 }, { unique: true });
+        } catch { /* exists */ }
+        if (action === 'schools.class.join') {
+          try {
+            await members.insertOne(
+              { classId, userId: uid, joinedAt: new Date() });
+          } catch (error) {
+            if (!isDupKey(error)) throw error;
+          }
+        } else {
+          await members.deleteOne({ classId, userId: uid });
+        }
+        return ok({ member: action === 'schools.class.join' });
+      }
+
+      case 'schools.assignment.create': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const classId = String(p.classId ?? '');
+        const title = String(p.title ?? '').trim().slice(0, 160);
+        const body = String(p.body ?? '').trim().slice(0, 4000);
+        if (!classId || !title) {
+          return fail('A class and a title are required');
+        }
+        const klass = await (await dbFor('groups'))
+          .collection('school_classes')
+          .findOne({ _id: new ObjectId(classId) } as never);
+        if (!klass) return fail('Class not found', 404);
+        const manager = await groupManager(
+          'schools', String(klass.schoolId), uid);
+        if (!manager && String(klass.teacherId) !== uid) {
+          return fail('Only the teacher can set assignments', 403);
+        }
+        let dueAt: Date | null = null;
+        if (typeof p.dueAt === 'string' && p.dueAt) {
+          const parsed = new Date(p.dueAt);
+          if (!isNaN(parsed.getTime())) dueAt = parsed;
+        }
+        let book: Record<string, unknown> | null = null;
+        if (typeof p.bookId === 'string' && isHexId(p.bookId)) {
+          const b = await (await dbFor('books')).collection('books')
+            .findOne({ _id: new ObjectId(p.bookId) },
+              { projection: { title: 1, authorName: 1, coverUrl: 1 } });
+          if (b) {
+            book = {
+              bookId: p.bookId,
+              title: String(b.title ?? 'Untitled').slice(0, 200),
+              authorName: String(b.authorName ?? 'Unknown').slice(0, 120),
+              coverUrl: typeof b.coverUrl === 'string' ? b.coverUrl : null,
+            };
+          }
+        }
+        const inserted = await (await dbFor('groups'))
+          .collection('school_assignments').insertOne({
+            classId, schoolId: String(klass.schoolId), title, body,
+            dueAt, book, createdById: uid,
+            doneBy: [], createdAt: new Date(),
+          });
+        return ok({ assignment: { id: String(inserted.insertedId) } });
+      }
+
+      case 'schools.assignment.list': {
+        const schoolId = String(p.schoolId ?? '');
+        if (!schoolId) return fail('A valid schoolId is required');
+        const me = await currentUserId(req);
+        const rows = await (await dbFor('groups'))
+          .collection('school_assignments')
+          .find({ schoolId }).sort({ createdAt: -1 }).limit(100).toArray();
+        const classIds = [...new Set(rows.map((r) => String(r.classId)))];
+        const classNames = new Map<string, string>();
+        if (classIds.length > 0) {
+          const klasses = await (await dbFor('groups'))
+            .collection('school_classes')
+            .find({ _id: { $in: classIds.map((i) => new ObjectId(i)) } })
+            .project({ name: 1 }).toArray();
+          for (const k of klasses) classNames.set(String(k._id), String(k.name ?? ''));
+        }
+        return ok({
+          assignments: rows.map((r) => ({
+            id: String(r._id),
+            classId: String(r.classId),
+            className: classNames.get(String(r.classId)) ?? 'Class',
+            title: r.title ?? '', body: r.body ?? '',
+            dueAt: r.dueAt ?? null,
+            book: r.book ?? null,
+            done: me != null && ((r.doneBy as string[]) ?? []).includes(me),
+            doneCount: ((r.doneBy as string[]) ?? []).length,
+          })),
+        });
+      }
+
+      case 'schools.assignment.done': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const id = String(p.assignmentId ?? '');
+        if (!isHexId(id)) return fail('A valid assignmentId is required');
+        const col = (await dbFor('groups')).collection('school_assignments');
+        const doc = await col.findOne({ _id: new ObjectId(id) });
+        if (!doc) return fail('Assignment not found', 404);
+        const done = ((doc.doneBy as string[]) ?? []).includes(uid);
+        await col.updateOne({ _id: doc._id }, done
+          ? { $pull: { doneBy: uid } }
+          : { $addToSet: { doneBy: uid } });
+        return ok({ done: !done });
+      }
+
+      case 'schools.exam.create': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const schoolId = String(p.schoolId ?? '');
+        const title = String(p.title ?? '').trim().slice(0, 160);
+        if (!schoolId || !title) {
+          return fail('A school and a title are required');
+        }
+        const manager = await groupManager('schools', schoolId, uid);
+        if (!manager) {
+          return fail('Only the school owner can schedule exams', 403);
+        }
+        let at: Date | null = null;
+        if (typeof p.at === 'string' && p.at) {
+          const parsed = new Date(p.at);
+          if (!isNaN(parsed.getTime())) at = parsed;
+        }
+        const inserted = await (await dbFor('groups'))
+          .collection('school_exams').insertOne({
+            schoolId, title,
+            subject: String(p.subject ?? '').slice(0, 60) || null,
+            at, createdAt: new Date(),
+          });
+        return ok({ exam: { id: String(inserted.insertedId) } });
+      }
+
+      case 'schools.exam.list': {
+        const schoolId = String(p.schoolId ?? '');
+        if (!schoolId) return fail('A valid schoolId is required');
+        const rows = await (await dbFor('groups')).collection('school_exams')
+          .find({ schoolId }).sort({ at: 1 }).limit(60).toArray();
+        return ok({
+          exams: rows.map((r) => ({
+            id: String(r._id), title: r.title ?? '',
+            subject: r.subject ?? null, at: r.at ?? null,
+          })),
+        });
+      }
+
       // ── kind superpowers: POTM, vice mods, school lists, leaderboards ────
       async function groupManager(
         kind: string, groupId: string, uid: string,

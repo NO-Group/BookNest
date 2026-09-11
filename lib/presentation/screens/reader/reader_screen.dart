@@ -3,6 +3,7 @@ import 'dart:convert' show jsonDecode, jsonEncode;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:go_router/go_router.dart';
@@ -10,8 +11,10 @@ import 'package:go_router/go_router.dart';
 import '../../../config/theme.dart';
 import '../../components/booknest_ui.dart';
 import '../../components/manuscript_embeds.dart';
+import '../../components/reader_paginator.dart';
 import '../../components/watermark_background.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
@@ -56,6 +59,17 @@ class _ReaderScreenState extends State<ReaderScreen>
   int _readerTheme = 0; // 0 Night(auto) · 1 Paper · 2 Sepia · 3 Ink
   String _unitType = 'chapter';
 
+  // ── Reader Pro ──────────────────────────────────────────────────────────
+  bool _paginated = false;                 // pages vs scroll
+  bool _fontSerif = false;                 // Classic sans vs Book serif
+  double _dim = 0.0;                       // page warmth / dim overlay
+  List<Map<String, dynamic>> _bookmarks = [];
+  List<List<Paragraph>> _pages = const [];
+  int _pageIndex = 0;
+  String _pagesKey = '';                   // invalidation key for pagination
+  PageController? _pageController;
+  int _wordCount = 0;
+
   Timer? _saveDebounce;
   Timer? _streakTimer;
   final Stopwatch _readingTime = Stopwatch();
@@ -69,6 +83,8 @@ class _ReaderScreenState extends State<ReaderScreen>
     _loadBook();
     _readingTime.start();
     _streakTimer = Timer.periodic(const Duration(minutes: 5), (_) => _logStreak());
+    // Reader Pro: the page stays awake and the chrome immerses.
+    WakelockPlus.enable().catchError((_) {});
   }
 
   @override
@@ -79,6 +95,9 @@ class _ReaderScreenState extends State<ReaderScreen>
     _streakTimer?.cancel();
     _richController?.dispose();
     _scroll.dispose();
+    _pageController?.dispose();
+    WakelockPlus.disable().catchError((_) {});
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge).catchError((_) {});
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -128,6 +147,13 @@ class _ReaderScreenState extends State<ReaderScreen>
       if (progress is Map) {
         startChapter = (progress['chapterNumber'] as num?)?.toInt() ?? 1;
         startScroll = (progress['scroll'] as num?)?.toDouble() ?? 0;
+        final marks = (progress as Map)['bookmarks'];
+        if (marks is List) {
+          _bookmarks = marks
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList();
+        }
       }
     }
     if (chapters.isNotEmpty &&
@@ -182,10 +208,109 @@ class _ReaderScreenState extends State<ReaderScreen>
       _content = content;
       _richController?.dispose();
       _richController = rich;
+      _pages = const [];
+      _pagesKey = '';
+      _pageIndex = 0;
+      _wordCount = ReaderPaginator.words(
+          rich != null ? '' : content);
       _loading = false;
     });
-    if (resumeScroll > 0) _restoreScroll(resumeScroll);
+    if (_paginated && rich == null) {
+      _restorePage(resumeScroll);
+    } else if (resumeScroll > 0) {
+      _restoreScroll(resumeScroll);
+    }
     _scheduleProgressSave();
+  }
+
+  /// Jump to the page matching [fraction] once pages exist.
+  void _restorePage(double fraction) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      for (var i = 0; i < 12; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        if (!mounted) return;
+        if (_pages.isNotEmpty) break;
+      }
+      if (!mounted || _pages.isEmpty) return;
+      final target = (fraction * _pages.length).floor().clamp(0, _pages.length - 1);
+      _pageController ??= PageController(initialPage: target);
+      setState(() {
+        _pageIndex = target;
+        _restoredScroll = true;
+        _scrollFraction = _pages.length <= 1 ? 1 : (target + 1) / _pages.length;
+      });
+    });
+  }
+
+  /// Re-pagination runs when the (content, type, viewport) key changes.
+  void _maybePaginate(Size viewport, TextStyle body, TextStyle heading,
+      TextStyle sub, double lineHeight) {
+    if (_richController != null || _content.trim().isEmpty) return;
+    final key = '$_content|$_fontScale|$_lineHeight|${viewport.width.round()}'
+        '|${viewport.height.round()}|$_fontSerif';
+    if (key == _pagesKey) return;
+    _pagesKey = key;
+    final pages = ReaderPaginator.paginate(
+      paragraphs: ReaderPaginator.parse(_content),
+      viewport: viewport,
+      body: body,
+      heading: heading,
+      subheading: sub,
+      lineHeight: lineHeight,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _pages = pages);
+    });
+  }
+
+  List<Map<String, dynamic>> get _bookmarkMaps => _bookmarks
+      .map((b) => <String, dynamic>{
+            'id': b['id']?.toString() ??
+                'bm${DateTime.now().millisecondsSinceEpoch}',
+            'chapterNumber': (b['chapterNumber'] as num?)?.toInt() ?? _chapterNumber,
+            'scroll': (b['scroll'] as num?)?.toDouble() ?? _scrollFraction,
+            'label': b['label']?.toString() ?? 'Chapter $_chapterNumber',
+            if (b['at'] != null) 'at': b['at'],
+          })
+      .toList();
+
+  Future<void> _toggleBookmark() async {
+    final existing = _bookmarks
+        .where((b) => (b['chapterNumber'] as num?)?.toInt() == _chapterNumber)
+        .toList();
+    if (existing.isNotEmpty) {
+      setState(() => _bookmarks = _bookmarks
+          .where((b) => (b['chapterNumber'] as num?)?.toInt() != _chapterNumber)
+          .toList());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bookmark removed.')));
+    } else {
+      setState(() {
+        _bookmarks = [
+          ..._bookmarks,
+          {
+            'id': 'bm${DateTime.now().millisecondsSinceEpoch}',
+            'chapterNumber': _chapterNumber,
+            'scroll': _scrollFraction,
+            'label': _chapterTitle.isEmpty
+                ? 'Chapter $_chapterNumber'
+                : _chapterTitle,
+            'at': DateTime.now().toIso8601String(),
+          }
+        ];
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bookmarked — find it in the contents.')));
+    }
+    BackendApi.instance.call('reader.progress.save', {
+      'bookId': widget.bookId,
+      'chapterNumber': _chapterNumber,
+      'scroll': _scrollFraction,
+      'bookmarks': _bookmarkMaps,
+    });
   }
 
   void _restoreScroll(double fraction) {
@@ -207,6 +332,7 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   void _onScroll() {
     if (!_scroll.hasClients) return;
+    if (_paginated && _pages.isNotEmpty) return;
     final max = _scroll.position.maxScrollExtent;
     setState(() {
       _scrollFraction = max <= 0 ? 0 : (_scroll.offset / max).clamp(0, 1);
@@ -245,7 +371,15 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  void _toggleChrome() => setState(() => _chromeVisible = !_chromeVisible);
+  void _toggleChrome() {
+    setState(() => _chromeVisible = !_chromeVisible);
+    // True immersion: the system bars sink away with the chrome.
+    SystemChrome.setEnabledSystemUIMode(
+      _chromeVisible
+          ? SystemUiMode.edgeToEdge
+          : SystemUiMode.immersiveSticky,
+    ).catchError((_) {});
+  }
 
   /// The manuscript's reading typography, themed for light and dark and
   /// scaled by the reader's comfort settings.
@@ -321,6 +455,9 @@ class _ReaderScreenState extends State<ReaderScreen>
           _lineHeight = ((map['lh'] as num?)?.toDouble() ?? 1.75)
               .clamp(1.5, 2.0);
           _readerTheme = (map['theme'] as num?)?.toInt() ?? 0;
+          _paginated = map['pd'] == true;
+          _fontSerif = map['ff'] == true;
+          _dim = ((map['dm'] as num?)?.toDouble() ?? 0).clamp(0.0, 0.45);
         });
       }
     } catch (_) {}
@@ -335,6 +472,9 @@ class _ReaderScreenState extends State<ReaderScreen>
           'fs': _fontScale,
           'lh': _lineHeight,
           'theme': _readerTheme,
+          'pd': _paginated,
+          'ff': _fontSerif,
+          'dm': _dim,
         }),
       );
     } catch (_) {}
@@ -501,6 +641,93 @@ class _ReaderScreenState extends State<ReaderScreen>
     );
   }
 
+  /// The paginated reading surface: real pages, swipe or tap to turn.
+  Widget _buildPages(BuildContext context, TextStyle baseStyle) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final pageText = _pageForeground(dark);
+    final pageCount = _pages.length;
+    final totalPages = pageCount + 1; // + the chapter-end card
+    _pageController ??= PageController();
+    return PageView.builder(
+      controller: _pageController,
+      itemCount: totalPages,
+      onPageChanged: (index) {
+        setState(() {
+          _pageIndex = math.min(index, math.max(0, pageCount - 1));
+          _scrollFraction =
+              (index + 1) / totalPages;
+        });
+        _scheduleProgressSave();
+      },
+      itemBuilder: (context, index) {
+        if (index >= pageCount) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 120),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.auto_stories_rounded,
+                    size: 44, color: BookNestColors.cyan.withOpacity(.7)),
+                const SizedBox(height: 14),
+                Text('End of chapter $_chapterNumber',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: pageText)),
+                const SizedBox(height: 6),
+                Text(_chapterTitle,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: pageText.withOpacity(.65))),
+              ],
+            ),
+          );
+        }
+        final page = _pages[index];
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 56),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final paragraph in page) ...[
+                Text(
+                  paragraph.text,
+                  textAlign: paragraph.isHeading ? TextAlign.left : null,
+                  style: paragraph.isHeading
+                      ? baseStyle.copyWith(
+                          fontSize: 24 * _fontScale,
+                          fontWeight: FontWeight.w800,
+                          height: 1.25)
+                      : paragraph.isSubheading
+                          ? baseStyle.copyWith(
+                              fontSize: 15 * _fontScale,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.2,
+                              color: BookNestColors.cyan)
+                          : baseStyle,
+                ),
+                const SizedBox(height: 10),
+              ],
+              const Spacer(),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'page ${index + 1} of $totalPages',
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      letterSpacing: 1.1,
+                      color: pageText.withOpacity(.4)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _openTypography() {
     showModalBottomSheet<void>(
       context: context,
@@ -535,6 +762,90 @@ class _ReaderScreenState extends State<ReaderScreen>
                       .titleLarge
                       ?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 18),
+              if (_richController == null) ...[
+                Text('Page layout',
+                    style: TextStyle(
+                        color: Theme.of(sheetContext).hintColor,
+                        fontSize: 13)),
+                const SizedBox(height: 8),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(
+                        value: false,
+                        icon: Icon(Icons.swap_vert_rounded, size: 17),
+                        label: Text('Scroll')),
+                    ButtonSegment(
+                        value: true,
+                        icon: Icon(Icons.menu_book_rounded, size: 17),
+                        label: Text('Pages')),
+                  ],
+                  selected: {_paginated},
+                  style: SegmentedButton.styleFrom(
+                    selectedBackgroundColor:
+                        BookNestColors.cyan.withOpacity(.18),
+                    selectedForegroundColor: BookNestColors.cyan,
+                  ),
+                  onSelectionChanged: (selection) {
+                    setState(() {
+                      _paginated = selection.first;
+                      _pagesKey = '';
+                      _pages = const [];
+                      _pageController?.dispose();
+                      _pageController = null;
+                      _pageIndex = 0;
+                    });
+                    _saveReaderPrefs();
+                    Navigator.pop(sheetContext);
+                  },
+                ),
+                const SizedBox(height: 14),
+                Text('Typeface',
+                    style: TextStyle(
+                        color: Theme.of(sheetContext).hintColor,
+                        fontSize: 13)),
+                const SizedBox(height: 8),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(
+                        value: false, label: Text('Classic')),
+                    ButtonSegment(
+                        value: true, label: Text('Book serif')),
+                  ],
+                  selected: {_fontSerif},
+                  style: SegmentedButton.styleFrom(
+                    selectedBackgroundColor:
+                        BookNestColors.cyan.withOpacity(.18),
+                    selectedForegroundColor: BookNestColors.cyan,
+                  ),
+                  onSelectionChanged: (selection) {
+                    setState(() {
+                      _fontSerif = selection.first;
+                      _pagesKey = '';
+                    });
+                    _saveReaderPrefs();
+                  },
+                ),
+                const SizedBox(height: 14),
+                Text('Page warmth',
+                    style: TextStyle(
+                        color: Theme.of(sheetContext).hintColor,
+                        fontSize: 13)),
+                Slider(
+                  value: _dim,
+                  min: 0,
+                  max: 0.45,
+                  divisions: 9,
+                  activeColor: BookNestColors.cyan,
+                  label: _dim < 0.03
+                      ? 'Off'
+                      : '${(_dim / 0.45 * 100).round()}%',
+                  onChanged: (value) {
+                    setState(() => _dim = value);
+                    _saveReaderPrefs();
+                  },
+                ),
+                const SizedBox(height: 6),
+              ],
               Text('Reading theme',
                   style: TextStyle(
                       color: Theme.of(sheetContext).hintColor, fontSize: 13)),
@@ -697,6 +1008,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     final baseStyle = TextStyle(
       fontSize: 16 * _fontScale,
       height: _lineHeight,
+      fontFamily: _fontSerif ? 'Georgia' : null,
       color: pageText,
     );
 
@@ -782,7 +1094,24 @@ class _ReaderScreenState extends State<ReaderScreen>
                                     }
                                     return false;
                                   },
-                                  child: GestureDetector(
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      _maybePaginate(
+                                        constraints.biggest,
+                                        baseStyle,
+                                        baseStyle.copyWith(
+                                            fontSize: 24 * _fontScale,
+                                            fontWeight: FontWeight.w800),
+                                        baseStyle.copyWith(
+                                            fontSize: 15 * _fontScale,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 1.2,
+                                            color: BookNestColors.cyan),
+                                        _lineHeight,
+                                      );
+                                      final paginated = _paginated &&
+                                          _richController == null;
+                                      return GestureDetector(
                                     onTap: _toggleChrome,
                                     child: _richController != null
                                         ? quill.QuillEditor.basic(
@@ -799,7 +1128,16 @@ class _ReaderScreenState extends State<ReaderScreen>
                                                       24, 20, 24, 120),
                                             ),
                                           )
-                                        : ListView(
+                                        : paginated && _pages.isEmpty
+                                            ? const Center(
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        color: BookNestColors
+                                                            .cyan))
+                                            : paginated
+                                                ? _buildPages(
+                                                    context, baseStyle)
+                                                : ListView(
                                       controller: _scroll,
                                       padding: const EdgeInsets.fromLTRB(
                                           24, 20, 24, 120),
@@ -851,6 +1189,8 @@ class _ReaderScreenState extends State<ReaderScreen>
                                           ),
                                       ],
                                     ),
+                                    );
+                                    },
                                   ),
                                 ),
                     ),
@@ -859,6 +1199,16 @@ class _ReaderScreenState extends State<ReaderScreen>
               ),
             ),
           ),
+
+          // Page warmth: a candlelight dim over the paper, under the chrome.
+          if (_dim > 0.005)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ColoredBox(
+                    color: const Color(0xFF3A2A14)
+                        .withOpacity(_dim)),
+              ),
+            ),
 
           // ── Revealable chrome ──────────────────────────────────────────
           AnimatedSlide(
@@ -897,7 +1247,10 @@ class _ReaderScreenState extends State<ReaderScreen>
                           ),
                           Text(
                             '$_author · Chapter $_chapterNumber of '
-                                '${_chapters.isEmpty ? '?' : (_chapters.last['chapterNumber'] as num).toInt()}',
+                                '${_chapters.isEmpty ? '?' : (_chapters.last['chapterNumber'] as num).toInt()}'
+                                '${_wordCount > 0 ? ' · ${ReaderPaginator.minutesLabel(_wordCount)}' : ''}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 11,
                               color: BookNestColors.cyan,
@@ -907,8 +1260,20 @@ class _ReaderScreenState extends State<ReaderScreen>
                       ),
                     ),
                     IconButton(
+                      icon: Icon(
+                        _bookmarks.any((b) =>
+                            (b['chapterNumber'] as num?)?.toInt() ==
+                                _chapterNumber)
+                            ? Icons.bookmark_rounded
+                            : Icons.bookmark_border_rounded,
+                        color: BookNestColors.cyan,
+                      ),
+                      tooltip: 'Bookmark this spot',
+                      onPressed: _toggleBookmark,
+                    ),
+                    IconButton(
                       icon: const Icon(Icons.format_list_bulleted_rounded),
-                      tooltip: 'Chapters',
+                      tooltip: 'Contents',
                       onPressed: _chapters.isEmpty ? null : _openToc,
                     ),
                     IconButton(

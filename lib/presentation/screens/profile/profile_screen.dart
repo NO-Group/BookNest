@@ -9,6 +9,7 @@ import '../../../config/app_config.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/supabase_service.dart';
+import '../../../services/profile_layout.dart';
 import '../../../services/reader_profile.dart';
 import '../../../config/locales.dart';
 import '../../components/booknest_keyboard.dart';
@@ -272,6 +273,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// The Studio hero: a navy-to-cyan band that bleeds behind the avatar —
+  /// the alternative profile composition, chosen in Settings.
+  Widget _heroBand(ThemeData theme, bool dark) {
+    return Transform.translate(
+      offset: const Offset(-20, -24),
+      child: Container(
+        width: double.infinity,
+        height: 128,
+        margin: const EdgeInsets.only(bottom: 4),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              BookNestColors.navy,
+              BookNestColors.navyDeep,
+              BookNestColors.cyan.withOpacity(.55),
+            ],
+          ),
+          borderRadius: const BorderRadius.only(
+            bottomLeft: Radius.circular(30),
+            bottomRight: Radius.circular(30),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: BookNestColors.cyan.withOpacity(.18),
+              blurRadius: 26,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              right: 34,
+              top: 18,
+              child: Icon(Icons.auto_stories_rounded,
+                  size: 64,
+                  color: Colors.white.withOpacity(.10)),
+            ),
+            Positioned(
+              left: 22,
+              bottom: 14,
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('BookNest',
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(.9),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2.4)),
+                    const SizedBox(height: 3),
+                    Text('Reader studio',
+                        style: TextStyle(
+                            color: BookNestColors.cyan.withOpacity(.9),
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2)),
+                  ]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _signOut() async {
     await SupabaseService().auth.signOut();
     if (!mounted) return;
@@ -290,6 +358,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
+    return ValueListenableBuilder<String>(
+      valueListenable: profileLayout,
+      builder: (context, layout, __) {
+    final studio = layout == 'studio';
     return Scaffold(
       backgroundColor:
           dark ? BookNestColors.darkChatBackground : BookNestColors.lightSurface,
@@ -298,7 +370,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Stack(
+            if (studio) _heroBand(theme, dark),
+            Transform.translate(
+              offset: Offset(0, studio ? -62 : 0),
+              child: Stack(
               children: [
                 Column(
                   children: [
@@ -385,7 +460,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ],
+              ),
             ),
+            if (studio) const SizedBox(height: 42),
             const SizedBox(height: 14),
             InkWell(
               onTap: _editDisplayName,
@@ -687,6 +764,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
+        );
+      },
     );
   }
 }

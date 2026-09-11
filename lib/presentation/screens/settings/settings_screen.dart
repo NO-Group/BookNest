@@ -26,6 +26,7 @@ import '../../../config/theme.dart';
 import '../../../services/notification_service.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/background_link.dart';
+import '../../../services/profile_layout.dart';
 import '../../../services/chat_backup_service.dart';
 import '../../../services/chat_store.dart';
 import '../../../services/push_service.dart';
@@ -58,6 +59,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     NotificationService.instance.streakReminderEnabled().then((v) {
       if (mounted) setState(() => _streakReminderOn = v);
     });
+  }
+
+  Widget _layoutCard(
+    BuildContext context, {
+    required String value,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool selected,
+  }) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return ListTile(
+      onTap: () async {
+        await setProfileLayout(value);
+        if (mounted) setState(() {});
+      },
+      leading: Icon(icon,
+          size: 21,
+          color: selected ? BookNestColors.cyan : onSurface.withOpacity(.6)),
+      title: Text(title,
+          style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+              color: selected ? BookNestColors.cyan : onSurface)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+      trailing: selected
+          ? const Icon(Icons.check_circle_rounded,
+              color: BookNestColors.cyan, size: 20)
+          : null,
+    );
   }
 
   String _profileSubtitle() {
@@ -357,6 +388,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => context.push('/terms'),
             ),
           ]),
+          const SizedBox(height: 24),
+
+          const _SectionLabel('PROFILE LAYOUT'),
+          const SizedBox(height: 10),
+          ValueListenableBuilder<String>(
+            valueListenable: profileLayout,
+            builder: (context, layout, _) => _SettingsGroup(children: [
+              _layoutCard(
+                context,
+                value: 'classic',
+                title: 'Classic',
+                subtitle: 'The centered reader card — calm and familiar',
+                icon: Icons.person_outline_rounded,
+                selected: layout == 'classic',
+              ),
+              _layoutCard(
+                context,
+                value: 'studio',
+                title: 'Studio',
+                subtitle: 'Hero band, overlapping avatar — bold and unique',
+                icon: Icons.auto_awesome_rounded,
+                selected: layout == 'studio',
+              ),
+            ]),
+          ),
+
           const SizedBox(height: 24),
 
           const _SectionLabel('REMINDERS'),

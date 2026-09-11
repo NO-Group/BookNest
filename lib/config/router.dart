@@ -33,6 +33,8 @@ import '../presentation/screens/books/writer_dashboard_screen.dart';
 import '../presentation/screens/books/manage_book_screen.dart';
 import '../presentation/screens/books/chapter_manager_screen.dart';
 import '../presentation/screens/books/chapter_editor_screen.dart';
+import 'package:flutter/material.dart' show GlobalKey, NavigatorState;
+
 import '../presentation/components/booknest_ui.dart';
 import '../presentation/screens/books/book_analytics_screen.dart';
 import '../presentation/screens/books/reviews_hub_screen.dart';
@@ -46,6 +48,7 @@ import '../presentation/screens/support/privacy_screen.dart';
 import '../presentation/screens/support/terms_screen.dart';
 import '../presentation/screens/settings/chat_backup_screen.dart';
 import '../presentation/screens/moderation/moderation_screen.dart';
+import '../presentation/screens/brainstorm/brainstorm_screen.dart';
 import '../presentation/screens/support/about_screen.dart';
 import '../presentation/screens/support/connection_status_screen.dart';
 import '../presentation/screens/support/permissions_screen.dart';
@@ -121,6 +124,9 @@ String? _redirect(BuildContext context, GoRouterState state) {
 
   return null;
 }
+
+/// Root navigator key — used by system-level overlays (calls).
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -381,6 +387,10 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => ClubDetailScreen(
         clubId: state.pathParameters['id'] ?? '',
       ),
+    ),
+    GoRoute(
+      path: '/brainstorm',
+      builder: (context, state) => const BrainstormScreen(),
     ),
     GoRoute(
       path: '/community/:id',

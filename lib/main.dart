@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 
 import 'config/app_state.dart';
 import 'config/router.dart';
+import 'presentation/screens/calls/call_screen.dart';
 import 'config/theme.dart';
 import 'services/home_widgets_service.dart';
 import 'services/push_service.dart';
+import 'services/call_service.dart';
+import 'services/profile_layout.dart';
 import 'services/inbox_watcher.dart';
 import 'services/background_link.dart';
 import 'services/notification_service.dart';
@@ -32,6 +35,14 @@ Future<void> main() async {
     // Zero-external notifications while the app is alive (no Firebase
     // needed): a light sweep of the message queue every 30 seconds.
     InboxWatcher.instance.start();
+    // Calls: listen for incoming rings; the ring opens the call room
+    // over whatever is on screen.
+    CallService.instance.onIncoming = (session) {
+      final context = rootNavigatorKey.currentContext;
+      if (context != null) CallScreen.open(context);
+    };
+    unawaited(CallService.instance.ensureInitialized());
+    unawaited(loadProfileLayout());
     // BookNest's own background link (no Google): restores the foreground
     // service when the reader keeps it enabled.
     unawaited(LinkService.instance.ensureStartedIfPreferred());

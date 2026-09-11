@@ -13,6 +13,8 @@ import '../chat/media_viewer_screen.dart';
 import '../../components/booknest_emojis.dart';
 import '../../../services/reader_profile.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/call_service.dart';
+import '../calls/call_screen.dart';
 import '../../../services/inbox_watcher.dart';
 import '../../../services/supabase_service.dart';
 
@@ -124,6 +126,21 @@ class _DMChatScreenState extends State<DMChatScreen> {
         _themeDim = dim;
       });
     }
+  }
+
+  Future<void> _startCall({required bool video}) async {
+    final peer = widget.peerId;
+    if (peer == null || peer.isEmpty) return;
+    final service = CallService.instance;
+    if (service.status != CallStatus.idle) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Already in a call.')));
+      return;
+    }
+    await service.startCall(
+        peerId: peer, peerName: _peerName, video: video);
+    if (!mounted) return;
+    CallScreen.open(context);
   }
 
   Future<void> _editTheme() async {
@@ -580,6 +597,20 @@ class _DMChatScreenState extends State<DMChatScreen> {
         leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
         actions: [
+          IconButton(
+            tooltip: 'Voice call',
+            icon: const Icon(Icons.call_outlined, size: 20),
+            onPressed: widget.peerId == null || widget.peerId!.isEmpty
+                ? null
+                : () => _startCall(video: false),
+          ),
+          IconButton(
+            tooltip: 'Video call',
+            icon: const Icon(Icons.videocam_outlined, size: 21),
+            onPressed: widget.peerId == null || widget.peerId!.isEmpty
+                ? null
+                : () => _startCall(video: true),
+          ),
           IconButton(
             tooltip: 'Chat theme',
             icon: const Icon(Icons.palette_outlined, size: 21),

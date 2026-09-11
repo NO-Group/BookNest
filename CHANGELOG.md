@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.14.0+26 — 2026-09-11 · The pro reader, calls, brainstorm & the school
+
+- **The Reader, rebuilt to pro standard**: true **paginated mode** —
+  chapters flow into real swipeable pages measured against your exact
+  type settings (toggle: Scroll ⇄ Pages). A **Book serif** typeface
+  option, **page warmth** (candlelight dim), **bookmarks** synced to your
+  account with jump-and-remove from the contents sheet, immersive system
+  bars when the chrome hides, keep-screen-awake while reading, per-chapter
+  **reading-time estimates**, and a page-turn page indicator.
+- **Brainstorm** 💡: BookNest's idea boards — float an idea, everyone
+  builds on it in true threads (one-level nesting, reply badges, expand/
+  collapse, 💡 boosts). Lives on Discover.
+- **Schools, levelled up into a real LMS**: **Classes** (create, join,
+  teacher + roster counts), **Assignments** (per class, due-date
+  countdowns, optional anchor book, done-toggles with live completion
+  counts, teacher-only creation), and **Exam countdowns** (scheduled by
+  the school, live to-the-minute timers) — alongside the existing reading
+  list and top-readers board.
+- **Voice & video calls**: call any reader straight from a chat — pure
+  peer-to-peer WebRTC (video calls with camera flip/mute, voice calls),
+  ringing through BookNest's own realtime channels. No third-party call
+  service, no minutes bill. Works on open networks (hotspots, home wifi,
+  mobile data).
+- **Profile layout setting**: Settings → Profile Layout — switch your
+  profile between the **Classic** card flow and the new **Studio** hero
+  band (gradient banner with overlapping avatar). Your choice sticks.
+
 ## 2.13.0+25 — 2026-09-11 · Threads, kind superpowers, buttery loading
 
 - **Thread comments**: post conversations are now true threads — replies

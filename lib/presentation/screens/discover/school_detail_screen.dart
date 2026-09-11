@@ -6,6 +6,7 @@ import '../../../services/backend_api.dart';
 import '../../components/book_picker_sheet.dart';
 import '../../components/booknest_ui.dart';
 import 'group_base_screen.dart';
+import 'school_lms.dart';
 
 /// The full school experience: everything a group gets (profile,
 /// membership, announcements, directory, chat) plus the two things only a
@@ -24,6 +25,12 @@ class SchoolDetailScreen extends StatelessWidget {
       groupId: id,
       title: 'School',
       extraSections: (state) => [
+        SchoolClassesSection(state: state),
+        const SizedBox(height: 16),
+        SchoolAssignmentsSection(state: state),
+        const SizedBox(height: 16),
+        SchoolExamsSection(state: state),
+        const SizedBox(height: 16),
         _ReadingListSection(state: state),
         const SizedBox(height: 16),
         _LeaderboardSection(state: state),
