@@ -728,6 +728,21 @@ class _ReaderScreenState extends State<ReaderScreen>
     );
   }
 
+  /// Flips between scrolling and page-swiping, resetting the pagination
+  /// cache so the new layout is measured against the current typography.
+  void _setReadingMode(bool paginated) {
+    if (_paginated == paginated) return;
+    setState(() {
+      _paginated = paginated;
+      _pagesKey = '';
+      _pages = const [];
+      _pageController?.dispose();
+      _pageController = null;
+      _pageIndex = 0;
+    });
+    _saveReaderPrefs();
+  }
+
   void _openTypography() {
     showModalBottomSheet<void>(
       context: context,
@@ -786,15 +801,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                     selectedForegroundColor: BookNestColors.cyan,
                   ),
                   onSelectionChanged: (selection) {
-                    setState(() {
-                      _paginated = selection.first;
-                      _pagesKey = '';
-                      _pages = const [];
-                      _pageController?.dispose();
-                      _pageController = null;
-                      _pageIndex = 0;
-                    });
-                    _saveReaderPrefs();
+                    _setReadingMode(selection.first);
                     Navigator.pop(sheetContext);
                   },
                 ),
@@ -1258,6 +1265,18 @@ class _ReaderScreenState extends State<ReaderScreen>
                           ),
                         ],
                       ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        _paginated
+                            ? Icons.menu_book_rounded
+                            : Icons.swap_vert_rounded,
+                        color: BookNestColors.cyan,
+                      ),
+                      tooltip: _paginated
+                          ? 'Reading in pages — switch to scrolling'
+                          : 'Scrolling — switch to swiping pages',
+                      onPressed: () => _setReadingMode(!_paginated),
                     ),
                     IconButton(
                       icon: Icon(

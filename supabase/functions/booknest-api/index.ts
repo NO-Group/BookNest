@@ -1455,6 +1455,7 @@ Deno.serve(async (req: Request) => {
           created_at: r.createdAt ?? null,
           owner: owners.get(String(r.ownerId)) ?? null,
           member_count: counts[i],
+          verified: r.verified === true,
         })) });
       }
 
@@ -3865,6 +3866,159 @@ Deno.serve(async (req: Request) => {
         if (!canDelete) return fail('Only owners can remove announcements', 403);
         await col.deleteOne({ _id: doc._id } as never);
         return ok({ deleted: true });
+      }
+
+      // ── Organization departments (units) ─────────────────────────────
+      case 'groups.units.create': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'organizations');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        if (!groupId) return fail('A valid groupId is required');
+        const name = String(p.name ?? '').trim().slice(0, 80);
+        if (!name) return fail('A department name is required');
+        const groups = (await dbFor('groups')).collection(kind);
+        const group = await groups
+          .findOne({ _id: groupId } as never,
+            { projection: { ownerId: 1, viceModeratorId: 1 } });
+        if (!group) return fail('Group not found', 404);
+        if (group.ownerId !== uid && group.viceModeratorId !== uid) {
+          return fail('Only owners and deputies can create departments', 403);
+        }
+        const units = (await dbFor('groups')).collection('units');
+        const dupe = await units.findOne({ groupId, name });
+        if (dupe) return fail('A department with that name already exists');
+        const doc = { groupId, kind, name, leadId: null, createdAt: new Date() };
+        const inserted = await units.insertOne({ ...doc });
+        return ok({ unit: { id: String(inserted.insertedId), ...doc } });
+      }
+
+      case 'groups.units.list': {
+        const kind = String(p.kind ?? 'organizations');
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        if (!groupId) return fail('A valid groupId is required');
+        const units = (await dbFor('groups')).collection('units');
+        const rows = await units
+          .find({ groupId }).sort({ createdAt: 1 }).limit(100).toArray();
+        const members = (await dbFor('groups')).collection('unit_members');
+        const counts: number[] = [];
+        const rosters: string[][] = [];
+        for (const u of rows) {
+          const uid16 = String(u._id);
+          counts.push(await members.countDocuments({ unitId: uid16 }));
+          const roster = await members
+            .find({ unitId: uid16 }, { projection: { userId: 1 } })
+            .limit(200).toArray();
+          rosters.push(roster.map((r) => String(r.userId)));
+        }
+        return ok({ units: rows.map((u, i) => ({
+          id: String(u._id),
+          name: u.name ?? '',
+          leadId: u.leadId ?? null,
+          memberCount: counts[i],
+          memberIds: rosters[i],
+          createdAt: u.createdAt ?? null,
+        })) });
+      }
+
+      case 'groups.units.remove': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'organizations');
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        const unitId = typeof p.unitId === 'string' ? p.unitId : '';
+        if (!groupId || !isHexId(unitId)) return fail('A valid unitId is required');
+        const group = await (await dbFor('groups')).collection(kind)
+          .findOne({ _id: groupId } as never,
+            { projection: { ownerId: 1, viceModeratorId: 1 } });
+        if (!group) return fail('Group not found', 404);
+        if (group.ownerId !== uid && group.viceModeratorId !== uid) {
+          return fail('Only owners and deputies can remove departments', 403);
+        }
+        const db = await dbFor('groups');
+        await db.collection('units')
+          .deleteOne({ _id: new ObjectId(unitId) } as never);
+        await db.collection('unit_members')
+          .deleteMany({ unitId } as never);
+        return ok({ deleted: true });
+      }
+
+      case 'groups.units.join': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const unitId = typeof p.unitId === 'string' ? p.unitId : '';
+        if (!isHexId(unitId)) return fail('A valid unitId is required');
+        const unit = await (await dbFor('groups')).collection('units')
+          .findOne({ _id: new ObjectId(unitId) } as never);
+        if (!unit) return fail('Department not found', 404);
+        const kind = String(unit.kind ?? 'organizations');
+        const member = await (await dbFor('groups'))
+          .collection(`${kind}_members`)
+          .findOne({ groupId: String(unit.groupId), userId: uid });
+        if (!member) return fail('Join the organization first', 403);
+        await (await dbFor('groups')).collection('unit_members')
+          .updateOne({ unitId, userId: uid } as never,
+            { $set: { unitId, userId: uid, groupId: String(unit.groupId), joinedAt: new Date() } },
+            { upsert: true });
+        return ok({ joined: true });
+      }
+
+      case 'groups.units.leave': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const unitId = typeof p.unitId === 'string' ? p.unitId : '';
+        if (!isHexId(unitId)) return fail('A valid unitId is required');
+        await (await dbFor('groups')).collection('unit_members')
+          .deleteOne({ unitId, userId: uid } as never);
+        return ok({ left: true });
+      }
+
+      case 'groups.units.setLead': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const unitId = typeof p.unitId === 'string' ? p.unitId : '';
+        if (!isHexId(unitId)) return fail('A valid unitId is required');
+        const unit = await (await dbFor('groups')).collection('units')
+          .findOne({ _id: new ObjectId(unitId) } as never);
+        if (!unit) return fail('Department not found', 404);
+        const kind = String(unit.kind ?? 'organizations');
+        const group = await (await dbFor('groups')).collection(kind)
+          .findOne({ _id: String(unit.groupId) } as never,
+            { projection: { ownerId: 1, viceModeratorId: 1 } });
+        if (!group) return fail('Group not found', 404);
+        if (group.ownerId !== uid && group.viceModeratorId !== uid) {
+          return fail('Only owners and deputies can assign leads', 403);
+        }
+        const target = typeof p.userId === 'string' ? p.userId : '';
+        if (!target) {
+          await (await dbFor('groups')).collection('units')
+            .updateOne({ _id: new ObjectId(unitId) } as never,
+              { $set: { leadId: null } });
+          return ok({ leadId: null });
+        }
+        const member = await (await dbFor('groups'))
+          .collection(`${kind}_members`)
+          .findOne({ groupId: String(unit.groupId), userId: target });
+        if (!member) return fail('That reader is not a member', 404);
+        await (await dbFor('groups')).collection('units')
+          .updateOne({ _id: new ObjectId(unitId) } as never,
+            { $set: { leadId: target } });
+        return ok({ leadId: target });
+      }
+
+      // ── Organization verification (overall moderator only) ───────────
+      case 'groups.verify.set': {
+        const admin = await adminUserId(req);
+        if (!admin) return fail('Only the overall moderator can verify', 403);
+        const kind = String(p.kind ?? 'organizations');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        if (!groupId) return fail('A valid groupId is required');
+        const verified = p.verified === true;
+        await (await dbFor('groups')).collection(kind)
+          .updateOne({ _id: groupId } as never, { $set: { verified } });
+        return ok({ verified });
       }
 
       case 'books.stats': {

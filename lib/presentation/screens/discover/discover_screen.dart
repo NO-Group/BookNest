@@ -230,6 +230,11 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
                 const SizedBox(height: 8),
 
+                // Organizations spotlight — verified structures up front
+                const _OrgSpotlightRail(),
+
+                const SizedBox(height: 8),
+
                 // Brainstorm — the idea board
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
@@ -590,5 +595,111 @@ class _DiscoverCard extends StatelessWidget {
         context.push('/school/${item['id']}');
         break;
     }
+  }
+}
+/// ── Organizations spotlight ─────────────────────────────────────────────
+/// A horizontal rail of the newest organizations on BookNest, with verified
+/// badges — the front door to the Organization experience.
+class _OrgSpotlightRail extends StatelessWidget {
+  const _OrgSpotlightRail();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: BackendApi.instance
+          .call('groups.list', {'kind': 'organizations'})
+          .then((res) => ((res?['groups'] as List?) ?? const [])
+              .whereType<Map<dynamic, dynamic>>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()),
+      builder: (context, snapshot) {
+        final orgs = snapshot.data ?? const [];
+        if (orgs.isEmpty) return const SizedBox.shrink();
+        final onSurface = Theme.of(context).colorScheme.onSurface;
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 2),
+            child: Row(children: [
+              const Icon(Icons.account_balance_rounded,
+                  size: 18, color: BookNestColors.cyan),
+              const SizedBox(width: 8),
+              Text('Organizations',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: onSurface)),
+              const SizedBox(width: 8),
+              Text('${orgs.length} on BookNest',
+                  style: TextStyle(
+                      fontSize: 11.5, color: onSurface.withOpacity(.55))),
+            ]),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 138,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              scrollDirection: Axis.horizontal,
+              itemCount: orgs.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, i) {
+                final org = orgs[i];
+                final name = org['name']?.toString() ?? '';
+                final members = ((org['member_count'] as num?) ?? 0).toInt();
+                final verified = org['verified'] == true;
+                return GlassPanel(
+                  radius: 20,
+                  onTap: () => context.push('/organization/${org['id'] ?? ''}'),
+                  child: Container(
+                    width: 168,
+                    padding: const EdgeInsets.all(13),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(colors: [
+                                BookNestColors.navy,
+                                BookNestColors.navyDeep
+                              ]),
+                              borderRadius: BorderRadius.circular(11),
+                            ),
+                            child: const Icon(Icons.account_balance_rounded,
+                                size: 19, color: BookNestColors.cyan),
+                          ),
+                          const Spacer(),
+                          Row(children: [
+                            Flexible(
+                              child: Text(name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: onSurface)),
+                            ),
+                            if (verified) ...[
+                              const SizedBox(width: 4),
+                              const Icon(Icons.verified_rounded,
+                                  size: 14, color: BookNestColors.cyan),
+                            ],
+                          ]),
+                          const SizedBox(height: 3),
+                          Text(
+                              '$members member${members == 1 ? '' : 's'}',
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: onSurface.withOpacity(.6))),
+                        ]),
+                  ),
+                );
+              },
+            ),
+          ),
+        ]);
+      },
+    );
   }
 }

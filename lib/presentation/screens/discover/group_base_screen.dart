@@ -375,6 +375,10 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                       ]),
                       const SizedBox(height: 16),
                       _announcementsPanel(theme, onSurface),
+                      if (kind == 'organizations') ...[
+                        const SizedBox(height: 16),
+                        OrgDepartmentsSection(state: this),
+                      ],
                       const SizedBox(height: 16),
                       _membersPanel(theme, onSurface),
                       ...?widget.extraSections?.call(this),
@@ -420,11 +424,21 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(g['name']?.toString() ?? widget.title,
-                        style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            color: onSurface)),
+                    Row(children: [
+                      Flexible(
+                        child: Text(g['name']?.toString() ?? widget.title,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                color: onSurface)),
+                      ),
+                      if (g['verified'] == true) ...[
+                        const SizedBox(width: 6),
+                        const Icon(Icons.verified_rounded,
+                            size: 17, color: BookNestColors.cyan),
+                      ],
+                    ]),
                     const SizedBox(height: 3),
                     Text(
                       '${members.length} member${members.length == 1 ? '' : 's'}'
@@ -502,10 +516,51 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                     .toList(),
               ),
             ],
+            if (_isOverallModerator && kind == 'organizations') ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: ActionChip(
+                  avatar: Icon(
+                      g['verified'] == true
+                          ? Icons.verified_rounded
+                          : Icons.new_releases_outlined,
+                      size: 17,
+                      color: BookNestColors.cyan),
+                  label: Text(
+                      g['verified'] == true
+                          ? 'Verified — remove badge'
+                          : 'Verify this organization',
+                      style: const TextStyle(
+                          fontSize: 11.5, fontWeight: FontWeight.w700)),
+                  onPressed: _toggleVerified,
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  bool get _isOverallModerator =>
+      (SupabaseService().auth.currentUser?.email ?? '')
+          .toLowerCase() == 'n.ogroup@yahoo.com';
+
+  Future<void> _toggleVerified() async {
+    final g = group;
+    if (g == null) return;
+    final id = g['_id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    final next = g['verified'] != true;
+    final res = await BackendApi.instance
+        .call('groups.verify.set', {'kind': kind, 'groupId': id, 'verified': next});
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res != null
+            ? (next ? 'Organization verified ✓' : 'Verification removed')
+            : 'Could not update verification — try again.')));
+    if (res != null) await reload();
   }
 
   Widget _announcementsPanel(ThemeData theme, Color onSurface) {
@@ -683,5 +738,342 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
               letterSpacing: .6,
               color: color)),
     );
+  }
+}
+
+/// ── Organization departments ────────────────────────────────────────────
+/// The internal structure of an organization: named departments any member
+/// can join, each optionally led by a member the owner/deputy appoints.
+class OrgDepartmentsSection extends StatefulWidget {
+  const OrgDepartmentsSection({super.key, required this.state});
+
+  final GroupBaseScreenState state;
+
+  @override
+  State<OrgDepartmentsSection> createState() => _OrgDepartmentsSectionState();
+}
+
+class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
+  List<Map<String, dynamic>> _units = [];
+  bool _loading = true;
+  bool _busy = false;
+
+  GroupBaseScreenState get _state => widget.state;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final res = await BackendApi.instance
+        .call('groups.units.list', {'kind': _state.kind, 'groupId': _state.groupId});
+    if (!mounted) return;
+    setState(() {
+      _units = ((res?['units'] as List?) ?? const [])
+          .whereType<Map<dynamic, dynamic>>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      _loading = false;
+    });
+  }
+
+  Future<void> _createUnit() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('New department',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 80,
+          decoration: const InputDecoration(
+              hintText: 'e.g. Editorial, Outreach, Design'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel')),
+          FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: BookNestColors.navy),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, controller.text.trim()),
+              child: const Text('Create')),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty) return;
+    setState(() => _busy = true);
+    final res = await BackendApi.instance.call('groups.units.create',
+        {'kind': _state.kind, 'groupId': _state.groupId, 'name': name});
+    if (!mounted) return;
+    setState(() => _busy = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res != null
+            ? 'Department "$name" created.'
+            : 'Could not create the department — try again.')));
+    if (res != null) _load();
+  }
+
+  Future<void> _joinLeave(Map<String, dynamic> unit) async {
+    if (_busy) return;
+    final joined = _isJoined(unit);
+    setState(() => _busy = true);
+    final res = await BackendApi.instance.call(
+        joined ? 'groups.units.leave' : 'groups.units.join',
+        {'unitId': unit['id']?.toString() ?? ''});
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (res != null) _load();
+  }
+
+  bool _isJoined(Map<String, dynamic> unit) {
+    final ids = (unit['memberIds'] as List?) ?? const [];
+    return ids.contains(SupabaseService().auth.currentUser?.id);
+  }
+
+  Future<void> _manageUnit(Map<String, dynamic> unit) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 6),
+          ListTile(
+            leading: const Icon(Icons.star_rounded, color: BookNestColors.cyan),
+            title: Text((unit['leadId'] ?? '') != null &&
+                    unit['leadId'].toString().isNotEmpty
+                ? 'Change the lead'
+                : 'Appoint a lead'),
+            onTap: () => Navigator.pop(sheetContext, 'lead'),
+          ),
+          ListTile(
+            leading:
+                const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+            title: const Text('Remove department'),
+            onTap: () => Navigator.pop(sheetContext, 'remove'),
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (action == 'lead') await _pickLead(unit);
+    if (action == 'remove') await _removeUnit(unit);
+  }
+
+  Future<void> _pickLead(Map<String, dynamic> unit) async {
+    final members = _state.members;
+    if (members.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No members to appoint yet.')));
+      return;
+    }
+    final currentLead = unit['leadId']?.toString() ?? '';
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Appoint the lead',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        children: [
+          for (final m in members.take(30))
+            SimpleDialogOption(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, m['user_id']?.toString() ?? ''),
+              child: Row(children: [
+                Icon(
+                    m['user_id']?.toString() == currentLead
+                        ? Icons.star_rounded
+                        : Icons.person_outline_rounded,
+                    size: 19,
+                    color: BookNestColors.cyan),
+                const SizedBox(width: 10),
+                Flexible(
+                    child: Text(
+                        _state._nameOf(m['user_id']?.toString() ?? ''),
+                        overflow: TextOverflow.ellipsis)),
+              ]),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || picked.isEmpty) return;
+    final res = await BackendApi.instance
+        .call('groups.units.setLead', {'unitId': unit['id']?.toString() ?? '', 'userId': picked});
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res != null
+            ? 'Lead appointed ✓'
+            : 'Could not appoint the lead — try again.')));
+    if (res != null) _load();
+  }
+
+  Future<void> _removeUnit(Map<String, dynamic> unit) async {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Remove department?',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        content: Text(
+            '"${unit['name']?.toString() ?? 'This department'}" and its '
+            'membership list will be removed.',
+            style: const TextStyle(fontSize: 13.5)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Keep')),
+          FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (sure != true) return;
+    final res = await BackendApi.instance.call('groups.units.remove', {
+      'kind': _state.kind,
+      'groupId': _state.groupId,
+      'unitId': unit['id']?.toString() ?? '',
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res != null
+            ? 'Department removed.'
+            : 'Could not remove the department — try again.')));
+    if (res != null) _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+    return GlassPanel(
+      radius: 24,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.account_tree_rounded,
+                size: 19, color: BookNestColors.cyan),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('Departments · ${_units.length}',
+                  style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
+                      color: onSurface)),
+            ),
+            if (_state.isManager)
+              IconButton(
+                tooltip: 'New department',
+                icon: const Icon(Icons.add_circle_outline_rounded,
+                    size: 21, color: BookNestColors.cyan),
+                onPressed: _busy ? null : _createUnit,
+              ),
+          ]),
+          const SizedBox(height: 4),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(
+                  child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: BookNestColors.cyan))),
+            )
+          else if (_units.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                  _state.isManager
+                      ? 'No departments yet — add teams like Editorial, '
+                          'Outreach or Design.'
+                      : 'No departments yet.',
+                  style: TextStyle(
+                      fontSize: 12.5, color: onSurface.withOpacity(.6))),
+            )
+          else
+            for (final unit in _units)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: InkWell(
+                  onTap: _state.isManager ? () => _manageUnit(unit) : null,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(children: [
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: _isJoined(unit)
+                              ? BookNestColors.cyan.withOpacity(.16)
+                              : BookNestColors.navy.withOpacity(.08),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Icon(
+                            _isJoined(unit)
+                                ? Icons.check_rounded
+                                : Icons.account_tree_outlined,
+                            size: 16,
+                            color: BookNestColors.cyan),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(unit['name']?.toString() ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 13.2,
+                                      fontWeight: FontWeight.w700,
+                                      color: onSurface)),
+                              Text(
+                                  '${((unit['memberCount'] as num?) ?? 0).toInt()} '
+                                  'member${((unit['memberCount'] as num?) ?? 0).toInt() == 1 ? '' : 's'}'
+                                  ' · lead: ${_leadLabel(unit)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: onSurface.withOpacity(.6))),
+                            ]),
+                      ),
+                      if (_state.isMember)
+                        TextButton(
+                          onPressed: _busy ? null : () => _joinLeave(unit),
+                          style: TextButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
+                              minimumSize: const Size(0, 34)),
+                          child: Text(_isJoined(unit) ? 'Leave' : 'Join',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: BookNestColors.cyan)),
+                        ),
+                    ]),
+                  ),
+                ),
+              ),
+        ]),
+      ),
+    );
+  }
+
+  String _leadLabel(Map<String, dynamic> unit) {
+    final leadId = unit['leadId']?.toString() ?? '';
+    if (leadId.isEmpty) return 'none yet';
+    return _state._nameOf(leadId);
   }
 }

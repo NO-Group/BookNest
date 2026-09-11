@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
+import '../../../services/call_service.dart';
+import '../calls/call_screen.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
@@ -108,6 +110,21 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
   }
 
   @override
+  Future<void> _call({required bool video}) async {
+    if (widget.userId.isEmpty) return;
+    final service = CallService.instance;
+    if (service.status != CallStatus.idle) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Already in a call.')));
+      return;
+    }
+    await service.startCall(
+        peerId: widget.userId, peerName: _name, video: video);
+    if (!mounted) return;
+    CallScreen.open(context);
+  }
+
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (_loading) {
@@ -159,6 +176,18 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
           ],
         ),
         actions: [
+          if (!_isMe && !_loading) ...[
+            IconButton(
+              tooltip: 'Voice call',
+              icon: const Icon(Icons.call_outlined, size: 20),
+              onPressed: () => _call(video: false),
+            ),
+            IconButton(
+              tooltip: 'Video call',
+              icon: const Icon(Icons.videocam_outlined, size: 21),
+              onPressed: () => _call(video: true),
+            ),
+          ],
           if (!_isMe && !_loading)
             PopupMenuButton<String>(
               tooltip: 'More options',

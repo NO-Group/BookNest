@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.15.0+27 — 2026-09-11 · The organization impact round
+
+- **Organizations, rebuilt for real structure**:
+  - **Departments** — owners and deputies create internal teams
+    (Editorial, Outreach, Design…), members join and leave freely, and a
+    **lead** can be appointed to each department from the roster. Live
+    member counts, join checks, and management (change lead, remove) from
+    the organization page.
+  - **Verified badge** — the overall moderator can now verify an
+    organization; the cyan tick shows on the org page and everywhere it
+    appears on Discover.
+  - **Organizations spotlight** — a dedicated rail on Discover: every
+    organization on BookNest, member counts, verified ticks, one tap in.
+- **Reading, your way, one tap away**: a new layout button in the reading
+  chrome flips instantly between **scrolling** and **swiping pages** (the
+  comfort-sheet switch is still there) — both modes keep your typography,
+  progress and page position.
+- **Calls everywhere you meet a reader**: voice and video call buttons on
+  every **profile page** (next to the menu), alongside the ones already in
+  every chat header.
+- **Chat watermark, visible**: the book-and-quill watermark now shows
+  properly on the **dark theme** and its opacity is raised a touch on both
+  themes — quiet, but unmistakably there.
+
 ## 2.14.0+26 — 2026-09-11 · The pro reader, calls, brainstorm & the school
 
 - **The Reader, rebuilt to pro standard**: true **paginated mode** —

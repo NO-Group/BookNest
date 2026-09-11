@@ -90,7 +90,7 @@ class ChatCanvas extends StatelessWidget {
     return Container(
       color: dark ? BookNestColors.darkChatBackground : BookNestColors.lightSurface,
       child: WatermarkBackground(
-        opacity: dark ? 0.045 : 0.055,
+        opacity: dark ? 0.10 : 0.09,
         child: child,
       ),
     );

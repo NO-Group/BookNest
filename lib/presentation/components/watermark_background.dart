@@ -14,7 +14,7 @@ import '../../config/theme.dart';
 class WatermarkBackground extends StatelessWidget {
   final Widget child;
 
-  /// Glyph strength. Keep it whisper-quiet: ~0.05 in dark, ~0.06 in light.
+  /// Glyph strength. Quiet but visible: ~0.10 in dark, ~0.09 in light.
   final double opacity;
 
   /// Tile size in logical pixels. Larger → sparser pattern.
@@ -26,7 +26,7 @@ class WatermarkBackground extends StatelessWidget {
   const WatermarkBackground({
     super.key,
     required this.child,
-    this.opacity = 0.05,
+    this.opacity = 0.09,
     this.spacing = 132,
     this.color,
   });
