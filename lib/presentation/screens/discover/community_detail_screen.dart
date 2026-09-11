@@ -18,11 +18,11 @@ class CommunityDetailScreen extends StatelessWidget {
       title: 'Community',
       extraSections: (state) => [
         const SizedBox(height: 16),
-        GroupChannelsSection(state: state),
+        GroupChannelsSection(state: state.ctx),
         const SizedBox(height: 16),
-        GroupEventsSection(state: state),
+        GroupEventsSection(state: state.ctx),
         const SizedBox(height: 16),
-        GroupRulesSection(state: state),
+        GroupRulesSection(state: state.ctx),
       ],
     );
   }

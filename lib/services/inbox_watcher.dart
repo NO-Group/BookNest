@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'backend_api.dart';
 import 'background_link.dart';
 import 'notification_service.dart';
@@ -53,6 +55,7 @@ class InboxWatcher {
       if (me == null) return;
       await _sweepDirects(me);
       await _sweepClubs(me);
+      await _sweepEvents(me);
       _primed = true;
     } catch (_) {
       // Never let the watcher crash the loop; next tick tries again.
@@ -112,6 +115,54 @@ class InboxWatcher {
             ? room['title'].toString()
             : 'Group chat',
         body: _preview(text, fallback: 'New message in the club'),
+      );
+    }
+  }
+
+  DateTime? _lastEventSweep;
+  static const Duration _eventInterval = Duration(minutes: 10);
+
+  /// Upcoming group events (next 24 h) become quiet local reminders —
+  /// 24 h, 2 h and 15 min before the start, each fired once per event.
+  Future<void> _sweepEvents(String me) async {
+    final now = DateTime.now();
+    final last = _lastEventSweep;
+    if (last != null && now.difference(last) < _eventInterval) return;
+    _lastEventSweep = now;
+    final res = await BackendApi.instance.callFresh('groups.events.reminders');
+    final events = res?['events'];
+    if (events is! List || events.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    for (final row in events) {
+      if (row is! Map) continue;
+      final e = Map<String, dynamic>.from(row);
+      final id = e['id']?.toString() ?? '';
+      final at = DateTime.tryParse(e['at']?.toString() ?? '');
+      if (id.isEmpty || at == null) continue;
+      final untilStart = at.difference(now);
+      String? bucket;
+      if (untilStart.inMinutes <= 15 && untilStart.inMinutes > -1) {
+        bucket = '15m';
+      } else if (untilStart.inHours <= 2 && untilStart.inMinutes > 15) {
+        bucket = '2h';
+      } else if (untilStart.inHours <= 24 && untilStart.inMinutes > 120) {
+        bucket = '24h';
+      }
+      if (bucket == null) continue;
+      final key = 'bn_evt_$id$bucket';
+      if (prefs.getBool(key) == true) continue;
+      await prefs.setBool(key, true);
+      final title = e['title']?.toString() ?? 'Group event';
+      final group = e['groupName']?.toString() ?? '';
+      final when = switch (bucket) {
+        '15m' => 'Starting any moment now',
+        '2h' => 'Starts within 2 hours',
+        _ => 'Starts within 24 hours',
+      };
+      NotificationService.instance.showInstant(
+        id: ('$id$bucket').hashCode & 0x7fffffff,
+        title: '📅 $title',
+        body: group.isEmpty ? when : '$when · $group',
       );
     }
   }

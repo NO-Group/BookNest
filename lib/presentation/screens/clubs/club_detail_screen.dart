@@ -13,6 +13,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 import '../../components/book_picker_sheet.dart';
+import '../discover/group_extras.dart';
 
 class ClubDetailScreen extends StatefulWidget {
   final String clubId;
@@ -397,7 +398,8 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
               icon: const Icon(Icons.forum_outlined),
               tooltip: 'Group chat',
               onPressed: () {
-                final id = _club?['id']?.toString() ?? '';
+                final id = _club?['_id']?.toString() ??
+                    _club?['id']?.toString() ?? '';
                 if (id.isEmpty) return;
                 context.push(
                   '/club-chat?id=$id&kind=clubs'
@@ -435,6 +437,39 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                         isOwner: _isOwner,
                         onPost: _postAnnouncement,
                         onDelete: _deleteAnnouncement,
+                      ),
+                      const SizedBox(height: 16),
+                      GroupChannelsSection(
+                        state: GroupContext(
+                          kind: 'clubs',
+                          groupId: widget.clubId,
+                          group: _club,
+                          isMember: _isMember,
+                          isManager: _isManager,
+                          reload: _load,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      GroupEventsSection(
+                        state: GroupContext(
+                          kind: 'clubs',
+                          groupId: widget.clubId,
+                          group: _club,
+                          isMember: _isMember,
+                          isManager: _isManager,
+                          reload: _load,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      GroupRulesSection(
+                        state: GroupContext(
+                          kind: 'clubs',
+                          groupId: widget.clubId,
+                          group: _club,
+                          isMember: _isMember,
+                          isManager: _isManager,
+                          reload: _load,
+                        ),
                       ),
                       // ── glass header ──
                       GlassPanel(

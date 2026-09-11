@@ -48,6 +48,9 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   Map<String, dynamic>? _replyTo;
+  Map<String, dynamic>? _pinned;   // the room's pinned message, if any
+  bool _canPin = false;            // viewer is owner / deputy
+  bool _pinBusy = false;
   String _themeId = 'classic';
   double _themeDim = 0;
 
@@ -114,6 +117,9 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     _conversationId = conversation['id']?.toString();
+    final pinned = res['pinnedMessage'];
+    _pinned = pinned is Map ? Map<String, dynamic>.from(pinned) : null;
+    _canPin = res['canPin'] == true;
     final openConv = _conversationId;
     if (openConv != null) InboxWatcher.instance.enter(openConv);
     await _load();
@@ -136,6 +142,96 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _editTheme() async {
     await showChatThemePicker(context, conversationKey: _conversationKey);
     _loadTheme();
+  }
+
+  Future<void> _togglePin(Map<String, dynamic> message) async {
+    if (_pinBusy) return;
+    _pinBusy = true;
+    final id = message['id']?.toString() ?? '';
+    final wasPinned = _pinned?['id']?.toString() == id;
+    final res = await BackendApi.instance
+        .call('chat.pin', {'messageId': id, 'pinned': !wasPinned});
+    _pinBusy = false;
+    if (!mounted) return;
+    if (res != null) {
+      setState(() =>
+          _pinned = !wasPinned ? Map<String, dynamic>.from(message) : null);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res == null
+            ? 'Could not update the pin — try again.'
+            : (wasPinned ? 'Message unpinned.' : 'Message pinned 📌'))));
+  }
+
+  /// The slim banner under the app bar: the room's pinned message.
+  Widget _pinnedBanner() {
+    final pinned = _pinned;
+    if (pinned == null) return const SizedBox.shrink();
+    final text = pinned['text']?.toString() ?? '';
+    final author = _senderName(pinned['senderId']?.toString() ?? '');
+    return Material(
+      color: BookNestColors.cyan.withOpacity(.10),
+      child: InkWell(
+        onTap: () => showModalBottomSheet<void>(
+          context: context,
+          showDragHandle: true,
+          shape: const RoundedRectangleBorder(
+              borderRadius:
+                  BorderRadius.vertical(top: Radius.circular(24))),
+          builder: (sheetContext) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
+              child: Column(mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Row(children: [
+                  Icon(Icons.push_pin_rounded,
+                      size: 18, color: BookNestColors.cyan),
+                  SizedBox(width: 8),
+                  Text('Pinned message',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: BookNestColors.cyan)),
+                ]),
+                const SizedBox(height: 10),
+                if (author.isNotEmpty) ...[
+                  Text(author,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 14)),
+                  const SizedBox(height: 4),
+                ],
+                Text(text.isEmpty ? '（media message）' : text,
+                    style: const TextStyle(fontSize: 14.5, height: 1.4)),
+              ]),
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          child: Row(children: [
+            const Icon(Icons.push_pin_rounded,
+                size: 15, color: BookNestColors.cyan),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                  '${author.isNotEmpty ? '$author: ' : ''}'
+                  '${text.isEmpty ? 'Pinned message' : text}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12.5)),
+            ),
+            if (_canPin)
+              GestureDetector(
+                onTap: () => _togglePin(pinned),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.close_rounded,
+                      size: 15, color: BookNestColors.cyan),
+                ),
+              ),
+          ]),
+        ),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -547,6 +643,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       )
                     : Column(
                         children: [
+                          _pinnedBanner(),
                           Expanded(
                             child: _messages.isEmpty
                                 ? Center(
@@ -658,6 +755,13 @@ class _ChatScreenState extends State<ChatScreen> {
                                                   forEveryone: true),
                                           onTranslate: () =>
                                               _translateMessage(message),
+                                          onPin: _canPin
+                                              ? () => _togglePin(message)
+                                              : null,
+                                          isPinned:
+                                              _pinned?['id']?.toString() ==
+                                                  (message['id']?.toString() ??
+                                                      ''),
                                         );
                                       },
                                         ),

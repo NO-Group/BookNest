@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.17.0+29 — 2026-09-11 · Pinned messages, event reminders & the club strike
+
+- **Pinned messages**: owners and deputies can **pin any message** in a
+  group chat — department chats, channels, club and community rooms. A
+  slim 📌 banner rides under the chat title; tap it for the full message,
+  and managers unpin right from the banner or the message's action sheet.
+- **Event reminders**: events now come to you — BookNest's own
+  notification sweep raises a quiet local reminder **24 hours**, **2
+  hours** and **15 minutes** before anything you can attend starts,
+  across every club, community, organization and school you're in. Still
+  zero external services.
+- **The club strike**: clubs now carry the full modern toolkit too —
+  **# Channels** (topic chat rooms), **Events with RSVPs**, and **House
+  rules**, living right beside the announcement forum, the shelf and the
+  Book-of-the-Month desk. Also fixed the club page's group-chat button
+  (it pointed at the wrong id field and silently no-oped).
+
 ## 2.16.0+28 — 2026-09-11 · Department chats, events & the community strike
 
 - **Department chat rooms**: every organization department now has its

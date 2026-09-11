@@ -6,7 +6,26 @@ import 'package:go_router/go_router.dart';
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../components/booknest_ui.dart';
-import 'group_base_screen.dart';
+
+/// The live facts a shared group section needs. Hosted by whichever
+/// screen is showing the group — the group base page or the club page.
+class GroupContext {
+  const GroupContext({
+    required this.kind,
+    required this.groupId,
+    this.group,
+    this.isMember = false,
+    this.isManager = false,
+    required this.reload,
+  });
+
+  final String kind;
+  final String groupId;
+  final Map<String, dynamic>? group;
+  final bool isMember;
+  final bool isManager;
+  final Future<void> Function() reload;
+}
 
 /// ── Community channels ──────────────────────────────────────────────────
 /// Named, members-only topic chat rooms. Owners and deputies add and
@@ -15,7 +34,7 @@ import 'group_base_screen.dart';
 class GroupChannelsSection extends StatefulWidget {
   const GroupChannelsSection({super.key, required this.state});
 
-  final GroupBaseScreenState state;
+  final GroupContext state;
 
   @override
   State<GroupChannelsSection> createState() => _GroupChannelsSectionState();
@@ -228,7 +247,7 @@ class _GroupChannelsSectionState extends State<GroupChannelsSection> {
 class GroupEventsSection extends StatefulWidget {
   const GroupEventsSection({super.key, required this.state});
 
-  final GroupBaseScreenState state;
+  final GroupContext state;
 
   @override
   State<GroupEventsSection> createState() => _GroupEventsSectionState();
@@ -664,7 +683,7 @@ class _RsvpChip extends StatelessWidget {
 class GroupRulesSection extends StatelessWidget {
   const GroupRulesSection({super.key, required this.state});
 
-  final GroupBaseScreenState state;
+  final GroupContext state;
 
   Future<void> _editRules(BuildContext context) async {
     final current =

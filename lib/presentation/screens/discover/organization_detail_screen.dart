@@ -18,7 +18,7 @@ class OrganizationDetailScreen extends StatelessWidget {
       title: 'Organization',
       extraSections: (state) => [
         const SizedBox(height: 16),
-        GroupEventsSection(state: state),
+        GroupEventsSection(state: state.ctx),
       ],
     );
   }

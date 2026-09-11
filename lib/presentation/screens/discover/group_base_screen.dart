@@ -5,6 +5,7 @@ import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
+import 'group_extras.dart';
 
 /// The full group experience shared by organizations, communities and
 /// schools: real membership, announcements, a named member directory with
@@ -46,6 +47,17 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
   String get viewerId => SupabaseService().auth.currentUser?.id ?? '';
   String get groupId => widget.groupId;
   String get kind => widget.kind;
+
+  /// A live snapshot for the shared group sections (channels, events,
+  /// rules) — they render from whatever this page currently knows.
+  GroupContext get ctx => GroupContext(
+        kind: kind,
+        groupId: groupId,
+        group: group,
+        isMember: isMember,
+        isManager: isManager,
+        reload: reload,
+      );
 
   bool memberIsOwner(Map<String, dynamic> m) => m['role']?.toString() == 'owner';
   bool memberIsVice(Map<String, dynamic> m) => m['role']?.toString() == 'vice';

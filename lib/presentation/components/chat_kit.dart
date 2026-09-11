@@ -131,6 +131,12 @@ class ChatBubble extends StatefulWidget {
   /// Report this message to the moderators.
   final VoidCallback? onReport;
 
+  /// Pin (or unpin) this message in the room — owners and deputies only.
+  final VoidCallback? onPin;
+
+  /// Whether this message is currently the room's pinned one.
+  final bool isPinned;
+
   const ChatBubble({
     super.key,
     required this.message,
@@ -149,6 +155,8 @@ class ChatBubble extends StatefulWidget {
     this.onTranslate,
     this.onReply,
     this.onReport,
+    this.onPin,
+    this.isPinned = false,
   });
 
   @override
@@ -332,6 +340,23 @@ class _ChatBubbleState extends State<ChatBubble>
                 onTap: () {
                   Navigator.pop(sheetContext);
                   widget.onDeleteForMe?.call();
+                },
+              ),
+            if (widget.onPin != null && canAct)
+              ListTile(
+                leading: Icon(
+                    widget.isPinned
+                        ? Icons.push_pin_outlined
+                        : Icons.push_pin_rounded,
+                    color: BookNestColors.cyan),
+                title: Text(
+                    widget.isPinned ? 'Unpin from the chat' : 'Pin to the chat',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: BookNestColors.cyan)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  widget.onPin?.call();
                 },
               ),
             if (widget.onDeleteForEveryone != null &&

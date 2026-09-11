@@ -754,6 +754,18 @@ async function isRoomMember(
   return isClubMember(String(room.kind), String(room.clubId), uid);
 }
 
+/** Owner / deputy check against a group. */
+async function isGroupManager(
+  kind: string,
+  groupId: string,
+  uid: string,
+): Promise<boolean> {
+  const group = await (await dbFor('groups')).collection(kind)
+    .findOne({ _id: groupId } as never,
+      { projection: { ownerId: 1, viceModeratorId: 1 } });
+  return !!group && (group.ownerId === uid || group.viceModeratorId === uid);
+}
+
 // ── chat message toolkit: reactions, deletes, read receipts ────────────────
 type MsgRow = Record<string, unknown> & { _id: ObjectId };
 
@@ -2417,11 +2429,20 @@ Deno.serve(async (req: Request) => {
         }
         const room = await ensureClubRoom(kind, clubId, uid, unitId, chanName);
         if (!room) return fail('Could not open the chat — please try again', 503);
+        let pinnedMessage: Record<string, unknown> | null = null;
+        const pinnedId = String(room.pinnedMessageId ?? '');
+        if (pinnedId && isHexId(pinnedId)) {
+          const m = await loadMessage(pinnedId);
+          if (m && String(m.conversationId) === String(room._id)) {
+            pinnedMessage = messageView(m);
+          }
+        }
+        const canPin = await isGroupManager(kind, clubId, uid);
         return ok({ conversation: {
           id: String(room._id),
           type: 'club',
           title: room.title ?? 'Group chat',
-        } });
+        }, pinnedMessage, canPin });
       }
 
       case 'chat.send': {
@@ -2598,6 +2619,24 @@ Deno.serve(async (req: Request) => {
             .findOne({ _id: m.conversationId as unknown as ObjectId });
           return !!conversation && !!(conversation.memberIds as string[]).includes(uid);
         });
+      }
+
+      case 'chat.pin': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const m = await loadMessage(String(p.messageId ?? ''));
+        if (!m) return fail('Message not found', 404);
+        const room = await (await dbFor('chats')).collection('conversations')
+          .findOne({ _id: m.conversationId as unknown as ObjectId });
+        if (!room || room.type !== 'club') return fail('Conversation not found', 404);
+        if (!(await isGroupManager(String(room.kind), String(room.clubId), uid))) {
+          return fail('Only owners and deputies can pin messages', 403);
+        }
+        const pinned = p.pinned !== false;
+        await (await dbFor('chats')).collection('conversations')
+          .updateOne({ _id: room._id } as never,
+            { $set: { pinnedMessageId: pinned ? String(m._id) : null } });
+        return ok({ pinnedMessageId: pinned ? String(m._id) : null });
       }
 
       case 'chat.react': {
@@ -4249,6 +4288,48 @@ Deno.serve(async (req: Request) => {
         await (await dbFor('groups')).collection(kind)
           .updateOne({ _id: groupId } as never, { $set: { rules: raw } });
         return ok({ rules: raw });
+      }
+
+      // ── event reminders: upcoming events across the reader's groups ──
+      case 'groups.events.reminders': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const g = await dbFor('groups');
+        const groupIds: string[] = [];
+        const kindOf = new Map<string, string>();
+        for (const kind of GROUP_KINDS) {
+          const rows = await g.collection(`${kind}_members`)
+            .find({ userId: uid }, { projection: { groupId: 1 } })
+            .limit(500).toArray();
+          for (const r of rows) {
+            const id = String(r.groupId);
+            if (id) { groupIds.push(id); kindOf.set(id, kind); }
+          }
+        }
+        if (groupIds.length === 0) return ok({ events: [] });
+        const now = Date.now();
+        const rows = await g.collection('events').find({
+          groupId: { $in: groupIds },
+          at: { $ne: null, $gt: new Date(now - 3600 * 1000),
+                $lt: new Date(now + 24 * 3600 * 1000) },
+        }).limit(20).toArray();
+        const names = new Map<string, string>();
+        for (const e of rows) {
+          const gid = String(e.groupId);
+          if (!names.has(gid)) {
+            const doc = await g.collection(kindOf.get(gid) ?? 'clubs')
+              .findOne({ _id: gid } as never, { projection: { name: 1 } });
+            names.set(gid, String(doc?.name ?? ''));
+          }
+        }
+        return ok({ events: rows.map((e) => ({
+          id: String(e._id),
+          title: e.title ?? '',
+          at: e.at ?? null,
+          groupId: String(e.groupId),
+          kind: kindOf.get(String(e.groupId)) ?? 'clubs',
+          groupName: names.get(String(e.groupId)) ?? '',
+        })) });
       }
 
       case 'books.stats': {
