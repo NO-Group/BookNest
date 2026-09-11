@@ -47,6 +47,8 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  bool _searching = false;
+  final TextEditingController _searchController = TextEditingController();
   Map<String, dynamic>? _replyTo;
   Map<String, dynamic>? _pinned;   // the room's pinned message, if any
   bool _canPin = false;            // viewer is owner / deputy
@@ -92,6 +94,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (openConv != null) InboxWatcher.instance.leave(openConv);
     _poll?.cancel();
     _scroll.dispose();
+    _searchController.dispose();
     ChatStore.instance.flush();
     super.dispose();
   }
@@ -574,7 +577,9 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
-    final rows = withDaySeparators(_messages);
+    final query = _searching ? _searchController.text : '';
+    final visible = filterChatMessages(_messages, query);
+    final rows = withDaySeparators(visible);
 
     return Scaffold(
       appBar: AppBar(
@@ -582,6 +587,14 @@ class _ChatScreenState extends State<ChatScreen> {
         leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
         actions: [
+          IconButton(
+            tooltip: 'Search messages',
+            icon: const Icon(Icons.search_rounded, size: 21),
+            onPressed: () => setState(() {
+              _searching = !_searching;
+              if (!_searching) _searchController.clear();
+            }),
+          ),
           IconButton(
             tooltip: 'Chat theme',
             icon: const Icon(Icons.palette_outlined, size: 21),
@@ -643,9 +656,40 @@ class _ChatScreenState extends State<ChatScreen> {
                       )
                     : Column(
                         children: [
+                          if (_searching)
+                            ChatSearchBar(
+                              controller: _searchController,
+                              resultCount: visible.length,
+                              hasQuery: _searchController.text.trim().isNotEmpty,
+                              onChanged: (_) => setState(() {}),
+                              onClose: () => setState(() {
+                                _searching = false;
+                                _searchController.clear();
+                              }),
+                            ),
                           _pinnedBanner(),
                           Expanded(
-                            child: _messages.isEmpty
+                            child: _searching &&
+                                    _searchController.text.trim().isNotEmpty &&
+                                    visible.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.search_off_rounded,
+                                            size: 40,
+                                            color: BookNestColors.cyan
+                                                .withOpacity(.5)),
+                                        const SizedBox(height: 10),
+                                        Text('No matches in this chat',
+                                            style: theme.textTheme.titleMedium
+                                                ?.copyWith(
+                                                    fontWeight:
+                                                        FontWeight.w700)),
+                                      ],
+                                    ),
+                                  )
+                                : _messages.isEmpty
                                 ? Center(
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,

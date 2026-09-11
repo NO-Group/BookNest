@@ -41,6 +41,8 @@ class _DMChatScreenState extends State<DMChatScreen> {
   String? _conversationId;
   Map<String, dynamic>? _peer;
   List<Map<String, dynamic>> _messages = [];
+  bool _searching = false;
+  final TextEditingController _searchController = TextEditingController();
   Map<String, dynamic>? _replyTo;
   String _themeId = 'classic';
   double _themeDim = 0;
@@ -92,6 +94,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
     if (openConv != null) InboxWatcher.instance.leave(openConv);
     _poll?.cancel();
     _scroll.dispose();
+    _searchController.dispose();
     ChatStore.instance.flush();
     super.dispose();
   }
@@ -589,7 +592,10 @@ class _DMChatScreenState extends State<DMChatScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
-    final rows = withDaySeparators(_messages);
+    final query = _searching ? _searchController.text : '';
+    final visible =
+        filterChatMessages(_messages, query);
+    final rows = withDaySeparators(visible);
 
     return Scaffold(
       appBar: AppBar(
@@ -597,6 +603,14 @@ class _DMChatScreenState extends State<DMChatScreen> {
         leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
         actions: [
+          IconButton(
+            tooltip: 'Search messages',
+            icon: const Icon(Icons.search_rounded, size: 21),
+            onPressed: () => setState(() {
+              _searching = !_searching;
+              if (!_searching) _searchController.clear();
+            }),
+          ),
           IconButton(
             tooltip: 'Voice call',
             icon: const Icon(Icons.call_outlined, size: 20),
@@ -665,8 +679,33 @@ class _DMChatScreenState extends State<DMChatScreen> {
       body: ChatCanvas(
         child: Column(
           children: [
+            if (_searching)
+              ChatSearchBar(
+                controller: _searchController,
+                resultCount: visible.length,
+                hasQuery: _searchController.text.trim().isNotEmpty,
+                onChanged: (_) => setState(() {}),
+                onClose: () => setState(() {
+                  _searching = false;
+                  _searchController.clear();
+                }),
+              ),
             Expanded(
-              child: _loading
+              child: _searching &&
+                      _searchController.text.trim().isNotEmpty &&
+                      visible.isEmpty
+                  ? Center(
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.search_off_rounded,
+                            size: 40,
+                            color: BookNestColors.cyan.withOpacity(.5)),
+                        const SizedBox(height: 10),
+                        Text('No matches in this chat',
+                            style: theme.textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700)),
+                      ]),
+                    )
+                  : _loading
                   ? const Center(
                       child: CircularProgressIndicator(
                           color: BookNestColors.cyan))

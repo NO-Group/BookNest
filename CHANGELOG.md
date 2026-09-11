@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.18.0+30 — 2026-09-11 · Organization parity & chat search
+
+- **Organizations reach school parity**: the **reading list** (curated
+  shelf, managers add from the catalogue, hold a cover to remove) and the
+  **Top readers · 30 days leaderboard** (server-computed from real
+  reading activity, medals for the top three) now live on every
+  organization page beside departments, events and verification.
+- **Search in chats**: every chat — **DMs and group rooms** alike — gets
+  a 🔍 search bar. Type to filter the conversation live down to the
+  matching messages (text and file names), with an honest match counter
+  and a friendly "no matches" state.
+- Shared sections were refactored onto the common group kit, so the
+  reading list and leaderboard render from the same components everywhere.
+
 ## 2.17.0+29 — 2026-09-11 · Pinned messages, event reminders & the club strike
 
 - **Pinned messages**: owners and deputies can **pin any message** in a

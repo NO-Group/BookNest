@@ -77,6 +77,88 @@ List<Object> withDaySeparators(List<Map<String, dynamic>> messages) {
   return rows;
 }
 
+/// Filters chat messages for the search bar: case-insensitive substring
+/// match over the message text (and file names for documents).
+List<Map<String, dynamic>> filterChatMessages(
+    List<Map<String, dynamic>> messages, String query) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return messages;
+  return messages
+      .where((m) =>
+          (m['text']?.toString() ?? '').toLowerCase().contains(q) ||
+          (m['fileName']?.toString() ?? '').toLowerCase().contains(q))
+      .toList();
+}
+
+/// The slim search bar pinned above the message list while searching.
+/// Type to filter the conversation live; the trailing count keeps it
+/// honest about how much actually matched.
+class ChatSearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  final int resultCount;
+  final bool hasQuery;
+  final VoidCallback onClose;
+  final ValueChanged<String> onChanged;
+
+  const ChatSearchBar({
+    super.key,
+    required this.controller,
+    required this.resultCount,
+    required this.hasQuery,
+    required this.onClose,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      decoration: BoxDecoration(
+        color: onSurface.withOpacity(.06),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.search_rounded, size: 19, color: BookNestColors.cyan),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            textInputAction: TextInputAction.search,
+            onChanged: onChanged,
+            style: TextStyle(fontSize: 14, color: onSurface),
+            decoration: const InputDecoration(
+              hintText: 'Search this chat…',
+              border: InputBorder.none,
+              isDense: true,
+            ),
+          ),
+        ),
+        if (hasQuery)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Text('$resultCount',
+                style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: BookNestColors.cyan)),
+          ),
+        InkWell(
+          onTap: onClose,
+          borderRadius: BorderRadius.circular(20),
+          child: const Padding(
+            padding: EdgeInsets.all(6),
+            child: Icon(Icons.close_rounded, size: 18),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
 // ── Watermark chat scaffold ──────────────────────────────────────────────────
 
 /// Standard chat page background: the watermark canvas over the chat color.
