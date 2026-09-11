@@ -24,7 +24,7 @@
 ///  With no --dart-define flags, the defaults below are used.
 class AppConfig {
   /// Display version — keep in sync with pubspec.yaml on every release.
-  static const String appVersion = '2.11.0+23';
+  static const String appVersion = '2.12.0+24';
 
   AppConfig._();
 

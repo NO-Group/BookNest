@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.12.0+24 — 2026-09-11 · The Page-Flip Runner
+
+- **New signature loader asset**: an ice-white runner striding across an
+  open isometric book — pages flip on bent arcs underfoot, kinetic
+  ocean-blue sparks fire on every footfall, sky-blue speed trails stretch
+  with velocity, and `progress` (0–100) accelerates the stride from a jog
+  into a lean-into-it sprint.
+- Firing `isComplete` interrupts with a finish-line jump: launch, mid-air
+  tuck, dissolve into a glowing ocean-blue particle burst.
+- Ships three synchronized artifacts: the executable motion prototype
+  (tools/page_flip_runner_proto.py), the rendered preview loop
+  (docs/assets/page_flip_runner.gif), and the production Flutter
+  component (PageFlipLoader) — plus the full Rive authoring spec for the
+  native .riv build (docs/PAGE_FLIP_RUNNER_SPEC.md).
+
 ## 2.11.0+23 — 2026-09-10 · The background link (no Google, still)
 
 - **Stay connected — with nobody but BookNest**: an optional slim
