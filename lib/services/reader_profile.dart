@@ -8,6 +8,7 @@ class ReaderProfile {
   String? country;
   String? countryCode;
   String? gender;
+  int? birthYear;
   List<Map<String, String>> languages = const [];
   String? preferredLanguage;
 
@@ -27,6 +28,7 @@ class ReaderProfile {
       _instance.country = p['country']?.toString();
       _instance.countryCode = p['countryCode']?.toString();
       _instance.gender = p['gender']?.toString();
+      _instance.birthYear = (p['birthYear'] as num?)?.toInt();
       _instance.preferredLanguage = p['preferredLanguage']?.toString();
       if (p['languages'] is List) {
         _instance.languages = [
@@ -46,12 +48,14 @@ class ReaderProfile {
     String? country,
     String? countryCode,
     String? gender,
+    int? birthYear,
     List<Map<String, String>>? languages,
     String? preferredLanguage,
   }) {
     _instance.country = country ?? _instance.country;
     _instance.countryCode = countryCode ?? _instance.countryCode;
     _instance.gender = gender ?? _instance.gender;
+    _instance.birthYear = birthYear ?? _instance.birthYear;
     _instance.languages = languages ?? _instance.languages;
     _instance.preferredLanguage = preferredLanguage ?? _instance.preferredLanguage;
     _loaded = true;

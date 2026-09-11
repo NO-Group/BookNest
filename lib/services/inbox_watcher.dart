@@ -56,6 +56,7 @@ class InboxWatcher {
       await _sweepDirects(me);
       await _sweepClubs(me);
       await _sweepEvents(me);
+      await _heartbeat(me);
       _primed = true;
     } catch (_) {
       // Never let the watcher crash the loop; next tick tries again.
@@ -116,6 +117,23 @@ class InboxWatcher {
             : 'Group chat',
         body: _preview(text, fallback: 'New message in the club'),
       );
+    }
+  }
+
+  DateTime? _lastBeat;
+  static const Duration _beatInterval = Duration(minutes: 3);
+
+  /// Presence heartbeat: the edge stamps user_prefs.lastActive so the
+  /// moderator's insight screen can count who is online right now.
+  Future<void> _heartbeat(String me) async {
+    final now = DateTime.now();
+    final last = _lastBeat;
+    if (last != null && now.difference(last) < _beatInterval) return;
+    _lastBeat = now;
+    try {
+      await BackendApi.instance.heartbeat();
+    } catch (_) {
+      // Presence is a courtesy; never disturb the sweep.
     }
   }
 

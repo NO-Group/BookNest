@@ -319,6 +319,36 @@ class BackendApi {
 
   // ── Club group chat ─────────────────────────────────────────────────────
   /// Opens (or reuses) the membership-gated room for a group.
+  Future<Map<String, dynamic>?> heartbeat() =>
+      call('me.heartbeat', <String, dynamic>{});
+
+  Future<Map<String, dynamic>?> myStatus() =>
+      call('me.status', <String, dynamic>{});
+
+  Future<Map<String, dynamic>?> syncPhone(String phone) =>
+      call('me.syncPhone', <String, dynamic>{'phone': phone});
+
+  Future<Map<String, dynamic>?> adminInsights() =>
+      call('admin.insights', <String, dynamic>{});
+
+  Future<Map<String, dynamic>?> adminUsersList({int page = 1}) =>
+      call('admin.users.list', <String, dynamic>{'page': page});
+
+  Future<Map<String, dynamic>?> adminMassMessage({
+    required String title,
+    required String body,
+  }) =>
+      call('admin.massMessage', <String, dynamic>{
+        'title': title,
+        'body': body,
+      });
+
+  Future<Map<String, dynamic>?> massLatest() =>
+      call('mass.latest', <String, dynamic>{});
+
+  Future<Map<String, dynamic>?> chatShared(String conversationId) =>
+      call('chat.shared', <String, dynamic>{'conversationId': conversationId});
+
   Future<Map<String, dynamic>?> ensureClubChat(String kind, String clubId,
           {String unitId = '', String name = ''}) =>
       call('chat.ensure', <String, dynamic>{
@@ -387,6 +417,7 @@ class BackendApi {
     String? country,
     String? countryCode,
     String? gender,
+    int? birthYear,
     List<Map<String, String>>? languages,
     String? preferredLanguage,
   }) =>
@@ -394,6 +425,7 @@ class BackendApi {
         if (country != null) 'country': country,
         if (countryCode != null) 'countryCode': countryCode,
         if (gender != null) 'gender': gender,
+        if (birthYear != null) 'birthYear': birthYear,
         if (languages != null)
           'languages': [for (final l in languages) {'code': l['code'], 'level': l['level']}],
         if (preferredLanguage != null) 'preferredLanguage': preferredLanguage,

@@ -609,15 +609,13 @@ class _DMChatScreenState extends State<DMChatScreen> {
             icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
         actions: [
           IconButton(
-            tooltip: 'Shared media',
-            icon: const Icon(Icons.photo_library_outlined, size: 21),
-            onPressed: _photoAlbum().isEmpty
+            tooltip: 'Shared media & files',
+            icon: const Icon(Icons.folder_shared_outlined, size: 21),
+            onPressed: _conversationId == null
                 ? null
-                : () => openChatPhoto(
-                      context,
-                      _photoAlbum().first.url,
-                      album: _photoAlbum(),
-                      initialIndex: 0,
+                : () => context.push(
+                      '/shared/$_conversationId'
+                      '?title=${Uri.encodeComponent(widget.title)}',
                     ),
           ),
           IconButton(

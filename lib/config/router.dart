@@ -49,6 +49,11 @@ import '../presentation/screens/support/terms_screen.dart';
 import '../presentation/screens/settings/chat_backup_screen.dart';
 import '../presentation/screens/moderation/moderation_screen.dart';
 import '../presentation/screens/brainstorm/brainstorm_screen.dart';
+import '../presentation/screens/auth/suspend_gate_screen.dart';
+import '../presentation/screens/moderator/insights_screen.dart';
+import '../presentation/screens/moderator/mass_message_screen.dart';
+import '../presentation/screens/moderator/users_screen.dart';
+import '../presentation/screens/chat/shared_content_screen.dart';
 import '../presentation/screens/support/about_screen.dart';
 import '../presentation/screens/support/connection_status_screen.dart';
 import '../presentation/screens/support/permissions_screen.dart';
@@ -388,6 +393,25 @@ final GoRouter appRouter = GoRouter(
       path: '/club/:id',
       builder: (context, state) => ClubDetailScreen(
         clubId: state.pathParameters['id'] ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/moderator',
+      builder: (context, state) => const InsightsScreen(),
+    ),
+    GoRoute(
+      path: '/moderator/users',
+      builder: (context, state) => const UsersScreen(),
+    ),
+    GoRoute(
+      path: '/moderator/mass',
+      builder: (context, state) => const MassMessageScreen(),
+    ),
+    GoRoute(
+      path: '/shared/:conversationId',
+      builder: (context, state) => SharedContentScreen(
+        conversationId: state.pathParameters['conversationId'] ?? '',
+        title: state.uri.queryParameters['title'] ?? 'Chat',
       ),
     ),
     GoRoute(

@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.20.0+32 — 2026-09-11 · The moderator cockpit
+
+- **Insights screen** (Moderation → 📊): everything in numbers — total
+  readers, **online right now** (5-minute presence), a **gender chart**,
+  an **age-range chart** (13–17 up to 55+), and the size of every
+  library: books, quotes, reviews, posts, news, messages, groups of all
+  four kinds, open reports and active punishments. Custom-painted bars,
+  crisp at every DPI.
+- **Birth year is now compulsory** at account setup (alongside gender,
+  which already was) — it powers the age chart.
+- **All readers screen**: the moderator browses every account — email,
+  phone, name, status — and taps for the levers: **Suspend** (1–365
+  days, with a reason) or **Ban permanently**, and lift either. Every
+  action is enforced **at the identity layer** (Supabase auth
+  ban_duration — sessions die instantly) and mirrored in the moderation
+  store, all backend-audited.
+- **The gate suspended/banned readers see**: a full-screen, honest page
+  — what happened, the reason, the end date if suspended — with exactly
+  one way back: **mailing n.ogroup@yahoo.com** (tap to open the mail
+  app pre-filled).
+- **Broadcast**: the moderator writes once, every reader sees it once —
+  a full dialog on their next open. Perfect for feature launches.
+- **Phone numbers land in the Supabase auth dashboard**: the signup
+  phone is mirrored into the auth user's phone column through the
+  service-role admin API (once per install, silently).
+- **Shared media, docs, links & files**: every chat's header now opens
+  a full shared-content screen — photos, documents, links and files
+  tabs, served from the edge (full history, not just loaded messages).
+- Presence heartbeat, mass-message retention (latest ten), and
+  self-expiring suspensions round it out.
+
 ## 2.19.0+31 — 2026-09-11 · Typing states, media galleries & announcement power
 
 - **Typing states**: see "**typing…**" live under the chat title — in

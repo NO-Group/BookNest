@@ -206,9 +206,38 @@ async function isBanned(uid: string): Promise<boolean> {
   try {
     const ban = await (await dbFor('moderation')).collection('bans')
       .findOne({ userId: uid, active: true });
-    return !!ban;
+    if (!ban) return false;
+    // Temporary suspensions expire on their own.
+    if (ban.mode === 'suspend' && ban.until instanceof Date &&
+        ban.until.getTime() < Date.now()) {
+      await (await dbFor('moderation')).collection('bans').updateOne(
+        { userId: uid }, { $set: { active: false, expiredAt: new Date() } });
+      return false;
+    }
+    return true;
   } catch {
     return false;
+  }
+}
+
+/** The reader's active punishment, if any (for the in-app gate). */
+async function activePunishment(uid: string) {
+  try {
+    const ban = await (await dbFor('moderation')).collection('bans')
+      .findOne({ userId: uid, active: true });
+    if (!ban) return null;
+    if (ban.mode === 'suspend' && ban.until instanceof Date &&
+        ban.until.getTime() < Date.now()) {
+      return null;
+    }
+    return {
+      mode: String(ban.mode ?? 'ban'),
+      reason: String(ban.reason ?? ''),
+      until: ban.until ?? null,
+      at: ban.at ?? null,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -2993,6 +3022,11 @@ Deno.serve(async (req: Request) => {
         if (['female', 'male', 'nonbinary', 'prefer_not_to_say'].includes(String(p.gender))) {
           updates.gender = String(p.gender);
         }
+        if (p.birthYear != null && Number.isFinite(Number(p.birthYear))) {
+          const by = Number(p.birthYear);
+          const thisYear = new Date().getUTCFullYear();
+          if (by >= 1900 && by <= thisYear - 5) updates.birthYear = by;
+        }
         if (Array.isArray(p.languages)) {
           const langs = (p.languages as unknown[])
             .filter((l): l is { code: string; level: string } =>
@@ -4372,6 +4406,239 @@ Deno.serve(async (req: Request) => {
         })) });
       }
 
+      // ── moderator: the full picture ─────────────────────────────────
+      case 'admin.insights': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can view insights', 403);
+        const now = Date.now();
+        const prefs = (await dbFor('users')).collection('user_prefs');
+        const [readers, profilesCount] = await Promise.all([
+          prefs.countDocuments({}),
+          serviceClient().from('profiles')
+            .select('id', { count: 'exact', head: true })
+            .then((r) => r.count ?? 0).catch(() => 0),
+        ]);
+        // gender + age + presence aggregates (single pass over prefs)
+        const genders: Record<string, number> = {};
+        const ages = { '13-17': 0, '18-24': 0, '25-34': 0, '35-44': 0,
+                       '45-54': 0, '55+': 0, unset: 0 };
+        let online = 0;
+        const thisYear = new Date().getUTCFullYear();
+        let withBirth = 0;
+        await prefs.find({}).limit(5000).forEach((doc) => {
+          const g = String(doc.gender ?? 'unset');
+          genders[g] = (genders[g] ?? 0) + 1;
+          const by = Number(doc.birthYear ?? 0);
+          if (by >= 1900 && by <= thisYear) {
+            withBirth++;
+            const age = thisYear - by;
+            if (age < 18) ages['13-17']++;
+            else if (age < 25) ages['18-24']++;
+            else if (age < 35) ages['25-34']++;
+            else if (age < 45) ages['35-44']++;
+            else if (age < 55) ages['45-54']++;
+            else ages['55+']++;
+          } else {
+            ages.unset++;
+          }
+          const last = doc.lastActive instanceof Date
+            ? doc.lastActive.getTime() : 0;
+          if (now - last < 5 * 60 * 1000) online++;
+        });
+        const feed = await dbFor('feed');
+        const [books, quotes, posts, reviews, news] = await Promise.all([
+          (await dbFor('books')).collection('books').countDocuments({}),
+          feed.collection('posts').countDocuments({ type: 'quote' }),
+          feed.collection('posts').countDocuments({}),
+          (await dbFor('books')).collection('reviews').countDocuments({}),
+          feed.collection('posts').countDocuments({ type: 'news' }),
+        ]);
+        const clubCounts: Record<string, number> = {};
+        for (const kind of GROUP_KINDS) {
+          clubCounts[kind] = await (await dbFor('groups'))
+            .collection(kind).countDocuments({});
+        }
+        const [messages, openReports, activeBans] = await Promise.all([
+          (await dbFor('chats')).collection('messages').countDocuments({}),
+          (await dbFor('moderation')).collection('reports')
+            .countDocuments({ status: 'open' }),
+          (await dbFor('moderation')).collection('bans')
+            .countDocuments({ active: true }),
+        ]);
+        return ok({ insights: {
+          readers, profilesCount, online, genders, ages, withBirth,
+          books, quotes, posts, reviews, news,
+          groups: clubCounts, messages, openReports, activeBans,
+          generatedAt: new Date().toISOString(),
+        } });
+      }
+
+      // ── moderator: every reader, with punishment state ───────────────
+      case 'admin.users.list': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can list readers', 403);
+        const page = Math.max(1, Number(p.page ?? 1) || 1);
+        const perPage = 100;
+        let authUsers: { users: Record<string, unknown>[]; total?: number } = {
+          users: [],
+        };
+        try {
+          const res = await serviceClient().auth.admin.listUsers({
+            page, perPage,
+          } as never);
+          authUsers = {
+            users: (res.data?.users ?? []) as Record<string, unknown>[],
+            total: undefined,
+          };
+        } catch { /* fall back to prefs-only rows */ }
+        const prefsCol = (await dbFor('users')).collection('user_prefs');
+        const bansCol = (await dbFor('moderation')).collection('bans');
+        const rows = [];
+        for (const u of authUsers.users) {
+          const id = String(u.id ?? '');
+          const meta = (u.raw_user_meta_data ?? {}) as Record<string, unknown>;
+          const pref = await prefsCol.findOne({ userId: id });
+          const ban = await bansCol.findOne({ userId: id, active: true });
+          let suspended = false;
+          if (ban && ban.mode === 'suspend' &&
+              ban.until instanceof Date && ban.until.getTime() < Date.now()) {
+            suspended = false;
+          } else if (ban) {
+            suspended = true;
+          }
+          rows.push({
+            id,
+            email: String(u.email ?? ''),
+            phone: String(u.phone ?? meta.phone ?? ''),
+            username: String(meta.username ?? pref?.username ?? ''),
+            displayName: String(meta.display_name ?? ''),
+            gender: pref?.gender ?? null,
+            birthYear: pref?.birthYear ?? null,
+            country: pref?.country ?? null,
+            lastActive: pref?.lastActive ?? null,
+            createdAt: u.created_at ?? null,
+            lastSignIn: u.last_sign_in_at ?? null,
+            banned: ban ? String(ban.mode ?? 'ban') : null,
+            banReason: ban ? String(ban.reason ?? '') : null,
+            banUntil: ban?.until ?? null,
+          });
+        }
+        return ok({ users: rows, page });
+      }
+
+      // ── moderator: mass message to every reader ──────────────────────
+      case 'admin.massMessage': {
+        const uid = await adminUserId(req);
+        if (!uid) return fail('Only the overall moderator can broadcast', 403);
+        const title = String(p.title ?? '').trim().slice(0, 120);
+        const body = String(p.body ?? '').trim().slice(0, 2000);
+        if (!title || !body) return fail('A title and a message are required');
+        const doc = { title, body, sentBy: uid, createdAt: new Date() };
+        const col = (await dbFor('moderation')).collection('mass_messages');
+        await col.insertOne({ ...doc });
+        // Only the latest 10 are kept — it is a broadcast, not an inbox.
+        const keep = await col.find({}).sort({ createdAt: -1 })
+          .limit(10).toArray();
+        const keepIds = keep.map((r) => r._id);
+        await col.deleteMany({ _id: { $nin: keepIds } } as never);
+        await logAdmin(uid, 'massMessage', { title });
+        return ok({ sent: true });
+      }
+
+      case 'mass.latest': {
+        const rows = await (await dbFor('moderation'))
+          .collection('mass_messages')
+          .find({}).sort({ createdAt: -1 }).limit(1).toArray();
+        if (rows.length === 0) return ok({ message: null });
+        const r = rows[0];
+        return ok({ message: {
+          id: String(r._id),
+          title: r.title ?? '',
+          body: r.body ?? '',
+          at: r.createdAt ?? null,
+        } });
+      }
+
+      // ── reader: presence heartbeat + own punishment state ────────────
+      case 'me.heartbeat': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        await (await dbFor('users')).collection('user_prefs').updateOne(
+          { userId: uid },
+          { $set: { lastActive: new Date() }, $setOnInsert: { userId: uid } },
+          { upsert: true },
+        );
+        return ok({ ok: true });
+      }
+
+      case 'me.status': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        return ok({ punishment: await activePunishment(uid) });
+      }
+
+      // ── reader: mirror the phone into auth (dashboard column) ────────
+      case 'me.syncPhone': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const phone = String(p.phone ?? '').trim();
+        if (!/^\+?[0-9]{7,15}$/.test(phone)) {
+          return fail('A valid phone number is required');
+        }
+        try {
+          await serviceClient().auth.admin.updateUserById(uid, {
+            phone: phone.startsWith('+') ? phone : `+${phone}`,
+          } as never);
+          return ok({ synced: true });
+        } catch {
+          return fail('Could not sync the phone number right now', 503);
+        }
+      }
+
+      // ── chat: shared media / docs / links / files ────────────────────
+      case 'chat.shared': {
+        void sweepOldMessages();
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const conversationId = typeof p.conversationId === 'string'
+          ? p.conversationId : '';
+        if (!isHexId(conversationId)) {
+          return fail('A valid conversationId is required');
+        }
+        const room = await (await dbFor('chats'))
+          .collection('conversations')
+          .findOne({ _id: new ObjectId(conversationId) });
+        if (!room || room.type !== 'club') {
+          return fail('Conversation not found', 404);
+        }
+        if (String(room.unitId ?? '')) {
+          if (!(await isUnitMember(String(room.unitId), uid))) {
+            return fail('Join this department to browse its files', 403);
+          }
+        } else if (!(await isClubMember(
+            String(room.kind), String(room.clubId), uid))) {
+          return fail('Join this group to browse its files', 403);
+        }
+        const col = (await dbFor('chats')).collection('messages');
+        const base = { conversationId } as Record<string, unknown>;
+        const media = await col.find(
+          { ...base, type: 'image', mediaUrl: { $ne: null } })
+          .sort({ _id: -1 }).limit(120).toArray();
+        const files = await col.find(
+          { ...base, type: { $in: ['file', 'video'] },
+            mediaUrl: { $ne: null } })
+          .sort({ _id: -1 }).limit(120).toArray();
+        const linkRows = await col.find(
+          { ...base, text: { $regex: 'https?://', $options: 'i' } })
+          .sort({ _id: -1 }).limit(80).toArray();
+        const view = (m: MsgRow) => messageView(m);
+        return ok({
+          media: media.map((m) => view(m as MsgRow)),
+          files: files.map((m) => view(m as MsgRow)),
+          links: linkRows.map((m) => view(m as MsgRow)),
+        });
+      }
+
       case 'books.stats': {
         if (!isAnyId(p.bookId)) return fail('A valid bookId is required');
         const d = await dbFor('books');
@@ -4697,16 +4964,32 @@ Deno.serve(async (req: Request) => {
         if (!isAnyId(target)) return fail('A valid userId is required');
         if (target === uid) return fail('You cannot suspend yourself');
         const reason = String(p.reason ?? '').trim().slice(0, 300);
+        const mode = p.mode === 'suspend' ? 'suspend' : 'ban';
+        const days = Math.max(1, Math.min(365, Number(p.days ?? 7) || 7));
+        const until = mode === 'suspend'
+          ? new Date(Date.now() + days * 24 * 3600 * 1000)
+          : null;
         await (await dbFor('moderation')).collection('bans').updateOne(
           { userId: target },
           { $set: {
-            userId: target, reason, active: true,
+            userId: target, reason, mode,
+            until, active: true,
             bannedBy: uid, at: new Date(),
           } },
           { upsert: true },
         );
-        await logAdmin(uid, 'ban', { target, reason });
-        return ok({ banned: true });
+        // Enforced at the identity layer too: banned readers lose their
+        // session refresh; suspended ones for the suspension window.
+        try {
+          const hours = mode === 'ban'
+            ? '876000h'
+            : String(days * 24) + 'h';
+          await serviceClient().auth.admin.updateUserById(target, {
+            ban_duration: hours,
+          } as never);
+        } catch { /* app-level gate still holds */ }
+        await logAdmin(uid, mode, { target, reason, days: mode === 'suspend' ? days : null });
+        return ok({ banned: true, mode, until });
       }
 
       case 'admin.unban': {
@@ -4718,6 +5001,11 @@ Deno.serve(async (req: Request) => {
           { userId: target },
           { $set: { active: false, unbannedBy: uid, unbannedAt: new Date() } },
         );
+        try {
+          await serviceClient().auth.admin.updateUserById(target, {
+            ban_duration: 'none',
+          } as never);
+        } catch { /* already clear */ }
         await logAdmin(uid, 'unban', { target });
         return ok({ banned: false });
       }

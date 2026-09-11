@@ -10,6 +10,10 @@ import 'config/theme.dart';
 import 'services/home_widgets_service.dart';
 import 'services/push_service.dart';
 import 'services/call_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'presentation/screens/auth/suspend_gate_screen.dart';
+import 'services/backend_api.dart';
 import 'services/profile_layout.dart';
 import 'services/inbox_watcher.dart';
 import 'services/background_link.dart';
@@ -43,6 +47,9 @@ Future<void> main() async {
     };
     unawaited(CallService.instance.ensureInitialized());
     unawaited(loadProfileLayout());
+    unawaited(_checkPunishment());
+    unawaited(_checkBroadcast());
+    unawaited(_syncPhoneOnce());
     // BookNest's own background link (no Google): restores the foreground
     // service when the reader keeps it enabled.
     unawaited(LinkService.instance.ensureStartedIfPreferred());
@@ -102,12 +109,102 @@ Future<void> _startupAftercare() async {
   } catch (_) {}
 }
 
+/// Set when the signed-in reader is banned or suspended — the whole app
+/// yields to the appeal gate until it clears.
+final ValueNotifier<Map<String, dynamic>?> punishmentGate =
+    ValueNotifier<Map<String, dynamic>?>(null);
+
+/// Checks for a moderator broadcast the reader hasn't seen and greets
+/// them once with it. Best-effort; silence on any hiccup.
+Future<void> _checkBroadcast() async {
+  try {
+    final res = await BackendApi.instance.massLatest();
+    final message = res?['message'];
+    if (message is! Map) return;
+    final id = message['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('bn_mass_seen_$id') == true) return;
+    await prefs.setBool('bn_mass_seen_$id', true);
+    final context = rootNavigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: Row(children: [
+          const Icon(Icons.campaign_rounded, color: BookNestColors.cyan),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(message['title']?.toString() ?? 'News',
+                style: const TextStyle(
+                    fontSize: 17, fontWeight: FontWeight.w800)),
+          ),
+        ]),
+        content: Text(message['body']?.toString() ?? '',
+            style: const TextStyle(fontSize: 14, height: 1.45)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Got it',
+                  style: TextStyle(
+                      color: BookNestColors.cyan,
+                      fontWeight: FontWeight.w800))),
+        ],
+      ),
+    );
+  } catch (_) {}
+}
+
+/// Mirrors the signup phone into the auth user record so the phone
+/// column is filled in the Supabase dashboard. Runs once per install.
+Future<void> _syncPhoneOnce() async {
+  try {
+    final user = SupabaseService().auth.currentUser;
+    final phone = user?.userMetadata?['phone']?.toString() ?? '';
+    if (phone.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('bn_phone_synced') == true) return;
+    final res = await BackendApi.instance.syncPhone(phone);
+    if (res != null) await prefs.setBool('bn_phone_synced', true);
+  } catch (_) {}
+}
+
+/// Checks whether the signed-in reader is banned/suspended.
+Future<void> _checkPunishment() async {
+  try {
+    final res = await BackendApi.instance.myStatus();
+    final punishment = res?['punishment'];
+    punishmentGate.value = punishment is Map
+        ? Map<String, dynamic>.from(punishment)
+        : null;
+  } catch (_) {
+    punishmentGate.value = null;
+  }
+}
+
 class BookNestApp extends StatelessWidget {
   const BookNestApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
+    return ValueListenableBuilder<Map<String, dynamic>?>(
+      valueListenable: punishmentGate,
+      builder: (context, punishment, __) {
+        if (punishment != null) {
+          return MaterialApp(
+            title: 'BookNest',
+            debugShowCheckedModeBanner: false,
+            theme: BookNestTheme.lightTheme,
+            darkTheme: BookNestTheme.darkTheme,
+            home: SuspendGateScreen(
+              mode: punishment['mode']?.toString() ?? 'ban',
+              reason: punishment['reason']?.toString() ?? '',
+              until: DateTime.tryParse(punishment['until']?.toString() ?? ''),
+            ),
+          );
+        }
+        return ValueListenableBuilder<ThemeMode>(
       valueListenable: AppSettings.themeMode,
       builder: (context, mode, _) => MaterialApp.router(
         title: 'BookNest',
@@ -124,6 +221,8 @@ class BookNestApp extends StatelessWidget {
         supportedLocales: const [Locale('en')],
         routerConfig: appRouter,
       ),
+        );
+      },
     );
   }
 }

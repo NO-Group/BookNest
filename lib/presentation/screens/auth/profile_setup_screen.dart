@@ -24,6 +24,7 @@ class ProfileSetupScreen extends StatefulWidget {
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   CountryChoice? _country;
   String? _gender;
+  int? _birthYear;
   List<Map<String, String>> _languages = [];
   LanguageChoice _pickLanguage = bookNestLanguages.first;
   LanguageLevel _pickLevel = bookNestLanguageLevels[2]; // fluent
@@ -48,6 +49,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     setState(() {
       _country = country;
       _gender = p.gender;
+      _birthYear = p.birthYear;
       _languages = [
         for (final l in p.languages)
           if (l['code']!.isNotEmpty) Map<String, String>.from(l),
@@ -75,7 +77,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   }
 
   bool get _canSave =>
-      _country != null && _gender != null && _languages.isNotEmpty && !_saving;
+      _country != null &&
+        _gender != null &&
+        _birthYear != null &&
+        _languages.isNotEmpty &&
+        !_saving;
 
   Future<void> _addLanguage() async {
     final code = _pickLanguage.code;
@@ -101,6 +107,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       country: _country!.name,
       countryCode: _country!.code,
       gender: _gender,
+      birthYear: _birthYear,
       languages: _languages,
       preferredLanguage: _computedPreferred,
     );
@@ -116,6 +123,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       country: _country!.name,
       countryCode: _country!.code,
       gender: _gender,
+      birthYear: _birthYear,
       languages: _languages,
       preferredLanguage: res['preferredLanguage']?.toString() ??
           _computedPreferred,
@@ -215,6 +223,31 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   side: BorderSide(color: BookNestColors.cyan.withOpacity(.4)),
                 ),
             ],
+          ),
+          const SizedBox(height: 18),
+
+          // ── birth year (compulsory — powers the age chart) ──
+          _sectionLabel('Birth year', Icons.cake_outlined, dark),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<int>(
+            value: _birthYear,
+            dropdownColor: dark ? BookNestColors.navyDeep : Colors.white,
+            style: TextStyle(fontSize: 14, color: dark ? Colors.white : BookNestColors.navyDeep),
+            decoration: InputDecoration(
+              hintText: 'Select your birth year',
+              filled: true,
+              fillColor: cardColor,
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none),
+            ),
+            items: [
+              for (var y = DateTime.now().year - 13;
+                  y >= 1950;
+                  y--)
+                DropdownMenuItem(value: y, child: Text('$y')),
+            ],
+            onChanged: (v) => setState(() => _birthYear = v),
           ),
           const SizedBox(height: 18),
 

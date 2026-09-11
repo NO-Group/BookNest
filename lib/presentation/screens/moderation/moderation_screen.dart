@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
@@ -21,6 +22,18 @@ class ModerationScreen extends StatelessWidget {
           elevation: 0,
           title: const Text('Moderation',
               style: TextStyle(fontWeight: FontWeight.w800)),
+          actions: [
+            IconButton(
+              tooltip: 'Insights cockpit',
+              icon: const Icon(Icons.insights_rounded, size: 21),
+              onPressed: () => context.push('/moderator'),
+            ),
+            IconButton(
+              tooltip: 'Broadcast to everyone',
+              icon: const Icon(Icons.campaign_rounded, size: 21),
+              onPressed: () => context.push('/moderator/mass'),
+            ),
+          ],
           bottom: const TabBar(
             indicatorColor: BookNestColors.cyan,
             dividerColor: Colors.transparent,
