@@ -615,7 +615,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
                 ? null
                 : () => context.push(
                       '/shared/$_conversationId'
-                      '?title=${Uri.encodeComponent(widget.title)}',
+                      '?title=${Uri.encodeComponent(_peerName)}',
                     ),
           ),
           IconButton(
