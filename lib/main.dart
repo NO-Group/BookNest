@@ -125,9 +125,9 @@ Future<void> _checkBroadcast() async {
     if (id.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('bn_mass_seen_$id') == true) return;
-    await prefs.setBool('bn_mass_seen_$id', true);
     final context = rootNavigatorKey.currentContext;
     if (context == null || !context.mounted) return;
+    await prefs.setBool('bn_mass_seen_$id', true);
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(

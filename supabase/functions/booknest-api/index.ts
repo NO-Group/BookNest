@@ -4608,16 +4608,23 @@ Deno.serve(async (req: Request) => {
         const room = await (await dbFor('chats'))
           .collection('conversations')
           .findOne({ _id: new ObjectId(conversationId) });
-        if (!room || room.type !== 'club') {
-          return fail('Conversation not found', 404);
-        }
-        if (String(room.unitId ?? '')) {
+        if (!room) return fail('Conversation not found', 404);
+        if (room.type === 'dm') {
+          const memberIds = (room.memberIds as string[]) ?? [];
+          if (!memberIds.includes(uid)) {
+            return fail('This conversation is not yours', 403);
+          }
+        } else if (String(room.unitId ?? '')) {
           if (!(await isUnitMember(String(room.unitId), uid))) {
             return fail('Join this department to browse its files', 403);
           }
-        } else if (!(await isClubMember(
-            String(room.kind), String(room.clubId), uid))) {
-          return fail('Join this group to browse its files', 403);
+        } else if (room.type === 'club') {
+          if (!(await isClubMember(
+              String(room.kind), String(room.clubId), uid))) {
+            return fail('Join this group to browse its files', 403);
+          }
+        } else {
+          return fail('Conversation not found', 404);
         }
         const col = (await dbFor('chats')).collection('messages');
         const base = { conversationId } as Record<string, unknown>;
