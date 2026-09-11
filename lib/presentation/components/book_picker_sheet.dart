@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../config/theme.dart';
 import '../../services/backend_api.dart';
 import 'booknest_ui.dart';
+import 'skeleton_kit.dart';
 
 /// The group curator's book picker: live search over the whole BookNest
 /// catalogue, cover-first results, returns the picked book map
