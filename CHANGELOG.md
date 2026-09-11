@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.13.0+25 — 2026-09-11 · Threads, kind superpowers, buttery loading
+
+- **Thread comments**: post conversations are now true threads — replies
+  nest under their thread root with "View replies" expansion and a
+  "replying to" badge, and replying keeps context in the composer. The
+  server flattens threads one level deep so nothing ever becomes a maze.
+- **Organizations, fully built**: real organization pages — profile with
+  mission, join/leave, announcements with pinning, a named member
+  directory with roles, deputy assignment, and the members-only chat
+  (replaces the old placeholder screen).
+- **Schools, fully built**: everything an organization gets plus a
+  curated **reading list** (managers add books from the catalogue;
+  members tap straight in) and a **Top readers** leaderboard computed on
+  the server from real reading activity over 30 days — medals included.
+- **Communities, fully built**: the same complete experience for
+  community pages (also replaces a placeholder).
+- **Clubs — Book of the Month**: owners pick the club read from the
+  catalogue; every member sees the cover and a Read-now button. Also
+  fixed a long-standing bug where club owners' powers (moderation desk,
+  owner badge) could fail to resolve.
+- **Ultra-smooth loading**: shimmering skeleton kits that mirror the exact
+  geometry of the content they become now greet the feed, library,
+  discover shelves, DM list, contact pickers and comment threads — no
+  more spinners mid-page, no layout jumps, 60fps sweeps.
+- The Page-Flip Runner loader stays **unwired** by request — the component
+  ships but nothing uses it yet.
+
 ## 2.12.0+24 — 2026-09-11 · The Page-Flip Runner
 
 - **New signature loader asset**: an ice-white runner striding across an

@@ -1,5 +1,6 @@
 // lib/presentation/screens/feed/feed_screen.dart
 
+import 'dart:async' show unawaited;
 import 'dart:math';
 import 'dart:ui';
 
@@ -14,6 +15,7 @@ import '../../components/post_extras.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
+import '../../components/skeleton_kit.dart';
 import '../../components/report_sheet.dart';
 
 class FeedScreen extends StatefulWidget {
@@ -259,7 +261,7 @@ class _FeedScreenState extends State<FeedScreen>
                 // Posts list
                 Expanded(
                   child: _isLoading
-                      ? const Center(child: BookNestLoader(size: 64))
+                      ? const PostListSkeleton()
                       : _filteredPosts.isEmpty
                           ? _buildEmptyState()
                           : RefreshIndicator(
@@ -1317,11 +1319,16 @@ class _PostCommentsSheet extends StatefulWidget {
   State<_PostCommentsSheet> createState() => _PostCommentsSheetState();
 }
 
+/// Comments live as threads: top-level posts with expandable reply
+/// threads one level deep (Telegram/Reddit hybrid — replies always attach
+/// to their thread root and carry a "replying to" badge when needed).
 class _PostCommentsSheetState extends State<_PostCommentsSheet> {
   List<Map<String, dynamic>> _comments = [];
   bool _loading = true;
   bool _sending = false;
   final _input = TextEditingController();
+  Map<String, dynamic>? _replyTarget;
+  final Set<String> _expanded = {};
 
   @override
   void initState() {
@@ -1347,48 +1354,80 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
     });
   }
 
+  String _nameOf(Map<String, dynamic> c) {
+    if (c['mine'] == true) return 'You';
+    final profile = c['profile'];
+    if (profile is Map) {
+      final profileMap = Map<String, dynamic>.from(profile);
+      return (profileMap['username']?.toString().isNotEmpty ?? false)
+          ? profileMap['username'].toString()
+          : (profileMap['display_name']?.toString().isNotEmpty ?? false
+              ? profileMap['display_name'].toString()
+              : 'Reader');
+    }
+    return 'Reader';
+  }
+
+  List<Map<String, dynamic>> get _roots => _comments
+      .where((c) =>
+          c['parentId'] == null || c['parentId'].toString().isEmpty)
+      .toList();
+
+  List<Map<String, dynamic>> _repliesOf(String rootId) => _comments
+      .where((c) => c['parentId'].toString() == rootId)
+      .toList();
+
   Future<void> _send() async {
     final text = _input.text.trim();
     if (text.isEmpty || _sending) return;
     setState(() => _sending = true);
-    final res = await BackendApi.instance
-        .call('posts.comments.create', {'postId': widget.postId, 'text': text});
+    final target = _replyTarget;
+    final res = await BackendApi.instance.call('posts.comments.create', {
+      'postId': widget.postId,
+      'text': text,
+      if (target != null) 'parentId': target['id']?.toString() ?? '',
+    });
     if (!mounted) return;
     setState(() => _sending = false);
     if (res == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('The comment could not be posted — please try again.')));
+          content:
+              Text('The comment could not be posted — please try again.')));
       return;
     }
     _input.clear();
-    final comment = res['comment'];
+    final comment = res['comment'] is Map
+        ? Map<String, dynamic>.from(res['comment'] as Map)
+        : <String, dynamic>{
+            'text': text,
+            'createdAt': DateTime.now().toIso8601String(),
+            'mine': true,
+            if (target != null)
+              'parentId': target['parentId']?.toString().isNotEmpty == true
+                  ? target['parentId'].toString()
+                  : target['id'].toString(),
+            if (target != null) 'replyToName': _nameOf(target),
+          };
     setState(() {
-      if (comment is Map) {
-        _comments = [
-          Map<String, dynamic>.from(comment),
-          ..._comments,
-        ];
-      } else {
-        _comments = [
-          {'text': text, 'createdAt': DateTime.now().toIso8601String(), 'mine': true},
-          ..._comments,
-        ];
+      _comments = [..._comments, comment];
+      if (comment['parentId']?.toString().isNotEmpty ?? false) {
+        _expanded.add(comment['parentId'].toString());
       }
+      _replyTarget = null;
     });
+    // Silent re-sync so counts and ordering stay server-truth.
+    unawaited(_load());
   }
 
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final nameOf = (Map<String, dynamic> c) =>
-        c['profiles'] is Map
-            ? (c['profiles']['username']?.toString() ?? 'Reader')
-            : (c['mine'] == true ? 'You' : 'Reader');
+    final roots = _roots;
     return Padding(
       padding:
           EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * .72,
+        height: MediaQuery.sizeOf(context).height * .74,
         child: Column(
           children: [
             const SizedBox(height: 10),
@@ -1401,17 +1440,15 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
               ),
             ),
             const SizedBox(height: 12),
-            Text('Comments',
+            Text('Conversation',
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: Theme.of(context).colorScheme.onSurface)),
             Expanded(
               child: _loading
-                  ? const Center(
-                      child: BookNestLoader(size: 40),
-                    )
-                  : _comments.isEmpty
+                  ? const RowsSkeleton(count: 6)
+                  : roots.isEmpty
                       ? Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -1423,73 +1460,80 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
                                       .withOpacity(.5)),
                               const SizedBox(height: 10),
                               Text(
-                                'Be the first to comment',
+                                'Start the thread — say something first',
                                 style: TextStyle(
                                     color: Theme.of(context).hintColor),
                               ),
                             ],
                           ),
                         )
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                          itemCount: _comments.length,
-                          itemBuilder: (context, i) {
-                            final c = _comments[i];
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(14),
-                                color: dark
-                                    ? Colors.white.withOpacity(.05)
-                                    : BookNestColors.navyDeep.withOpacity(.04),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 11,
-                                        backgroundColor:
-                                            BookNestColors.navy,
-                                        child: Text(
-                                          nameOf(c)[0].toUpperCase(),
-                                          style: const TextStyle(
-                                              color: BookNestColors.cyan,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(nameOf(c),
-                                          style: const TextStyle(
-                                              fontSize: 12.5,
-                                              fontWeight: FontWeight.w700)),
-                                      const Spacer(),
-                                      Text(
-                                        c['createdAt']?.toString() ?? '',
-                                        style: TextStyle(
-                                            fontSize: 10.5,
-                                            color: Theme.of(context)
-                                                .hintColor),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(c['text']?.toString() ?? '',
-                                      style: TextStyle(
-                                          fontSize: 14,
-                                          height: 1.35,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurface)),
-                                ],
-                              ),
-                            );
-                          },
+                      : RefreshIndicator(
+                          color: BookNestColors.cyan,
+                          onRefresh: _load,
+                          child: ListView.builder(
+                            padding:
+                                const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                            itemCount: roots.length,
+                            itemBuilder: (context, i) {
+                              final root = roots[i];
+                              final replies = _repliesOf(
+                                  root['id']?.toString() ?? '');
+                              final expanded = _expanded.contains(
+                                  root['id']?.toString() ?? '');
+                              return _ThreadTile(
+                                comment: root,
+                                dark: dark,
+                                onReply: () => setState(
+                                    () => _replyTarget = root),
+                                replies: expanded ? replies : const [],
+                                replyCount: replies.length,
+                                expanded: expanded,
+                                onToggle: replies.isEmpty
+                                    ? null
+                                    : () => setState(() {
+                                          final id =
+                                              root['id'].toString();
+                                          expanded
+                                              ? _expanded.remove(id)
+                                              : _expanded.add(id);
+                                        }),
+                                onReplyReply: (reply) => setState(
+                                    () => _replyTarget = reply),
+                              );
+                            },
+                          ),
                         ),
             ),
+            if (_replyTarget != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+                child: Row(
+                  children: [
+                    Icon(Icons.subdirectory_arrow_right_rounded,
+                        size: 15,
+                        color: BookNestColors.cyan.withOpacity(.9)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Replying to ${_nameOf(_replyTarget!)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () =>
+                          setState(() => _replyTarget = null),
+                      child: Icon(Icons.close_rounded,
+                          size: 16,
+                          color:
+                              Theme.of(context).colorScheme.onSurface
+                                  .withOpacity(.6)),
+                    ),
+                  ],
+                ),
+              ),
             SafeArea(
               top: false,
               child: Padding(
@@ -1503,7 +1547,9 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
                         maxLines: 4,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: InputDecoration(
-                          hintText: 'Add a comment…',
+                          hintText: _replyTarget != null
+                              ? 'Add a reply…'
+                              : 'Add a comment…',
                           suffixIcon: _sending
                               ? const Padding(
                                   padding: EdgeInsets.all(12),
@@ -1531,6 +1577,183 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// One root comment with its (optional) expanded reply thread beneath.
+class _ThreadTile extends StatelessWidget {
+  const _ThreadTile({
+    required this.comment,
+    required this.dark,
+    required this.onReply,
+    required this.replies,
+    required this.replyCount,
+    required this.expanded,
+    required this.onToggle,
+    required this.onReplyReply,
+  });
+
+  final Map<String, dynamic> comment;
+  final bool dark;
+  final VoidCallback onReply;
+  final List<Map<String, dynamic>> replies;
+  final int replyCount;
+  final bool expanded;
+  final VoidCallback? onToggle;
+  final ValueChanged<Map<String, dynamic>> onReplyReply;
+
+  String get _name {
+    if (comment['mine'] == true) return 'You';
+    final profile = comment['profile'];
+    if (profile is Map) {
+      final m = Map<String, dynamic>.from(profile);
+      return (m['username']?.toString().isNotEmpty ?? false)
+          ? m['username'].toString()
+          : (m['display_name']?.toString().isNotEmpty ?? false
+              ? m['display_name'].toString()
+              : 'Reader');
+    }
+    return 'Reader';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: dark
+            ? Colors.white.withOpacity(.05)
+            : BookNestColors.navyDeep.withOpacity(.04),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CommentRow(comment: comment, name: _name, onReply: onReply),
+          if (replyCount > 0 && !expanded)
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 34),
+              child: GestureDetector(
+                onTap: onToggle,
+                child: Text(
+                  'View $replyCount ${replyCount == 1 ? 'reply' : 'replies'}',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: BookNestColors.cyan),
+                ),
+              ),
+            ),
+          if (expanded) ...[
+            if (replyCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 34, bottom: 2),
+                child: GestureDetector(
+                  onTap: onToggle,
+                  child: Text('Hide replies',
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withOpacity(.5))),
+                ),
+              ),
+            for (final reply in replies)
+              Padding(
+                padding: const EdgeInsets.only(top: 8, left: 34),
+                child: _CommentRow(
+                  comment: reply,
+                  name: (reply['mine'] == true
+                      ? 'You'
+                      : ((reply['profile'] is Map &&
+                              (Map<String,
+                                              dynamic>.from(
+                                                  reply['profile'] as Map)
+                                          ['username']?.toString() ??
+                                      '')
+                                  .isNotEmpty)
+                          ? Map<String, dynamic>.from(
+                                  reply['profile'] as Map)['username']
+                              .toString()
+                          : 'Reader')),
+                  onReply: () => onReplyReply(reply),
+                  replyBadge: reply['replyToName']?.toString(),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentRow extends StatelessWidget {
+  const _CommentRow({
+    required this.comment,
+    required this.name,
+    required this.onReply,
+    this.replyBadge,
+  });
+
+  final Map<String, dynamic> comment;
+  final String name;
+  final VoidCallback onReply;
+  final String? replyBadge;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 11,
+              backgroundColor: BookNestColors.navy,
+              child: Text(name[0].toUpperCase(),
+                  style: const TextStyle(
+                      color: BookNestColors.cyan,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(width: 8),
+            Text(name,
+                style: const TextStyle(
+                    fontSize: 12.5, fontWeight: FontWeight.w700)),
+            const Spacer(),
+            GestureDetector(
+              onTap: onReply,
+              child: Text('Reply',
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: BookNestColors.cyan.withOpacity(.85))),
+            ),
+          ],
+        ),
+        if (replyBadge != null && replyBadge!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 5, left: 30),
+            child: Text('↩ $replyBadge',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withOpacity(.55))),
+          ),
+        const SizedBox(height: 6),
+        Text(comment['text']?.toString() ?? '',
+            style: TextStyle(
+                fontSize: 14,
+                height: 1.35,
+                color: Theme.of(context).colorScheme.onSurface)),
+      ],
     );
   }
 }

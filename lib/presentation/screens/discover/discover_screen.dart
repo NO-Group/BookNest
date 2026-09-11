@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../components/booknest_ui.dart';
+import '../../components/skeleton_kit.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 
@@ -232,9 +233,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                 // Items list
                 Expanded(
                   child: _isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(color: BookNestColors.cyan),
-                        )
+                      ? const GroupCardsSkeleton()
                       : RefreshIndicator(
                           color: BookNestColors.cyan,
                           onRefresh: _loadAll,

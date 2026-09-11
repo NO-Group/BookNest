@@ -12,6 +12,7 @@ import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
+import '../../components/book_picker_sheet.dart';
 
 class ClubDetailScreen extends StatefulWidget {
   final String clubId;
@@ -32,6 +33,9 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
   List<Map<String, dynamic>> _books = const [];
   List<Map<String, dynamic>> _pending = const [];
   bool _isOwner = false;
+  bool _isManager = false;
+  Map<String, dynamic>? _potm;
+  bool _potmBusy = false;
   bool _modLoading = false;
   final Set<String> _deciding = {};
 
@@ -70,10 +74,21 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
           .call('books.list', {'clubId': widget.clubId, 'limit': 50});
       final books = (booksRes?['books'] as List?) ?? const [];
       final viewerId = SupabaseService().auth.currentUser?.id;
-      final owner = club['owner_id']?.toString() ?? '';
+      // groups docs store ownerId (camelCase); some older rows may carry
+      // owner_id — accept both so owner powers always resolve.
+      final owner =
+          (club['ownerId'] ?? club['owner_id'])?.toString() ?? '';
+      final vice = club['viceModeratorId']?.toString() ?? '';
+      final potm = club['potm'] is Map
+          ? Map<String, dynamic>.from(club['potm'] as Map)
+          : null;
       if (!mounted) return;
       setState(() {
         _club = Map<String, dynamic>.from(club as Map);
+        _potm = potm;
+        _isManager =
+            (viewerId != null && owner == viewerId) ||
+                (viewerId != null && vice == viewerId);
         _memberCount = (members as List).length;
         _books = (books as List)
             .map((row) => Map<String, dynamic>.from(row as Map))
@@ -212,6 +227,160 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
           const SnackBar(content: Text('Announcement removed.')));
       _load();
     }
+  }
+
+  List<Widget> _potmSection(ThemeData theme) {
+    final onSurface = theme.colorScheme.onSurface;
+    final potm = _potm;
+    return [
+      GlassPanel(
+        radius: 24,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.auto_stories_rounded,
+                    size: 19, color: BookNestColors.cyan),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('Book of the month',
+                      style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w800,
+                          color: onSurface)),
+                ),
+                if (_isManager && _potmBusy)
+                  const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: BookNestColors.cyan)),
+                if (_isManager && _potmBusy == false && potm != null)
+                  IconButton(
+                    tooltip: 'Clear the club read',
+                    onPressed: _clearPotm,
+                    icon: Icon(Icons.delete_outline_rounded,
+                        size: 18, color: onSurface.withOpacity(.5)),
+                  ),
+              ]),
+              const SizedBox(height: 8),
+              if (potm == null)
+                Text(
+                  _isManager
+                      ? 'Pick the book every member should read this month.'
+                      : 'The club has not picked its read yet.',
+                  style: TextStyle(
+                      fontSize: 12.5, color: onSurface.withOpacity(.6)),
+                )
+              else
+                Row(children: [
+                  GestureDetector(
+                    onTap: () => context
+                        .push('/book/${potm['bookId']?.toString() ?? ''}'),
+                    child: BookCover(
+                      coverUrl: potm['coverUrl']?.toString(),
+                      title: potm['title']?.toString() ?? 'Book',
+                      width: 62,
+                      height: 84,
+                      radius: 12,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(potm['title']?.toString() ?? 'Untitled',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: onSurface)),
+                        const SizedBox(height: 3),
+                        Text(
+                            'by ${potm['authorName']?.toString() ?? 'Unknown'}',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: onSurface.withOpacity(.6))),
+                        const SizedBox(height: 10),
+                        FilledButton.icon(
+                          onPressed: () => context.push(
+                              '/book/${potm['bookId']?.toString() ?? ''}'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: BookNestColors.navy,
+                            foregroundColor: BookNestColors.cyan,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 8),
+                          ),
+                          icon: const Icon(Icons.menu_book_rounded,
+                              size: 15),
+                          label: const Text('Read now',
+                              style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ]),
+              if (_isManager && potm == null) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: _potmBusy ? null : _pickPotm,
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                        color: BookNestColors.cyan.withOpacity(.55)),
+                    foregroundColor: BookNestColors.cyan,
+                  ),
+                  icon: const Icon(Icons.emoji_events_rounded, size: 17),
+                  label: const Text('Pick the club read',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ];
+  }
+
+  Future<void> _pickPotm() async {
+    if (_potmBusy) return;
+    final book = await showBookPicker(context, title: 'Pick the club read');
+    if (book == null) return;
+    setState(() => _potmBusy = true);
+    final res = await BackendApi.instance.call('clubs.potm.set', {
+      'groupId': widget.clubId,
+      'kind': 'clubs',
+      'bookId': book['id']?.toString() ?? '',
+    });
+    if (!mounted) return;
+    setState(() => _potmBusy = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res == null
+            ? 'Could not set the club read — try again.'
+            : '"${book['title']}" is this month\'s read. 📖')));
+    if (res != null) _load();
+  }
+
+  Future<void> _clearPotm() async {
+    if (_potmBusy) return;
+    setState(() => _potmBusy = true);
+    final res = await BackendApi.instance.call('clubs.potm.clear', {
+      'groupId': widget.clubId,
+      'kind': 'clubs',
+    });
+    if (!mounted) return;
+    setState(() => _potmBusy = false);
+    if (res == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not clear it — try again.')));
+      return;
+    }
+    _load();
   }
 
   @override
@@ -353,7 +522,12 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
+
+                      // ── book of the month (the club read) ──
+                      ..._potmSection(theme),
+
+                      const SizedBox(height: 12),
 
                       // ── moderation desk (owner only) ──
                       if (_isOwner) ...[

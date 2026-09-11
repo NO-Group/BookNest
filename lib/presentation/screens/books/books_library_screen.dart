@@ -7,6 +7,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/genre_service.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart' show BookNestLoader, TagChip, kBookNestGenres;
+import '../../components/skeleton_kit.dart';
 
 class BooksLibraryScreen extends StatefulWidget {
   const BooksLibraryScreen({super.key});
@@ -217,7 +218,7 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
             ),
             Expanded(
               child: _loading
-                  ? Center(child: const BookNestLoader(size: 64))
+                  ? const BookShelfSkeleton()
                   : RefreshIndicator(
                       color: BookNestColors.cyan,
                       onRefresh: _load,

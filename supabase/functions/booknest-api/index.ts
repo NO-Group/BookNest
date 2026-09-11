@@ -213,6 +213,21 @@ async function isBanned(uid: string): Promise<boolean> {
 }
 
 /** Resolves the device holding a background-link pass (no Google push). */
+/** Fetches display names for reader ids from profiles. */
+async function namesForUsers(ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (ids.length === 0) return out;
+  try {
+    const { data } = await serviceClient().from('profiles')
+      .select('id, display_name, username').in('id', ids);
+    for (const row of data ?? []) {
+      out.set(String(row.id),
+        String(row.display_name || row.username || 'Reader'));
+    }
+  } catch { /* names are a courtesy */ }
+  return out;
+}
+
 async function userIdFromLinkPass(raw: unknown): Promise<string | null> {
   const passId = String(raw ?? '').trim();
   if (!/^[a-f0-9]{64}$/.test(passId)) return null;
@@ -3133,7 +3148,7 @@ Deno.serve(async (req: Request) => {
       case 'posts.comments.list': {
         if (typeof p.postId !== 'string' || !p.postId) return fail('A postId is required');
         const rows = await (await dbFor('feed')).collection('post_comments')
-          .find({ postId: p.postId }).sort({ createdAt: -1 }).limit(100).toArray();
+          .find({ postId: p.postId }).sort({ createdAt: 1 }).limit(200).toArray();
         const authorIds = [...new Set(rows.map((r) => String(r.userId)))];
         const authors = new Map<string, Record<string, unknown>>();
         if (authorIds.length > 0) {
@@ -3147,6 +3162,9 @@ Deno.serve(async (req: Request) => {
             text: r.text ?? '',
             userId: r.userId,
             createdAt: r.createdAt,
+            parentId: r.parentId ?? null,
+            replyToName: r.replyToName ?? null,
+            replyCount: r.replyCount ?? 0,
             profile: authors.get(String(r.userId)) ??
               { username: 'reader', display_name: 'Reader', avatar_url: null },
           })),
@@ -3160,9 +3178,41 @@ Deno.serve(async (req: Request) => {
         const text = String(p.text ?? '').trim().slice(0, 1000);
         if (!text) return fail('Write something first');
         const feed = await dbFor('feed');
+        // Threads: an optional parent flattens to its root so replies sit
+        // exactly one level deep, with the reply target kept for the badge.
+        let parentId: string | null = null;
+        let replyToName: string | null = null;
+        if (typeof p.parentId === 'string' && isHexId(p.parentId)) {
+          const parent = await feed.collection('post_comments')
+            .findOne({ _id: new ObjectId(p.parentId), postId: p.postId });
+          if (parent) {
+            parentId = typeof parent.parentId === 'string' && parent.parentId
+              ? String(parent.parentId)
+              : String(parent._id);
+            const targetId =
+              typeof parent.parentId === 'string' && parent.parentId
+                ? await (async () => {
+                    const root = await feed.collection('post_comments')
+                      .findOne({ _id: new ObjectId(String(parent!.parentId)) });
+                    return root ? String(root.userId) : String(parent!.userId);
+                  })()
+                : String(parent.userId);
+            if (parent.replyToName) {
+              replyToName = String(parent.replyToName);
+            } else {
+              const names = await namesForUsers([String(parent.userId)]);
+              replyToName = names.get(String(parent.userId)) ?? null;
+            }
+          }
+        }
         const inserted = await feed.collection('post_comments').insertOne({
           postId: p.postId, userId: uid, text, createdAt: new Date(),
+          parentId, replyToName,
         });
+        if (parentId) {
+          await feed.collection('post_comments')
+            .updateOne({ _id: new ObjectId(parentId) }, { $inc: { replyCount: 1 } });
+        }
         await feed.collection('posts')
           .updateOne({ _id: p.postId }, { $inc: { commentCount: 1 } });
         const prof = await serviceClient().from('profiles')
@@ -3172,6 +3222,8 @@ Deno.serve(async (req: Request) => {
           text,
           userId: uid,
           createdAt: new Date(),
+          parentId,
+          replyToName,
           profile: prof.data ?? { username: 'reader', display_name: 'Reader', avatar_url: null },
         } });
       }
@@ -3201,6 +3253,175 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── groups: announcement forum (auto-created with every group) ──────
+      // ── kind superpowers: POTM, vice mods, school lists, leaderboards ────
+      async function groupManager(
+        kind: string, groupId: string, uid: string,
+      ): Promise<Record<string, unknown> | null> {
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return null;
+        const group = await (await dbFor('groups')).collection(kind)
+          .findOne({ _id: groupId } as never,
+            { projection: { ownerId: 1, viceModeratorId: 1, name: 1 } });
+        if (!group) return null;
+        const isManager =
+          group.ownerId === uid || group.viceModeratorId === uid;
+        return isManager ? group as Record<string, unknown> : null;
+      }
+
+      case 'clubs.potm.set': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'clubs');
+        const groupId = String(p.groupId ?? '');
+        const group = await groupManager(kind, groupId, uid);
+        if (!group) return fail('Only the group owner can pick the read', 403);
+        const bookId = String(p.bookId ?? '');
+        if (!isHexId(bookId)) return fail('A valid bookId is required');
+        const book = await (await dbFor('books')).collection('books')
+          .findOne({ _id: new ObjectId(bookId) },
+            { projection: { title: 1, authorName: 1, coverUrl: 1 } });
+        if (!book) return fail('That book does not exist', 404);
+        const potm = {
+          bookId,
+          title: String(book.title ?? 'Untitled').slice(0, 200),
+          authorName: String(book.authorName ?? 'Unknown').slice(0, 120),
+          coverUrl: typeof book.coverUrl === 'string' ? book.coverUrl : null,
+          setAt: new Date(),
+        };
+        await (await dbFor('groups')).collection(kind)
+          .updateOne({ _id: groupId } as never, { $set: { potm } });
+        return ok({ potm });
+      }
+
+      case 'clubs.potm.clear': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'clubs');
+        const groupId = String(p.groupId ?? '');
+        const group = await groupManager(kind, groupId, uid);
+        if (!group) return fail('Only the group owner can change the read', 403);
+        await (await dbFor('groups')).collection(kind)
+          .updateOne({ _id: groupId } as never, { $set: { potm: null } });
+        return ok({ cleared: true });
+      }
+
+      case 'groups.vice.set': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'organizations');
+        const groupId = String(p.groupId ?? '');
+        const col = (await dbFor('groups')).collection(kind);
+        const group = await col
+          .findOne({ _id: groupId } as never, { projection: { ownerId: 1 } });
+        if (!group) return fail('Group not found', 404);
+        if (group.ownerId !== uid) {
+          return fail('Only the owner can assign the deputy', 403);
+        }
+        const members = (await dbFor('groups')).collection(`${kind}_members`);
+        const target = typeof p.userId === 'string' ? p.userId : '';
+        if (!target) {
+          const previous = String(group.viceModeratorId ?? '');
+          await col.updateOne({ _id: groupId } as never,
+            { $set: { viceModeratorId: null } });
+          if (previous) {
+            await members.updateOne(
+              { groupId, userId: previous }, { $set: { role: 'member' } });
+          }
+          return ok({ viceModeratorId: null });
+        }
+        const member = await members.findOne({ groupId, userId: target });
+        if (!member) return fail('That reader is not a member', 404);
+        if (target === group.ownerId) {
+          return fail('The owner already leads this group');
+        }
+        const previous = String(group.viceModeratorId ?? '');
+        await col.updateOne({ _id: groupId } as never,
+          { $set: { viceModeratorId: target } });
+        await members.updateOne(
+          { groupId, userId: target }, { $set: { role: 'vice' } });
+        if (previous && previous !== target) {
+          await members.updateOne(
+            { groupId, userId: previous }, { $set: { role: 'member' } });
+        }
+        return ok({ viceModeratorId: target });
+      }
+
+      case 'schools.readinglist.add': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'schools');
+        const groupId = String(p.groupId ?? '');
+        const group = await groupManager(kind, groupId, uid);
+        if (!group) return fail('Only the school owner can curate the list', 403);
+        const bookId = String(p.bookId ?? '');
+        if (!isHexId(bookId)) return fail('A valid bookId is required');
+        const book = await (await dbFor('books')).collection('books')
+          .findOne({ _id: new ObjectId(bookId) },
+            { projection: { title: 1, authorName: 1, coverUrl: 1 } });
+        if (!book) return fail('That book does not exist', 404);
+        const doc = await (await dbFor('groups')).collection(kind)
+          .findOne({ _id: groupId } as never,
+            { projection: { readingList: 1 } });
+        const list = Array.isArray(doc?.readingList) ? doc!.readingList : [];
+        if (list.some((e) => e && e.bookId === bookId)) {
+          return fail('Already on the reading list');
+        }
+        const entry = {
+          bookId,
+          title: String(book.title ?? 'Untitled').slice(0, 200),
+          authorName: String(book.authorName ?? 'Unknown').slice(0, 120),
+          coverUrl: typeof book.coverUrl === 'string' ? book.coverUrl : null,
+          addedAt: new Date(),
+        };
+        await (await dbFor('groups')).collection(kind).updateOne(
+          { _id: groupId } as never,
+          { $push: { readingList: { $each: [entry], $slice: -40 } } });
+        return ok({ entry });
+      }
+
+      case 'schools.readinglist.remove': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'schools');
+        const groupId = String(p.groupId ?? '');
+        const group = await groupManager(kind, groupId, uid);
+        if (!group) return fail('Only the school owner can curate the list', 403);
+        const bookId = String(p.bookId ?? '');
+        await (await dbFor('groups')).collection(kind).updateOne(
+          { _id: groupId } as never,
+          { $pull: { readingList: { bookId } } });
+        return ok({ removed: bookId });
+      }
+
+      case 'schools.leaderboard': {
+        const groupId = typeof p.groupId === 'string' ? p.groupId : '';
+        if (!groupId) return fail('A valid groupId is required');
+        const kind = String(p.kind ?? 'schools');
+        const memberRows = await (await dbFor('groups'))
+          .collection(`${kind}_members`)
+          .find({ groupId }).limit(500).toArray();
+        const ids = memberRows.map((m) => String(m.userId));
+        if (ids.length === 0) return ok({ leaders: [] });
+        const since = ObjectId.createFromTime(
+          Math.floor((Date.now() - 30 * 24 * 3600 * 1000) / 1000));
+        const rows = await (await dbFor('social')).collection('book_views')
+          .aggregate([
+            { $match: { userId: { $in: ids }, _id: { $gte: since } } },
+            { $group: { _id: '$userId', books: { $addToSet: '$bookId' } } },
+            { $project: { distinctBooks: { $size: '$books' } } },
+            { $sort: { distinctBooks: -1, _id: 1 } },
+            { $limit: 10 },
+          ]).toArray();
+        const names = await namesForUsers(rows.map((r) => String(r._id)));
+        return ok({
+          leaders: rows.map((r, i) => ({
+            rank: i + 1,
+            userId: String(r._id),
+            name: names.get(String(r._id)) ?? 'Reader',
+            books: r.distinctBooks ?? 0,
+          })),
+        });
+      }
+
       case 'groups.announcements.list': {
         const groupId = typeof p.groupId === 'string' ? p.groupId : '';
         if (!groupId) return fail('A valid groupId is required');

@@ -9,6 +9,7 @@ import '../../components/chat_kit.dart';
 import '../../../services/chat_store.dart';
 import '../../../services/chat_backup_service.dart';
 import '../../components/booknest_ui.dart';
+import '../../components/skeleton_kit.dart';
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
@@ -329,8 +330,7 @@ class _DMListScreenState extends State<DMListScreen> {
             const SizedBox(height: 8),
             Expanded(
               child: _loading
-                  ? Center(
-                      child: BookNestLoader(size: 44))
+                  ? const RowsSkeleton(count: 6)
                   : RefreshIndicator(
                       color: BookNestColors.cyan,
                       onRefresh: _load,
@@ -460,11 +460,10 @@ class _DMListScreenState extends State<DMListScreen> {
           future: _directory,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return Center(
-                  child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: BookNestLoader(size: 44),
-              ));
+              return const Padding(
+                padding: EdgeInsets.all(8),
+                child: RowsSkeleton(count: 4),
+              );
             }
             final contacts = snapshot.data ?? [];
             if (contacts.isEmpty) {
