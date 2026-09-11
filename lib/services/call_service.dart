@@ -357,7 +357,7 @@ class RealtimeChannelPair {
 
   Future<void> subscribe({RealtimeEvent? onEvent}) async {
     _onEvent = onEvent;
-    _channel = client.client.channel(channelName);
+    _channel = client.channel(channelName);
     for (final event in const [
       'ring', 'accepted', 'offer', 'answer', 'ice', 'connected',
       'declined', 'bye',
@@ -379,7 +379,7 @@ class RealtimeChannelPair {
 
   Future<void> teardown() async {
     try {
-      await client.client.removeChannel(_channel);
+      await client.removeChannel(_channel);
     } catch (_) {}
     _channel = null;
   }
@@ -398,7 +398,7 @@ class RealtimePersonal {
   dynamic _channel;
 
   Future<void> subscribe() async {
-    _channel = client.client.channel(channelName);
+    _channel = client.channel(channelName);
     _channel.onBroadcast(event: 'ring', callback: (payload) {
       if (payload is Map) onRing(payload);
     });

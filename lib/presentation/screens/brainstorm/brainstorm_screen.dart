@@ -284,9 +284,10 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
                                             size: 18,
                                             color: BookNestColors.cyan,
                                           ),
-                                          if ((idea['likeCount']
-                                                      as num?)?
-                                                  .toInt() !=
+                                          if (((idea['likeCount']
+                                                          as num?)
+                                                      ?.toInt() ??
+                                                  0) !=
                                               0) ...[
                                             const SizedBox(width: 5),
                                             Text(

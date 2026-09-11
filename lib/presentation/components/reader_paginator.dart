@@ -112,7 +112,7 @@ class ReaderPaginator {
     return pages;
   }
 
-  static String words(String markdown) => markdown
+  static int words(String markdown) => markdown
       .split(RegExp(r'\s+'))
       .where((w) => w.trim().isNotEmpty)
       .length;
