@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
+import '../../../services/reader_profile.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -24,7 +25,17 @@ class _SplashScreenState extends State<SplashScreen> {
 
     final session = SupabaseService().auth.currentSession;
     if (session != null) {
-      context.go('/feed');
+      // Compulsory profile: gender and birth year power the moderator's
+      // insights — readers who slipped past setup finish it here first.
+      await ReaderProfile.ensureLoaded();
+      final profile = ReaderProfile.instance;
+      if (!mounted) return;
+      if ((profile.gender == null || profile.gender!.isEmpty) ||
+          profile.birthYear == null) {
+        context.go('/profile-setup');
+      } else {
+        context.go('/feed');
+      }
     } else {
       context.go('/login');
     }

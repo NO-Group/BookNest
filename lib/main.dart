@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'presentation/screens/auth/suspend_gate_screen.dart';
 import 'services/backend_api.dart';
+import 'services/punishment_gate.dart';
 import 'services/profile_layout.dart';
 import 'services/inbox_watcher.dart';
 import 'services/background_link.dart';
@@ -47,7 +48,7 @@ Future<void> main() async {
     };
     unawaited(CallService.instance.ensureInitialized());
     unawaited(loadProfileLayout());
-    unawaited(_checkPunishment());
+    unawaited(refreshPunishmentGate());
     unawaited(_checkBroadcast());
     unawaited(_syncPhoneOnce());
     // BookNest's own background link (no Google): restores the foreground
@@ -109,11 +110,6 @@ Future<void> _startupAftercare() async {
   } catch (_) {}
 }
 
-/// Set when the signed-in reader is banned or suspended — the whole app
-/// yields to the appeal gate until it clears.
-final ValueNotifier<Map<String, dynamic>?> punishmentGate =
-    ValueNotifier<Map<String, dynamic>?>(null);
-
 /// Checks for a moderator broadcast the reader hasn't seen and greets
 /// them once with it. Best-effort; silence on any hiccup.
 Future<void> _checkBroadcast() async {
@@ -168,19 +164,6 @@ Future<void> _syncPhoneOnce() async {
     final res = await BackendApi.instance.syncPhone(phone);
     if (res != null) await prefs.setBool('bn_phone_synced', true);
   } catch (_) {}
-}
-
-/// Checks whether the signed-in reader is banned/suspended.
-Future<void> _checkPunishment() async {
-  try {
-    final res = await BackendApi.instance.myStatus();
-    final punishment = res?['punishment'];
-    punishmentGate.value = punishment is Map
-        ? Map<String, dynamic>.from(punishment)
-        : null;
-  } catch (_) {
-    punishmentGate.value = null;
-  }
 }
 
 class BookNestApp extends StatelessWidget {

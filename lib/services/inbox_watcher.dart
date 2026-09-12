@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'backend_api.dart';
 import 'background_link.dart';
 import 'notification_service.dart';
+import 'punishment_gate.dart';
 import 'supabase_service.dart';
 
 /// Zero-external message notifications. While BookNest is alive — in hand
@@ -57,6 +58,7 @@ class InboxWatcher {
       await _sweepClubs(me);
       await _sweepEvents(me);
       await _heartbeat(me);
+      await refreshPunishmentGate();
       _primed = true;
     } catch (_) {
       // Never let the watcher crash the loop; next tick tries again.

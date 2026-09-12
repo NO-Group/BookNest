@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.20.1+33 — 2026-09-11 · Cockpit hardening pass
+
+- **The compulsory profile can no longer be skipped**: readers who slip
+  past account setup (killed the app mid-setup, reinstalled onto an
+  existing account) are met by the profile screen at launch until gender
+  and birth year are in — the insights charts stay honest.
+- **Live enforcement**: a suspension or ban now lands **while the app is
+  open** — the sweep re-checks punishment state (throttled to one call
+  every three minutes) and the appeal gate rises on the spot, then
+  clears itself when the sentence expires or is lifted.
+
 ## 2.20.0+32 — 2026-09-11 · The moderator cockpit
 
 - **Insights screen** (Moderation → 📊): everything in numbers — total
