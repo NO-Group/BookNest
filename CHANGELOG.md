@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.21.0+34 — 2026-09-11 · Production polish round
+
+**Upgrades:**
+- **Emotes, reborn**: every BookNest emoji now plays a cinematic loop —
+  a breathing glow in its own color under the artwork, a light streak
+  that sweeps across it, a springy entrance, and real per-emote motion:
+  hearts **double-thump**, laughs **hop with squash-and-stretch**, stars
+  **twinkle**, flames **flicker**, the rest float with a gentle sway.
+- **Chat video player**: scrubbable seek bar, **1× / 1.5× / 2× playback
+  speed**, mute, fullscreen — comfortable in-chat viewing.
+- **Photo editor**: new **saturation** and **warmth** sliders, plus
+  **rotate, mirror and reset** — on top of the filter presets,
+  brightness and contrast. What you see is exactly what gets sent.
+- **Camera**: one-tap **lens presets** (1×, 2×, max) above the zoom
+  slider; sound already records with every video.
+- **Instant loading (aggressive caching)**: feeds, shelves and inboxes
+  now serve **stale-while-revalidate** — the last good answer renders
+  instantly (up to 10 minutes old) and a quiet background refresh
+  updates it. Screens never stare at spinners for data we've seen.
+- **Swipe left to reply** — any bubble, either direction; the reply
+  arrow appears on the side you drag.
+
+**Verified working end-to-end:** edit published books · save drafts
+(with dashboard badges) · remix/sequel with traveling marks · Book IDs
+that auto-chain sequels · Act/Scene/Part unit types · post views and
+reshares · the real gems economy (daily, streaks, author payouts,
+boosts) · live reactions · the full moderator cockpit · phone numbers
+in the Supabase auth dashboard · shared docs/links/files · production
+signing (`key/booknest-release.jks`, alias booknest) on every release
+build. User-facing copy swept — no dev text on any screen.
+
 ## 2.20.1+33 — 2026-09-11 · Cockpit hardening pass
 
 - **The compulsory profile can no longer be skipped**: readers who slip

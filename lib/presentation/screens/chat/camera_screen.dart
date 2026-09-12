@@ -312,7 +312,71 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
               if (_maxZoom > 1.05)
                 Container(
                   margin: const EdgeInsets.only(bottom: 10, left: 44, right: 44),
-                  child: Row(
+                  child: Column(children: [
+                    // Lens presets: 1× wide, 2× close, max reach.
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (final preset in const [1.0, 2.0])
+                          if (_maxZoom >= preset)
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 5),
+                              child: GestureDetector(
+                                onTap: () => _setZoom(preset),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 11, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: (_zoom - preset).abs() < .15
+                                        ? BookNestColors.cyan
+                                            .withOpacity(.85)
+                                        : Colors.white.withOpacity(.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                      preset == preset.roundToDouble()
+                                          ? '${preset.round()}×'
+                                          : '$preset×',
+                                      style: TextStyle(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w900,
+                                          color: (_zoom - preset).abs() < .15
+                                              ? BookNestColors.navyDeep
+                                              : Colors.white)),
+                                ),
+                              ),
+                            ),
+                        if (_maxZoom > 2.2)
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 5),
+                            child: GestureDetector(
+                              onTap: () => _setZoom(_maxZoom),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 11, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: _zoom > _maxZoom - .4
+                                      ? BookNestColors.cyan.withOpacity(.85)
+                                      : Colors.white.withOpacity(.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                    '${_maxZoom.round()}×',
+                                    style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w900,
+                                        color: _zoom > _maxZoom - .4
+                                            ? BookNestColors.navyDeep
+                                            : Colors.white)),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
                     children: [
                       const Icon(Icons.zoom_in_rounded,
                           color: Colors.white70, size: 18),
@@ -333,6 +397,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                               fontWeight: FontWeight.w700)),
                     ],
                   ),
+                  ]),
                 ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -452,7 +517,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
               Text(
                 _mode == CameraMode.video
                     ? 'BookNest camera  ·  video with sound'
-                    : 'BookNest camera  ·  filters on the next step',
+                    : 'BookNest camera  ·  photo editing next',
                 style: TextStyle(
                     color: Colors.white60,
                     fontSize: 11.5,

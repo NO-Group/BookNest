@@ -25,11 +25,15 @@ class BackendApi {
   bool _checked = false;
   bool _available = false;
 
-  // ── EphemCache: short-lived read-through cache for list reads. ──────
-  // Feeds, shelves and inboxes answer from memory for 60 seconds, so
-  // screens snap open instantly and the network breathes. Any write in
-  // the same domain drops the cache so fresh data is never hidden.
+  // ── EphemCache: stale-while-revalidate for list reads. ─────────────
+  // Fresh (60s) reads answer from memory outright. STALE reads (up to
+  // 10 minutes old) answer instantly too — and a background refresh
+  // updates the entry so the next paint is current. Screens never wait
+  // on the network when we have seen the answer before, and any write
+  // in the same domain drops the cache so fresh data is never hidden.
   static const Duration _cacheTtl = Duration(seconds: 60);
+  static const Duration _staleTtl = Duration(minutes: 10);
+  final Set<String> _revalidating = {};
   static const Set<String> _cacheable = {
     'posts.list',
     'books.list',
@@ -88,6 +92,36 @@ class BackendApi {
     return call(action, payload);
   }
 
+  /// Quietly refreshes a stale cache entry in the background. Failures
+  /// are silent — the reader simply keeps seeing the last good answer.
+  void _revalidate(
+      String action, Map<String, dynamic> payload, String key) {
+    if (_revalidating.contains(key)) return;
+    _revalidating.add(key);
+    () async {
+      try {
+        final response = await _client.functions.invoke(
+          AppConfig.edgeFunctionName,
+          body: <String, dynamic>{'action': action, 'payload': payload},
+        );
+        final data = response.data;
+        if (data is Map && data['ok'] == true) {
+          final result = data['data'];
+          if (result is Map) {
+            _cache[key] = (
+              data: Map<String, dynamic>.from(result),
+              at: DateTime.now(),
+            );
+          }
+        }
+      } catch (_) {
+        // Keep the stale answer; try again next call.
+      } finally {
+        _revalidating.remove(key);
+      }
+    }();
+  }
+
   /// True once the edge function has answered successfully at least once
   /// during this app session.
   bool get available => _available;
@@ -114,8 +148,13 @@ class BackendApi {
     if (_checked && !_available) return null;
     final key = _cacheKey(action, payload);
     final cached = _cache[key];
-    if (cached != null &&
-        DateTime.now().difference(cached.at) < _cacheTtl) {
+    final age = cached == null ? null : DateTime.now().difference(cached.at);
+    if (cached != null && age! < _cacheTtl) {
+      return cached.data;
+    }
+    if (cached != null && age! < _staleTtl) {
+      // Stale-while-revalidate: instant answer, quiet refresh behind it.
+      _revalidate(action, payload, key);
       return cached.data;
     }
     try {

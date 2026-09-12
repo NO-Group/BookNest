@@ -25,6 +25,10 @@ class _PhotoEditScreenState extends State<PhotoEditScreen> {
   int _filterIndex = 0;
   double _brightness = 1; // 0.5 – 1.5
   double _contrast = 1; // 0.5 – 1.5
+  double _saturation = 1; // 0 – 2
+  double _warmth = 0; // -1 cool … +1 warm
+  int _quarterTurns = 0;
+  bool _flip = false;
   bool _exporting = false;
 
   static const List<({String label, IconData icon, List<double> matrix})>
@@ -155,7 +159,23 @@ class _PhotoEditScreenState extends State<PhotoEditScreen> {
       0.0, 0.0, c, 0.0, (0.5 * (1 - c)) * 255 + (b - 1) * 96,
       0.0, 0.0, 0.0, 1.0, 0.0,
     ];
-    return _multiply(f, cm);
+    // Desaturate → saturate (luminance-weighted).
+    final sat = _saturation;
+    final List<double> sm = [
+      (1 - sat) * .213 + sat, (1 - sat) * .715, (1 - sat) * .072, 0, 0,
+      (1 - sat) * .213, (1 - sat) * .715 + sat, (1 - sat) * .072, 0, 0,
+      (1 - sat) * .213, (1 - sat) * .715, (1 - sat) * .072 + sat, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+    // Warmth nudges red up / blue down (and vice versa).
+    final w = _warmth * 22;
+    final List<double> wm = [
+      1, 0, 0, 0, w,
+      0, 1, 0, 0, 0,
+      0, 0, 1, 0, -w,
+      0, 0, 0, 1, 0,
+    ];
+    return _multiply(f, _multiply(cm, _multiply(sm, wm)));
   }
 
   static List<double> _multiply(List<double> a, List<double> b) {
@@ -245,12 +265,17 @@ class _PhotoEditScreenState extends State<PhotoEditScreen> {
             child: Center(
               child: RepaintBoundary(
                 key: _renderKey,
-                child: ColorFiltered(
-                  colorFilter:
-                      ColorFilter.matrix(_combinedMatrix),
-                  child: Image.memory(
-                    bytes,
-                    fit: BoxFit.contain,
+                child: Transform.flip(
+                  flipX: _flip,
+                  child: RotatedBox(
+                    quarterTurns: _quarterTurns,
+                    child: ColorFiltered(
+                      colorFilter: ColorFilter.matrix(_combinedMatrix),
+                      child: Image.memory(
+                        bytes,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -346,6 +371,69 @@ class _PhotoEditScreenState extends State<PhotoEditScreen> {
                     ),
                   ],
                 ),
+                // Saturation / warmth
+                Row(
+                  children: [
+                    const Icon(Icons.palette_outlined,
+                        color: Colors.white70, size: 18),
+                    Expanded(
+                      child: Slider(
+                        value: _saturation,
+                        min: 0,
+                        max: 2,
+                        activeColor: BookNestColors.cyan,
+                        onChanged: (v) => setState(() => _saturation = v),
+                      ),
+                    ),
+                    const Icon(Icons.thermostat_rounded,
+                        color: Colors.white70, size: 18),
+                    Expanded(
+                      child: Slider(
+                        value: _warmth,
+                        min: -1,
+                        max: 1,
+                        activeColor: BookNestColors.cyan,
+                        onChanged: (v) => setState(() => _warmth = v),
+                      ),
+                    ),
+                  ],
+                ),
+                // Rotate / flip
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  IconButton(
+                    tooltip: 'Rotate',
+                    icon: const Icon(Icons.rotate_right_rounded,
+                        color: Colors.white70),
+                    onPressed: () => setState(
+                        () => _quarterTurns = (_quarterTurns + 1) % 4),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: _flip ? 'Un-mirror' : 'Mirror',
+                    icon: Icon(
+                        _flip
+                            ? Icons.flip_rounded
+                            : Icons.flip_outlined,
+                        color: _flip
+                            ? BookNestColors.cyan
+                            : Colors.white70),
+                    onPressed: () => setState(() => _flip = !_flip),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Reset edits',
+                    icon: const Icon(Icons.restart_alt_rounded,
+                        color: Colors.white70),
+                    onPressed: () => setState(() {
+                      _brightness = 1;
+                      _contrast = 1;
+                      _saturation = 1;
+                      _warmth = 0;
+                      _quarterTurns = 0;
+                      _flip = false;
+                    }),
+                  ),
+                ]),
               ],
             ),
           ),

@@ -322,26 +322,24 @@ class _ChatBubbleState extends State<ChatBubble>
   }
 
   // ── Swipe-to-reply ──────────────────────────────────────────────────
-  double _swipe = 0;
-
-  /// +1 for bubbles on the left (drag right), −1 for mine (drag left).
-  double get _swipeDir => widget.mine ? -1 : 1;
+  // Signed drag: negative = leftward, positive = rightward. Either
+  // direction replies — a leftward swipe always works, on every bubble.
+  double _swipeSigned = 0;
 
   void _onSwipeUpdate(DragUpdateDetails d) {
     if (widget.onReply == null) return;
     setState(() {
-      final next = _swipe + d.delta.dx * _swipeDir;
-      _swipe = next.clamp(0.0, 88.0);
+      _swipeSigned = (_swipeSigned + d.delta.dx).clamp(-88.0, 88.0);
     });
   }
 
   void _onSwipeEnd(DragEndDetails d) {
     if (widget.onReply == null) return;
-    if (_swipe >= 56) {
+    if (_swipeSigned.abs() >= 56) {
       HapticFeedback.mediumImpact();
       widget.onReply!();
     }
-    setState(() => _swipe = 0);
+    setState(() => _swipeSigned = 0);
   }
 
   void _fireBurst() {
@@ -737,7 +735,7 @@ class _ChatBubbleState extends State<ChatBubble>
               children: [
                 if (replyStrip != null) replyStrip,
                 Transform.translate(
-                  offset: Offset(_swipe * _swipeDir, 0),
+                  offset: Offset(_swipeSigned, 0),
                   child: bubbleStack,
                 ),
                 if (hasReactions)
@@ -798,16 +796,16 @@ class _ChatBubbleState extends State<ChatBubble>
                   ),
               ],
             ),
-            // Reply arrow revealed by the swipe.
-            if (_swipe > 6)
+            // Reply arrow revealed by the swipe, on the dragged side.
+            if (_swipeSigned.abs() > 6)
               Positioned(
                 top: 0,
                 bottom: 0,
-                left: mine ? 0 : null,
-                right: mine ? null : 0,
+                left: _swipeSigned < 0 ? 0 : null,
+                right: _swipeSigned < 0 ? null : 0,
                 child: IgnorePointer(
                   child: Opacity(
-                    opacity: (_swipe / 56).clamp(0.0, 1.0),
+                    opacity: (_swipeSigned.abs() / 56).clamp(0.0, 1.0),
                     child: Container(
                       margin: const EdgeInsets.symmetric(vertical: 6),
                       padding: const EdgeInsets.all(8),
@@ -986,6 +984,7 @@ class _VideoContent extends StatefulWidget {
 
 class _VideoContentState extends State<_VideoContent> {
   late final VideoPlayerController _controller;
+  double _speed = 1.0;
   bool _ready = false;
   bool _failed = false;
 
@@ -1081,23 +1080,69 @@ class _VideoContentState extends State<_VideoContent> {
                       children: [
                         ValueListenableBuilder<VideoPlayerValue>(
                           valueListenable: _controller,
-                          builder: (context, value, _) => Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(2),
-                              child: LinearProgressIndicator(
-                                value: value.duration.inMilliseconds == 0
-                                    ? 0
-                                    : value.position.inMilliseconds /
-                                        value.duration.inMilliseconds,
-                                minHeight: 3.5,
-                                backgroundColor: Colors.white24,
-                                valueColor: const AlwaysStoppedAnimation(
-                                    BookNestColors.cyan),
+                          builder: (context, value, _) {
+                            final duration =
+                                value.duration.inMilliseconds.toDouble();
+                            return Expanded(
+                              child: SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  trackHeight: 3.5,
+                                  thumbShape: const RoundSliderThumbShape(
+                                      enabledThumbRadius: 6),
+                                  overlayShape: const RoundSliderOverlayShape(
+                                      overlayRadius: 11),
+                                ),
+                                child: Slider(
+                                  value: duration == 0
+                                      ? 0
+                                      : value.position.inMilliseconds
+                                          .toDouble()
+                                          .clamp(0, duration),
+                                  max: duration == 0 ? 1 : duration,
+                                  activeColor: BookNestColors.cyan,
+                                  inactiveColor: Colors.white24,
+                                  onChanged: duration == 0
+                                      ? null
+                                      : (v) => _controller.seekTo(
+                                            Duration(
+                                                milliseconds: v.round()),
+                                          ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ValueListenableBuilder<VideoPlayerValue>(
+                          valueListenable: _controller,
+                          builder: (context, value, _) => InkWell(
+                            onTap: () {
+                              final speeds = const [1.0, 1.5, 2.0];
+                              final next =
+                                  speeds[(speeds.indexOf(_speed) + 1) %
+                                      speeds.length];
+                              setState(() {
+                                _speed = next;
+                                _controller.setPlaybackSpeed(next);
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 3),
+                              child: Text(
+                                '${_speed}×',
+                                style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: _speed == 1.0
+                                        ? Colors.white.withOpacity(.85)
+                                        : BookNestColors.cyan),
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 4),
                         InkWell(
                           onTap: () => setState(() {
                             _controller.value.volume > 0

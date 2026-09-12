@@ -193,6 +193,67 @@ const String doubleTapReactionCode = 'heart';
 // The widget
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// A motion style per emote family — chosen from the def so faces,
+/// objects and effects each move the way viewers expect.
+enum _EmojiMotion { float, heartbeat, bounce, twinkle, flicker, sway }
+
+_EmojiMotion _motionFor(EmojiDef def) {
+  switch (def.effect) {
+    case EmojiEffect.bounce:
+    case EmojiEffect.shake:
+    case EmojiEffect.orbit:
+      return _EmojiMotion.bounce;
+    case EmojiEffect.twinkle:
+    case EmojiEffect.shine:
+      return _EmojiMotion.twinkle;
+    case EmojiEffect.floatUp:
+    case EmojiEffect.drip:
+      return _EmojiMotion.flicker;
+    case EmojiEffect.pulse:
+    case EmojiEffect.heartbeat:
+      return _EmojiMotion.heartbeat;
+    case EmojiEffect.spin:
+    case EmojiEffect.winkLoop:
+    case EmojiEffect.floatZ:
+      return _EmojiMotion.sway;
+    case EmojiEffect.none:
+      break;
+  }
+  if (def.object == EmojiObject.heart || def.code.contains('love')) {
+    return _EmojiMotion.heartbeat;
+  }
+  if (def.object == EmojiObject.star ||
+      def.object == EmojiObject.sparkles) {
+    return _EmojiMotion.twinkle;
+  }
+  if (def.code.contains('laugh') || def.code.contains('joy')) {
+    return _EmojiMotion.bounce;
+  }
+  return _EmojiMotion.float;
+}
+
+Color _dominantColor(EmojiDef def) {
+  if (def.face != BookNestEmojiPalette.cyan || def.object == null) {
+    return def.face;
+  }
+  switch (def.object!) {
+    case EmojiObject.heart:
+      return BookNestEmojiPalette.blushPink;
+    case EmojiObject.star:
+    case EmojiObject.sparkles:
+    case EmojiObject.lamp:
+      return BookNestEmojiPalette.cyan;
+    case EmojiObject.moon:
+      return BookNestEmojiPalette.lavender;
+    default:
+      return BookNestEmojiPalette.cyan;
+  }
+}
+
+/// The living BookNest emote: the hand-drawn painter wrapped in a
+/// cinematic layer — a breathing glow under the artwork, a light sweep
+/// across its rim, a springy entrance, and per-emote motion (heartbeats
+/// double-thump, fires flicker, stars twinkle, laughs bounce).
 class BookNestEmojiView extends StatefulWidget {
   final String code;
   final double size;
@@ -213,57 +274,205 @@ class BookNestEmojiView extends StatefulWidget {
 }
 
 class _BookNestEmojiViewState extends State<BookNestEmojiView>
-    with SingleTickerProviderStateMixin {
-  AnimationController? _controller;
+    with TickerProviderStateMixin {
+  AnimationController? _loop;
+  AnimationController? _entrance;
+  late final EmojiDef _def;
 
-  EmojiDef get _def => emojiByCode(widget.code) ?? bookNestEmotes.firstWhere((e) => e.code == 'heart');
+  EmojiDef _resolve() =>
+      emojiByCode(widget.code) ??
+      bookNestEmotes.firstWhere((e) => e.code == 'heart');
 
   @override
   void initState() {
     super.initState();
-    _maybeAnimate();
+    _def = _resolve();
+    if (widget.animate) {
+      _loop = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 2100),
+      )..repeat();
+      _entrance = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 420),
+      )..forward();
+    }
   }
 
   @override
   void didUpdateWidget(covariant BookNestEmojiView old) {
     super.didUpdateWidget(old);
-    _maybeAnimate();
-  }
-
-  void _maybeAnimate() {
-    // Every BookNest emote is alive: faces blink and bob, objects
-    // shimmer. Effect emotes just move more dramatically.
-    if (widget.animate) {
-      _controller ??= AnimationController(
+    if (widget.animate && _loop == null) {
+      _loop = AnimationController(
         vsync: this,
-        duration: const Duration(milliseconds: 2400),
+        duration: const Duration(milliseconds: 2100),
       )..repeat();
-    } else {
-      _controller?.dispose();
-      _controller = null;
+      _entrance = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 420),
+      )..forward();
     }
   }
 
   @override
   void dispose() {
-    _controller?.dispose();
+    _loop?.dispose();
+    _entrance?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final def = _def;
+    final loop = _loop?.value ?? 0;
+    final entrance = _entrance == null
+        ? 1.0
+        : Curves.easeOutBack.transform(_entrance!.value);
+    final motion = _motionFor(def);
+
+    // ── per-motion transform ──
+    var scale = entrance;
+    var dy = 0.0;
+    var dx = 0.0;
+    var rotation = 0.0;
+    var opacity = 1.0;
+    switch (motion) {
+      case _EmojiMotion.heartbeat:
+        final beat = loop % 1.0;
+        final thump = beat < .14
+            ? math.sin(beat / .14 * math.pi)
+            : (beat > .22 && beat < .40
+                ? math.sin((beat - .22) / .18 * math.pi) * .7
+                : 0.0);
+        scale *= 1 + .17 * thump;
+      case _EmojiMotion.bounce:
+        final b = (loop * 1.5) % 1.0;
+        final hop = math.sin(b * math.pi);
+        dy = -size.height * .12 * hop;
+        // squash & stretch
+        scale *= 1 + .08 * hop;
+      case _EmojiMotion.twinkle:
+        final tw = (math.sin(loop * 2 * math.pi) + 1) / 2;
+        opacity = .72 + .28 * tw;
+        scale *= .94 + .10 * tw;
+        rotation = .10 * math.sin(loop * 2 * math.pi);
+      case _EmojiMotion.flicker:
+        final f = loop * 3.0;
+        final flick =
+            (math.sin(f * math.pi) * .5 + math.sin(f * 2.7 * math.pi) * .5);
+        scale *= 1 + .05 * flick;
+        dy = -size.height * .03 * (1 + math.sin(f * math.pi));
+      case _EmojiMotion.sway:
+        rotation = .16 * math.sin(loop * 2 * math.pi);
+        dx = size.width * .03 * math.sin(loop * 2 * math.pi);
+      case _EmojiMotion.float:
+        final idle = math.sin(loop * 2 * math.pi);
+        dy = -size.height * .05 * idle;
+        rotation = .06 * math.sin(loop * 2 * math.pi + .6);
+        scale *= 1 + .03 * ((math.sin(loop * 4 * math.pi) + 1) / 2);
+    }
+
     return SizedBox(
       width: widget.size,
       height: widget.size,
-      child: AnimatedBuilder(
-        animation: _controller ?? kAlwaysDismissedAnimation,
-        builder: (context, _) => CustomPaint(
-          painter: BookNestEmojiPainter(def, t: _controller?.value ?? 0),
+      child: Opacity(
+        opacity: opacity.clamp(0.0, 1.0),
+        child: Transform.translate(
+          offset: Offset(dx, dy),
+          child: Transform.rotate(
+            angle: rotation,
+            child: Transform.scale(
+              scale: scale,
+              child: CustomPaint(
+                painter: _EmojiAuraPainter(
+                  def: def,
+                  t: loop,
+                  motion: motion,
+                ),
+                foregroundPainter: _EmojiShinePainter(t: loop),
+                child: CustomPaint(
+                  painter: BookNestEmojiPainter(def, t: loop),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
+}
+
+/// Breathing glow + rim light painted behind the emote.
+class _EmojiAuraPainter extends CustomPainter {
+  final EmojiDef def;
+  final double t;
+  final _EmojiMotion motion;
+
+  _EmojiAuraPainter({
+    required this.def,
+    required this.t,
+    required this.motion,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height / 2);
+    final radius = size.width * .52;
+    final color = _dominantColor(def);
+    final breath = .30 + .22 * ((math.sin(t * 2 * math.pi) + 1) / 2);
+    final glow = Paint()
+      ..color = color.withOpacity((motion == _EmojiMotion.flicker
+              ? breath * 1.25
+              : breath) *
+          .55)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * .42);
+    canvas.drawCircle(c, radius * .92, glow);
+    // crisp rim
+    final rim = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * .02
+      ..color = Colors.white.withOpacity(.16);
+    canvas.drawCircle(c, radius * .84, rim);
+  }
+
+  @override
+  bool shouldRepaint(_EmojiAuraPainter old) =>
+      old.t != t || old.def != def || old.motion != motion;
+}
+
+/// A light streak that sweeps across the emote — the "premium" tell.
+class _EmojiShinePainter extends CustomPainter {
+  final double t;
+  _EmojiShinePainter({required this.t});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height / 2);
+    final radius = size.width * .5;
+    // The streak orbits once per loop; it only crosses the face part of
+    // the time so the emote gets a periodic sparkle, not a strobe.
+    final angle = t * 2 * math.pi - math.pi / 2;
+    final visible = (t % 1.0) < .42;
+    if (!visible) return;
+    final sweepPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * .075
+      ..strokeCap = StrokeCap.round
+      ..shader = SweepGradient(
+        startAngle: angle,
+        endAngle: angle + 1.15,
+        colors: [
+          Colors.white.withOpacity(0),
+          Colors.white.withOpacity(.42),
+          Colors.white.withOpacity(0),
+        ],
+        transform: GradientRotation(angle),
+      ).createShader(Rect.fromCircle(center: c, radius: radius));
+    canvas.drawCircle(c, radius * .74, sweepPaint);
+  }
+
+  @override
+  bool shouldRepaint(_EmojiShinePainter old) => old.t != t;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
