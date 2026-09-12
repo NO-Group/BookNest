@@ -324,6 +324,7 @@ class _BookNestEmojiViewState extends State<BookNestEmojiView>
   @override
   Widget build(BuildContext context) {
     final def = _def;
+    final size = Size(widget.size, widget.size);
     final loop = _loop?.value ?? 0;
     final entrance = _entrance == null
         ? 1.0
