@@ -423,6 +423,8 @@ class CallService {
     if (audio != null && audio.isNotEmpty) {
       audio.first.enabled = !_muted;
     }
+    // Nudge the call screen so the button redraws its state.
+    statusNotifier.value = status;
   }
 
   Future<void> toggleCamera() async {
@@ -431,8 +433,10 @@ class CallService {
     if (video != null && video.isNotEmpty) {
       video.first.enabled = !_cameraOff;
     }
+    statusNotifier.value = status;
   }
 
+  /// Switches the active camera on the fly and nudges the UI.
   Future<void> switchCamera() async {
     try {
       final video = _local?.getVideoTracks();
@@ -440,6 +444,7 @@ class CallService {
         await Helper.switchCamera(video.first);
       }
     } catch (_) {}
+    statusNotifier.value = status;
   }
 
   Future<void> endCall({bool notifyPeer = true}) async {

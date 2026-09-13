@@ -1368,6 +1368,10 @@ class _VoiceContent extends StatefulWidget {
   State<_VoiceContent> createState() => _VoiceContentState();
 }
 
+/// Every live voice-note player; starting one stops the rest so two
+/// notes never talk over each other.
+final List<AudioPlayer> _liveVoicePlayers = <AudioPlayer>[];
+
 class _VoiceContentState extends State<_VoiceContent> {
   final AudioPlayer _player = AudioPlayer();
   static const List<double> _speeds = [1.0, 1.5, 2.0];
@@ -1382,6 +1386,7 @@ class _VoiceContentState extends State<_VoiceContent> {
   @override
   void initState() {
     super.initState();
+    _liveVoicePlayers.add(_player);
     _player.onPlayerStateChanged.listen((state) {
       if (!mounted) return;
       setState(() {
@@ -1412,6 +1417,7 @@ class _VoiceContentState extends State<_VoiceContent> {
 
   @override
   void dispose() {
+    _liveVoicePlayers.remove(_player);
     _player.dispose();
     super.dispose();
   }
@@ -1420,6 +1426,14 @@ class _VoiceContentState extends State<_VoiceContent> {
     if (_playing) {
       await _player.pause();
       return;
+    }
+    // Only one voice note talks at a time — stop the others first.
+    for (final other in List<AudioPlayer>.from(_liveVoicePlayers)) {
+      if (other != _player) {
+        try {
+          await other.stop();
+        } catch (_) {}
+      }
     }
     setState(() {
       _loading = true;

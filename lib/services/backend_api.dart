@@ -154,7 +154,7 @@ class BackendApi {
     _available = false;
     final res = await call('ping');
     if (res == null) return (reachable: false, upToDate: false);
-    return (reachable: true, upToDate: res['server']?.toString() == '2.22');
+    return (reachable: true, upToDate: res['server']?.toString() == '2.24');
   }
 
   SupabaseClient get _client => SupabaseService().client;

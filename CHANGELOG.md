@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.24.1+40 — 2026-09-13 · Calls & voice, hardened
+
+- **Call buttons redraw for real**: mic, camera and flip now nudge the
+  call screen on toggle — they always worked, but the buttons looked
+  frozen; caught in self-review and fixed.
+- **One voice at a time**: starting a voice note stops every other
+  playing note — notes never talk over each other.
+- **Server stamp synced to 2.24**: the edge `ping` and the owner
+  banner now agree on what "current" means for this release (no one
+  had pasted an older stamp, so nothing needs re-doing).
+
 ## 2.24.0+39 — 2026-09-13 · Calls & voice notes, real
 
 **Voice notes — fully alive:**
