@@ -38,15 +38,18 @@ jobs:
             out=$(curl -s --max-time 20 -X POST "$FN_URL" \
               -H "Authorization: Bearer $ANON" \
               -H "Content-Type: application/json" \
-              -d "$body" | head -c 220)
+              -d "$body" | head -c 600)
             echo "$label → ${out:-<no answer>}"
           }
           {
             echo "Live probe of the deployed booknest-api — $(date -u +%FT%TZ)"
             echo "(\"Sign in required\" = the action EXISTS on the server;"
-            echo " \"Unknown action\" = the deployed file predates it)"
+            echo " \"Unknown action\" = the deployed file predates it;"
+            echo " ping's `server` field shows the deployed file's version)"
             echo ""
             probe "ping              " '{"action":"ping"}'
+            probe "admin.users.list  " '{"action":"admin.users.list"}'
+            probe "moderation.list   " '{"action":"moderation.list"}'
             probe "moderation.report " '{"action":"moderation.report"}'
             probe "dm.react          " '{"action":"dm.react"}'
             probe "chat.react        " '{"action":"chat.react"}'
