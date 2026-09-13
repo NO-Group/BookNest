@@ -1061,8 +1061,13 @@ Deno.serve(async (req: Request) => {
       case 'ping': {
         // Always answers ok — the `mongo` field tells the truth about the
         // data layer separately, so callers can distinguish "function is
-        // awake" from "data connection is live".
-        const base = { databases: DB_NAMES, time: new Date().toISOString() };
+        // awake" from "data connection is live". `server` lets the app
+        // detect an outdated deployment (old servers never send it).
+        const base = {
+          databases: DB_NAMES,
+          time: new Date().toISOString(),
+          server: '2.22',
+        };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
           const d = await dbFor('books');

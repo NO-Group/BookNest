@@ -1,0 +1,55 @@
+name: Supabase Edge Deploy
+
+# Deploys the booknest edge function straight from CI so the server never
+# lags the app. One-time setup by the owner (dashboard only, no terminal):
+#   1. Supabase dashboard → Account → Access Tokens → Generate token
+#   2. GitHub repo → Settings → Secrets and variables → Actions →
+#      "New repository secret", twice:
+#        SUPABASE_ACCESS_TOKEN  = the token from step 1
+#        SUPABASE_PROJECT_REF   = Supabase dashboard → Project Settings →
+#                                 General → Reference ID
+#   3. GitHub → Actions tab → "Supabase Edge Deploy" → Run workflow.
+# After that, deploying the server is ONE click — no more manual pasting.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-edge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard — secrets present?
+        env:
+          HAS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+          HAS_REF: ${{ secrets.SUPABASE_PROJECT_REF != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ] || [ "$HAS_REF" != "true" ]; then
+            {
+              echo "## Missing secrets"
+              echo ""
+              echo "Add **SUPABASE_ACCESS_TOKEN** and **SUPABASE_PROJECT_REF**"
+              echo "under Settings → Secrets and variables → Actions"
+              echo "(see ops/SUPABASE_AUTO_DEPLOY.md), then re-run."
+            } >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy booknest-api
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          supabase functions deploy booknest-api \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --use-api

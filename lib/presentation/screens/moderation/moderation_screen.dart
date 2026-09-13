@@ -6,6 +6,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/genre_service.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
+import '../../components/server_status_banner.dart';
 
 /// The overall moderator's console: reports, readers, and the state of
 /// the world — every power enforced server-side, every action logged.
@@ -46,12 +47,20 @@ class ModerationScreen extends StatelessWidget {
             ],
           ),
         ),
-        body: TabBarView(
+        body: Column(
           children: [
-            _ReportsTab(),
-            _ReadersTab(),
-            _StatsTab(),
-            _GenresTab(),
+            // Owner-only: shouts exactly when the deployed server is old.
+            const ServerStatusBanner(),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _ReportsTab(),
+                  _ReadersTab(),
+                  _StatsTab(),
+                  _GenresTab(),
+                ],
+              ),
+            ),
           ],
         ),
       ),

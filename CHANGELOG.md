@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.22.1+36 — 2026-09-13 · The server-truth round
+
+**New — the app now tells you what's wrong:**
+- **Server self-check**: the edge `ping` now declares its version. New
+  in **Settings → About** and at the top of the **Moderation console**
+  (owner only): a banner that says **"Server update needed — copy
+  supabase/functions/booknest-api/index.ts … then Deploy"** whenever the
+  deployed server is older than the app, and disappears the moment the
+  paste takes. No more guessing which layer fails: if the banner is
+  gone and something still misbehaves, it's an app bug — screenshot it;
+  if the banner is up, the server needs the paste.
+- **One-click edge deploys from CI**: new **Supabase Edge Deploy**
+  workflow (Actions tab). One-time setup: create an access token + add
+  two repo secrets — full click-by-click guide in
+  `ops/SUPABASE_AUTO_DEPLOY.md`. After that the server deploys without
+  any pasting, ever again.
+
+**Carried from 2.22.0 (all twelve reported points):** responsive post
+cards · likes fixed (envelope unwrap) · deletes, reactions and reports
+fixed (duplicate launch-era server handler removed) · emotes never
+called "images" · **72 real Twemoji emotes** (CC BY 4.0) with the
+cinematic motion engine · books shelf healed server-side every cold
+start · Reddit-style profile with Follow/Message pills and tabs ·
+moderator users-list profiles fallback · phone-sync pattern verified.
+
 ## 2.22.0+35 — 2026-09-13 · The "every lever works" round
 
 **Fixes — every reported point:**

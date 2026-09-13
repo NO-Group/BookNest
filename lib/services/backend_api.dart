@@ -145,6 +145,18 @@ class BackendApi {
     return res != null;
   }
 
+  /// Deployment check: is the server reachable AND does the deployed edge
+  /// speak this app's contract? New servers declare `server` in `ping`;
+  /// an old deployment answers without it — which is exactly the "you
+  /// pasted an older index.ts" tell the maintenance banner needs.
+  Future<({bool reachable, bool upToDate})> serverStatus() async {
+    _checked = false;
+    _available = false;
+    final res = await call('ping');
+    if (res == null) return (reachable: false, upToDate: false);
+    return (reachable: true, upToDate: res['server']?.toString() == '2.22');
+  }
+
   SupabaseClient get _client => SupabaseService().client;
 
   /// Calls an action on the edge function. Returns the `data` map on success,

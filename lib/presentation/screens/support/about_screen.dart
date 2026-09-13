@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/app_config.dart';
 import '../../../config/theme.dart';
+import '../../components/server_status_banner.dart';
 
 /// About BookNest — version, mission, credits.
 class AboutScreen extends StatelessWidget {
@@ -67,6 +68,7 @@ class AboutScreen extends StatelessWidget {
           _Row(label: 'Built with', value: 'Flutter'),
           _Row(label: 'Cloud', value: 'Supabase · MongoDB · Cloudinary · R2'),
           _Row(label: 'By', value: 'N.O Group'),
+          const ServerStatusBanner(),
           const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
