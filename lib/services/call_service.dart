@@ -333,13 +333,12 @@ class CallService {
           await _prepareMedia();
           await _createPeer();
           final offer = await _pc!.createOffer();
-          await _pc!.setLocalDescription(RTCSessionDescription(
-            _applyOpusQuality(offer.sdp ?? ''),
-            offer.type,
-          ));
+          final offerSdp = _applyOpusQuality(offer.sdp ?? '');
+          await _pc!
+              .setLocalDescription(RTCSessionDescription(offerSdp, offer.type));
           await _pair!.send('offer', {
             'from': _me,
-            'sdp': _pc!.localDescription?.sdp ?? offer.sdp,
+            'sdp': offerSdp,
             'type': offer.type,
           });
         } catch (_) {
@@ -355,13 +354,12 @@ class CallService {
           await _pc!.setRemoteDescription(
               RTCSessionDescription(payload['sdp']?.toString() ?? '', 'offer'));
           final answer = await _pc!.createAnswer();
-          await _pc!.setLocalDescription(RTCSessionDescription(
-            _applyOpusQuality(answer.sdp ?? ''),
-            answer.type,
-          ));
+          final answerSdp = _applyOpusQuality(answer.sdp ?? '');
+          await _pc!.setLocalDescription(
+              RTCSessionDescription(answerSdp, answer.type));
           await _pair!.send('answer', {
             'from': _me,
-            'sdp': _pc!.localDescription?.sdp ?? answer.sdp,
+            'sdp': answerSdp,
             'type': answer.type,
           });
         } catch (_) {
