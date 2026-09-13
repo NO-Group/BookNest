@@ -1,25 +1,41 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 
 import '../../../config/theme.dart';
-import '../../../services/backend_api.dart';
+import '../../../services/cloudinary_service.dart';
 
 /// ─────────────────────────────────────────────────────────────────────────────
-/// Hold-to-record voice notes, BookNest-styled. Recording and playback
-/// work today; SENDING unlocks when Cloudflare R2 is connected — voice
-/// is "other media", so by our media law it goes to R2, never into a
-/// database and never to Cloudinary.
+/// Hold-to-record voice notes, BookNest-styled — record, preview, send.
+/// Storage: media law sends "other media" to Cloudflare R2 when those
+/// credentials exist; until they do, the owner directive (2026-09-13)
+/// keeps voice fully alive through the existing Cloudinary auto endpoint.
+/// Databases store the URL only; nothing is ever stored in a database
+/// other than the URL. When R2 lands, only [_send] changes.
 /// ─────────────────────────────────────────────────────────────────────────────
 
-/// Opens the recorder sheet. Resolves with the recorded file, or null.
-/// [onR2Ready] is injected by the composer; it only resolves when R2 is
-/// connected, so callers can distinguish "cancelled" from "gated".
-Future<File?> showVoiceRecorder(BuildContext context) async {
+/// A finished, uploaded voice note — the URL plus everything the bubble
+/// needs to render playback without another fetch.
+class VoiceNoteResult {
+  final String url;
+  final String durationLabel;
+  final int seconds;
+
+  const VoiceNoteResult({
+    required this.url,
+    required this.durationLabel,
+    required this.seconds,
+  });
+}
+
+/// Opens the recorder sheet. Resolves with an uploaded voice note, or
+/// null when the reader cancelled or rerecorded.
+Future<VoiceNoteResult?> showVoiceRecorder(BuildContext context) async {
   return Navigator.of(context, rootNavigator: true)
-      .push<File>(MaterialPageRoute(
+      .push<VoiceNoteResult>(MaterialPageRoute(
     fullscreenDialog: true,
     builder: (_) => const VoiceRecorderScreen(),
   ));
@@ -117,22 +133,39 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
   }
 
   Future<void> _send() async {
-    setState(() => _stage = _VrStage.uploading);
-    final status = await BackendApi.instance.mediaStatus();
-    final r2Ready = status?['r2Configured'] == true;
-    if (!r2Ready) {
+    if (_path == null) return;
+    setState(() {
+      _stage = _VrStage.uploading;
+      _notice = null;
+    });
+    try {
+      final Uint8List bytes = await File(_path!).readAsBytes();
+      final seconds = _elapsed.inSeconds.clamp(1, 120);
+      final url = await CloudinaryService.uploadRaw(
+        bytes: bytes,
+        filename: 'voice_$seconds.m4a',
+      );
+      if (!mounted) return;
+      if (url == null) {
+        setState(() {
+          _stage = _VrStage.recorded;
+          _notice = 'The voice message could not be uploaded — '
+              'check your connection and try again.';
+        });
+        return;
+      }
+      Navigator.of(context).pop<VoiceNoteResult>(VoiceNoteResult(
+        url: url,
+        durationLabel: _clock(_elapsed),
+        seconds: seconds,
+      ));
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _stage = _VrStage.recorded;
-        _notice = 'Voice messages unlock as soon as cloud storage (R2) is '
-            'connected to BookNest. Your recording stays on this device for now.';
+        _notice = 'The voice message could not be sent — please try again.';
       });
-      return;
     }
-    // R2 uploader lands with the storage credentials — the recording is
-    // kept and the composer is re-invoked then.
-    if (!mounted) return;
-    Navigator.of(context).pop<File?>(null);
   }
 
   String _clock(Duration d) {

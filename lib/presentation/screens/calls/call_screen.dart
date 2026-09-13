@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
@@ -116,13 +118,13 @@ class CallScreen extends StatelessWidget {
                           : Colors.white.withOpacity(.08),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text(statusLine,
-                        style: TextStyle(
-                            color: status == CallStatus.active
-                                ? BookNestColors.cyan
-                                : Colors.white70,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600)),
+                    child: status == CallStatus.active
+                        ? _CallTimer()
+                        : Text(statusLine,
+                            style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600)),
                   ),
                 ]),
               ),
@@ -197,6 +199,17 @@ class CallScreen extends StatelessWidget {
                         const SizedBox(width: 16),
                       ],
                       _CallAction(
+                        icon: service.speakerOn
+                            ? Icons.volume_up_rounded
+                            : Icons.hearing_rounded,
+                        label: service.speakerOn ? 'Speaker' : 'Earpiece',
+                        background: service.speakerOn
+                            ? BookNestColors.cyan.withOpacity(.3)
+                            : Colors.white.withOpacity(.12),
+                        onTap: () => service.toggleSpeaker(),
+                      ),
+                      const SizedBox(width: 16),
+                      _CallAction(
                         icon: service.muted
                             ? Icons.mic_off_rounded
                             : Icons.mic_rounded,
@@ -227,6 +240,41 @@ class CallScreen extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+/// Live mm:ss ticker for the active pill — ticks once per second while
+/// the call is connected.
+class _CallTimer extends StatefulWidget {
+  @override
+  State<_CallTimer> createState() => _CallTimerState();
+}
+
+class _CallTimerState extends State<_CallTimer> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final service = CallService.instance;
+    return Text(service.elapsedLabel,
+        style: const TextStyle(
+            color: BookNestColors.cyan,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w800));
   }
 }
 

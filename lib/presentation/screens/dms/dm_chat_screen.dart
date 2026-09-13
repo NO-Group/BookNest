@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../components/chat_kit.dart';
+import '../chat/voice_recorder_sheet.dart';
 import '../../../services/chat_store.dart';
 import '../../../services/dm_crypto.dart';
 import '../../components/report_sheet.dart';
@@ -559,6 +560,35 @@ class _DMChatScreenState extends State<DMChatScreen> {
     await _load();
   }
 
+  Future<void> _sendVoiceNote(VoiceNoteResult voice) async {
+    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+    setState(() => _messages.add({
+          'id': localId,
+          'senderId': _viewerId,
+          'type': 'voice',
+          'text': voice.durationLabel,
+          'mediaUrl': voice.url,
+          'createdAt': DateTime.now().toIso8601String(),
+          'pending': true,
+        }));
+    _jumpToBottom();
+    final res = await BackendApi.instance.sendMessage(
+      conversationId: _conversationId,
+      peerId: widget.peerId,
+      type: 'voice',
+      text: voice.durationLabel,
+      mediaUrl: voice.url,
+    );
+    if (!mounted) return;
+    if (res == null) {
+      _markLocal(localId, failed: true);
+      _notice('The voice message could not be delivered — please try again.');
+      return;
+    }
+    _conversationId ??= res['conversationId']?.toString() ?? widget.conversationId;
+    await _load();
+  }
+
   String? _peerCountry;
   String? _peerGender;
 
@@ -826,6 +856,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
               onSendImage: _sendImage,
               onSendFile: _sendFile,
               onSendVideo: _sendVideo,
+              onSendVoice: _sendVoiceNote,
               onSendEmote: _sendEmote,
               replyTo: _replyTo,
               onCancelReply: () => setState(() => _replyTo = null),

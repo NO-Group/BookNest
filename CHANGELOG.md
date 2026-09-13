@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.24.0+39 — 2026-09-13 · Calls & voice notes, real
+
+**Voice notes — fully alive:**
+- **Record → preview → send works for real**: the mic sheet now uploads
+  through the existing Cloudinary auto pipeline (URL-only storage, per
+  media law; the R2 upgrade path stays first-in-line when those
+  credentials arrive) and lands in the chat as a playable voice note.
+- **Real voice bubbles**: play/pause, waveform that fills as it plays,
+  scrubbable position, duration, and **1× / 1.5× / 2× speed** — all
+  inside the bubble, both in DMs and club chats, with optimistic send
+  and honest failure states.
+
+**Calls — clarity like no other:**
+- **64 kbps Opus upgrade**: the audio line is renegotiated from the
+  default thin ~24 kbps mono to broadcast-grade stereo-capable Opus
+  with in-band forward error correction — the single biggest clarity
+  win a call can get.
+- **OS-grade capture**: noise suppression, echo cancellation and
+  auto-gain explicitly on; 1280×720 @ 30fps video.
+- **The call actually connects**: both sides now watch their own ICE
+  state, so the call flips to "active" the moment media truly flows —
+  no more connecting-forever traps; drops show **Reconnecting…** and
+  attempt an ICE restart.
+- **Speaker / earpiece toggle** on every call (video starts on speaker,
+  voice on the earpiece), a **live call timer** in the status pill, and
+  a proper **ringtone with haptic pulses** for outgoing ringback and
+  incoming rings.
+
 ## 2.23.0+38 — 2026-09-13 · The in-app deploy kit
 
 - **Fixing the server is now three taps inside the app** (owner only):

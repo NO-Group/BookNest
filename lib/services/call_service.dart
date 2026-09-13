@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -22,6 +24,9 @@ class CallSession {
   final String peerName;
   final bool video;
   final bool incoming;
+
+  /// When media actually started flowing — the call timer's zero point.
+  DateTime? connectedAt;
 
   CallSession({
     required this.peerId,
@@ -54,8 +59,48 @@ class CallService {
   RealtimePersonal? _personal;
   bool _muted = false;
   bool _cameraOff = false;
+  bool _speakerOn = false;
   bool get muted => _muted;
   bool get cameraOff => _cameraOff;
+  bool get speakerOn => _speakerOn;
+
+  /// Call timer text, ticked by the ring/active loop.
+  String get elapsedLabel {
+    final at = session?.connectedAt;
+    if (at == null) return '00:00';
+    final d = DateTime.now().difference(at);
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final sec = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$sec';
+  }
+
+  // ── ringer: looping tone + haptic pulse while ringing/answering ──
+  final AudioPlayer _ringer = AudioPlayer();
+  Timer? _haptics;
+  bool _ringerOn = false;
+
+  Future<void> _startRinger() async {
+    if (_ringerOn) return;
+    _ringerOn = true;
+    try {
+      await _ringer.setReleaseMode(ReleaseMode.loop);
+      await _ringer.setVolume(.75);
+      await _ringer.play(AssetSource('sounds/call_ring.wav'));
+    } catch (_) {}
+    _haptics = Timer.periodic(const Duration(milliseconds: 800), (_) {
+      HapticFeedback.mediumImpact();
+    });
+  }
+
+  Future<void> _stopRinger() async {
+    if (!_ringerOn) return;
+    _ringerOn = false;
+    _haptics?.cancel();
+    _haptics = null;
+    try {
+      await _ringer.stop();
+    } catch (_) {}
+  }
 
   String get _me => SupabaseService().auth.currentUser?.id ?? '';
 
@@ -85,6 +130,7 @@ class CallService {
         );
         status = CallStatus.ringing;
         statusNotifier.value = status;
+        unawaited(_startRinger());
         onIncoming?.call(session!);
       },
     );
@@ -97,6 +143,7 @@ class CallService {
     status = CallStatus.outgoing;
     statusText.value = 'Calling ${peerName.split(' ').first}…';
     statusNotifier.value = status;
+    unawaited(_startRinger());
     try {
       _pair = RealtimeChannelPair(
           client: SupabaseService().client, channelName: _pairName);
@@ -124,6 +171,7 @@ class CallService {
     status = CallStatus.connecting;
     statusText.value = 'Connecting…';
     statusNotifier.value = status;
+    unawaited(_stopRinger());
     try {
       _pair = RealtimeChannelPair(
           client: SupabaseService().client, channelName: _pairName);
@@ -136,6 +184,7 @@ class CallService {
   }
 
   Future<void> declineIncoming() async {
+    unawaited(_stopRinger());
     try {
       final pair = RealtimeChannelPair(
           client: SupabaseService().client, channelName: _pairName);
@@ -154,13 +203,65 @@ class CallService {
     if (permissions[Permission.microphone]!.isDenied) {
       throw Exception('Microphone permission denied');
     }
+    // Broadcast-grade capture: the OS noise suppressor, echo canceller
+    // and auto-gain all on — the difference between "phone call" and
+    // "sitting across the table".
     _local = await navigator.mediaDevices.getUserMedia({
-      'audio': true,
+      'audio': {
+        'echoCancellation': true,
+        'noiseSuppression': true,
+        'autoGainControl': true,
+        'channelCount': 1,
+      },
       'video': (session?.video ?? false)
-          ? {'facingMode': 'user', 'width': 1280, 'height': 720}
+          ? {'facingMode': 'user', 'width': 1280, 'height': 720, 'frameRate': 30}
           : false,
     });
     localStream.value = _local;
+    // WhatsApp convention: video calls live on the speakerphone, voice
+    // calls start pinned to the earpiece.
+    _speakerOn = session?.video == true;
+    try {
+      await Helper.setSpeakerphoneOn(_speakerOn);
+    } catch (_) {}
+  }
+
+  Future<void> toggleSpeaker() async {
+    _speakerOn = !_speakerOn;
+    try {
+      await Helper.setSpeakerphoneOn(_speakerOn);
+    } catch (_) {}
+    statusNotifier.value = status; // nudge listeners for the button state
+  }
+
+  /// Upgrades the Opus audio line to 64 kbps stereo-capable — the default
+  /// SDP negotiates a thin ~24 kbps mono channel; this is the single
+  /// biggest clarity win a WebRTC call can get.
+  String _applyOpusQuality(String sdp) {
+    const boost = 'a=fmtp:111 '
+        'minptime=10;useinbandfec=1;maxaveragebitrate=64000;stereo=1;'
+        'sprop-stereo=1';
+    final lines = sdp.split('\r\n');
+    var fmtpIndex = -1;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith('a=fmtp:111')) {
+        fmtpIndex = i;
+        break;
+      }
+    }
+    if (fmtpIndex != -1) {
+      if (lines[fmtpIndex].contains('maxaveragebitrate')) return sdp;
+      lines[fmtpIndex] = boost;
+    } else {
+      // No fmtp line yet — add one right after the Opus rtpmap.
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith('a=rtpmap:111 opus/')) {
+          lines.insert(i + 1, boost);
+          break;
+        }
+      }
+    }
+    return lines.join('\r\n');
   }
 
   Future<void> _createPeer() async {
@@ -169,6 +270,7 @@ class CallService {
         {'urls': 'stun:stun.l.google.com:19302'},
         {'urls': 'stun:stun1.l.google.com:19302'},
       ],
+      'iceCandidatePoolSize': 4,
     });
     _pc!.onTrack = (event) {
       if (event.streams.isNotEmpty) {
@@ -184,6 +286,32 @@ class CallService {
         'sdpMid': candidate.sdpMid,
         'sdpMLineIndex': candidate.sdpMLineIndex,
       });
+    };
+    // The honest source of truth for "the call is live" — both sides
+    // watch their own ICE state, so neither waits on a signaling event
+    // that may never arrive.
+    _pc!.onIceConnectionState = (state) {
+      if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+          state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+        _stopRinger();
+        markActiveIfConnecting();
+      } else if (state ==
+          RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
+        if (status == CallStatus.active) {
+          statusText.value = 'Reconnecting…';
+          statusNotifier.value = status;
+        }
+      } else if (state ==
+          RTCIceConnectionState.RTCIceConnectionStateFailed) {
+        if (status == CallStatus.active ||
+            status == CallStatus.connecting) {
+          statusText.value = 'Reconnecting…';
+          statusNotifier.value = status;
+          try {
+            _pc?.restartIce();
+          } catch (_) {}
+        }
+      }
     };
     if (_local != null) {
       for (final track in _local!.getTracks()) {
@@ -205,10 +333,13 @@ class CallService {
           await _prepareMedia();
           await _createPeer();
           final offer = await _pc!.createOffer();
-          await _pc!.setLocalDescription(offer);
+          await _pc!.setLocalDescription(RTCSessionDescription(
+            _applyOpusQuality(offer.sdp ?? ''),
+            offer.type,
+          ));
           await _pair!.send('offer', {
             'from': _me,
-            'sdp': offer.sdp,
+            'sdp': _pc!.localDescription?.sdp ?? offer.sdp,
             'type': offer.type,
           });
         } catch (_) {
@@ -224,10 +355,13 @@ class CallService {
           await _pc!.setRemoteDescription(
               RTCSessionDescription(payload['sdp']?.toString() ?? '', 'offer'));
           final answer = await _pc!.createAnswer();
-          await _pc!.setLocalDescription(answer);
+          await _pc!.setLocalDescription(RTCSessionDescription(
+            _applyOpusQuality(answer.sdp ?? ''),
+            answer.type,
+          ));
           await _pair!.send('answer', {
             'from': _me,
-            'sdp': answer.sdp,
+            'sdp': _pc!.localDescription?.sdp ?? answer.sdp,
             'type': answer.type,
           });
         } catch (_) {
@@ -252,9 +386,13 @@ class CallService {
         } catch (_) {}
         break;
       case 'connected':
-        status = CallStatus.active;
-        statusText.value = null;
-        statusNotifier.value = status;
+        _stopRinger();
+        if (status == CallStatus.connecting) {
+          status = CallStatus.active;
+          session?.connectedAt ??= DateTime.now();
+          statusText.value = null;
+          statusNotifier.value = status;
+        }
         break;
       case 'declined':
         statusText.value = 'Call declined';
@@ -271,8 +409,10 @@ class CallService {
   void markActiveIfConnecting() {
     if (status == CallStatus.connecting) {
       status = CallStatus.active;
+      session?.connectedAt = DateTime.now();
       statusText.value = null;
       statusNotifier.value = status;
+      unawaited(_stopRinger());
       _pair?.send('connected', {'from': _me});
     }
   }
@@ -328,6 +468,11 @@ class CallService {
     _pair = null;
     _muted = false;
     _cameraOff = false;
+    await _stopRinger();
+    try {
+      await Helper.setSpeakerphoneOn(false);
+    } catch (_) {}
+    _speakerOn = false;
     localStream.value = null;
     remoteStream.value = null;
     statusText.value = null;

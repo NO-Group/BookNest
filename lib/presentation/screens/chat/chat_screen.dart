@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../components/chat_kit.dart';
+import '../chat/voice_recorder_sheet.dart';
 import '../chat/media_viewer_screen.dart';
 import '../../components/booknest_emojis.dart';
 import '../../../services/chat_store.dart';
@@ -346,6 +347,40 @@ class _ChatScreenState extends State<ChatScreen> {
           replying != null && !replying['id'].toString().startsWith('local-')
               ? replying['id'].toString()
               : null,
+    );
+    if (!mounted) return;
+    if (res == null) {
+      final index = _messages.indexWhere((m) => m['id'] == localId);
+      if (index != -1) {
+        setState(() {
+          _messages[index]['pending'] = false;
+          _messages[index]['failed'] = true;
+        });
+      }
+      return;
+    }
+    await _load();
+  }
+
+  Future<void> _sendVoiceNote(VoiceNoteResult voice) async {
+    final conversationId = _conversationId;
+    if (conversationId == null) return;
+    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+    setState(() => _messages.add({
+          'id': localId,
+          'senderId': _viewerId,
+          'type': 'voice',
+          'text': voice.durationLabel,
+          'mediaUrl': voice.url,
+          'createdAt': DateTime.now().toIso8601String(),
+          'pending': true,
+        }));
+    _jumpToBottom();
+    final res = await BackendApi.instance.sendClubMessage(
+      conversationId: conversationId,
+      type: 'voice',
+      text: voice.durationLabel,
+      mediaUrl: voice.url,
     );
     if (!mounted) return;
     if (res == null) {
@@ -849,6 +884,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             onSendText: _sendText,
                             onSendImage: _sendImage,
                             onSendFile: _sendFile,
+                            onSendVoice: _sendVoiceNote,
                             onSendEmote: _sendEmote,
                             hint: 'Message ${widget.title}…',
                             onSendVideo: _sendVideo,

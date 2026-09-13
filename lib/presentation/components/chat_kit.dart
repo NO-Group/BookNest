@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -513,6 +515,16 @@ class _ChatBubbleState extends State<ChatBubble>
         !_deletedForEveryone) {
       // Our own player — videos play right inside the chat.
       content = _VideoContent(url: _mediaUrl, dark: dark);
+    } else if (_type == 'voice' &&
+        _mediaUrl.startsWith('http') &&
+        !_deletedForEveryone) {
+      content = _VoiceContent(
+        url: _mediaUrl,
+        durationLabel:
+            _text.isNotEmpty ? _text : (widget.message['fileName']?.toString() ?? ''),
+        dark: dark,
+        mine: mine,
+      );
     } else if (_type == 'image' &&
         _mediaUrl.startsWith('http') &&
         !_deletedForEveryone) {
@@ -1337,6 +1349,284 @@ class _ImageContent extends StatelessWidget {
 }
 
 /// An attachment chip for any file type — tap to open or download.
+/// A received or sent voice note: play/pause, scrubbable progress,
+/// duration and 1× / 1.5× / 2× speed — everything plays in the bubble.
+class _VoiceContent extends StatefulWidget {
+  const _VoiceContent({
+    required this.url,
+    required this.durationLabel,
+    required this.dark,
+    required this.mine,
+  });
+
+  final String url;
+  final String durationLabel;
+  final bool dark;
+  final bool mine;
+
+  @override
+  State<_VoiceContent> createState() => _VoiceContentState();
+}
+
+class _VoiceContentState extends State<_VoiceContent> {
+  final AudioPlayer _player = AudioPlayer();
+  static const List<double> _speeds = [1.0, 1.5, 2.0];
+  int _speedIndex = 0;
+  bool _playing = false;
+  bool _loading = false;
+  bool _ready = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _player.onPlayerStateChanged.listen((state) {
+      if (!mounted) return;
+      setState(() {
+        _playing = state == PlayerState.playing;
+        _loading = false;
+        if (state == PlayerState.stopped) _playing = false;
+      });
+    });
+    _player.onPositionChanged.listen((p) {
+      if (!mounted) return;
+      setState(() => _position = p);
+    });
+    _player.onDurationChanged.listen((d) {
+      if (!mounted || d <= Duration.zero) return;
+      setState(() {
+        _duration = d;
+        _ready = true;
+      });
+    });
+    _player.onPlayerComplete.listen((_) {
+      if (!mounted) return;
+      setState(() {
+        _playing = false;
+        _position = Duration.zero;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    if (_playing) {
+      await _player.pause();
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      if (!_ready) {
+        await _player.play(UrlSource(widget.url));
+        await _player.setPlaybackRate(_speeds[_speedIndex]);
+      } else {
+        await _player.resume();
+        await _player.setPlaybackRate(_speeds[_speedIndex]);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Could not play — tap to retry.';
+        });
+      }
+    }
+  }
+
+  Future<void> _cycleSpeed() async {
+    final next = (_speedIndex + 1) % _speeds.length;
+    setState(() => _speedIndex = next);
+    try {
+      await _player.setPlaybackRate(_speeds[next]);
+    } catch (_) {}
+  }
+
+  String _clock(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = _duration > Duration.zero
+        ? _duration
+        : _parseLabel(widget.durationLabel);
+    final played = _position.inMilliseconds
+        .clamp(0, total.inMilliseconds)
+        .toDouble();
+    final progress =
+        total > Duration.zero ? played / total.inMilliseconds : 0.0;
+    final onMySide = widget.mine;
+    final tint = onMySide ? Colors.white : BookNestColors.cyan;
+    return Container(
+      width: 248,
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            GestureDetector(
+              onTap: _loading ? null : _toggle,
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: tint.withOpacity(.16),
+                  border: Border.all(color: tint.withOpacity(.5)),
+                ),
+                child: _loading
+                    ? const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white70),
+                      )
+                    : Icon(
+                        _playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        size: 22,
+                        color: Colors.white,
+                      ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (details) async {
+                  if (total <= Duration.zero) return;
+                  final box = context.findRenderObject() as RenderBox;
+                  final ratio =
+                      (details.localPosition.dx / box.size.width)
+                          .clamp(0.0, 1.0);
+                  try {
+                    await _player
+                        .seek(Duration(milliseconds: (ratio * total.inMilliseconds).round()));
+                    setState(() =>
+                        _position = Duration(milliseconds: (ratio * total.inMilliseconds).round()));
+                  } catch (_) {}
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Waveform: fixed bars, filled by progress.
+                    SizedBox(
+                      height: 26,
+                      child: CustomPaint(
+                        size: const Size(double.infinity, 26),
+                        painter: _VoiceWavePainter(
+                          progress: progress,
+                          played: Colors.white,
+                          rest: Colors.white.withOpacity(.38),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${_clock(_playing || _position > Duration.zero ? _position : Duration.zero)}'
+                      ' · ${_clock(total)}',
+                      style: TextStyle(
+                          fontSize: 10.5, color: Colors.white.withOpacity(.75)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: _cycleSpeed,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  color: Colors.white.withOpacity(.14),
+                ),
+                child: Text(
+                  '${_speeds[_speedIndex].toStringAsFixed(_speeds[_speedIndex] == 2.0 ? 0 : 1)}×',
+                  style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white),
+                ),
+              ),
+            ),
+          ]),
+          if (_error != null) ...[
+            const SizedBox(height: 4),
+            Text(_error!,
+                style: TextStyle(
+                    fontSize: 10.5, color: Colors.white.withOpacity(.7))),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static Duration _parseLabel(String label) {
+    final parts = label.trim().split(':');
+    if (parts.isEmpty) return Duration.zero;
+    final m = int.tryParse(parts[0]) ?? 0;
+    final s = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+    return Duration(minutes: m, seconds: s);
+  }
+}
+
+/// Static waveform bars whose left portion lights up with playback —
+/// honest decoration: the shape is deterministic, the fill is real.
+class _VoiceWavePainter extends CustomPainter {
+  _VoiceWavePainter({
+    required this.progress,
+    required this.played,
+    required this.rest,
+  });
+
+  final double progress;
+  final Color played;
+  final Color rest;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const count = 26;
+    final barWidth = size.width / (count * 1.6);
+    final gap = barWidth * 0.6;
+    final paint = Paint()..style = PaintingStyle.fill;
+    for (var i = 0; i < count; i++) {
+      final t = i / (count - 1);
+      // Deterministic pseudo-waveform (sin blend) — same shape every play.
+      final amp = 0.28 +
+          0.72 * (0.5 + 0.5 * math.sin(t * math.pi * 3.1) * 0.6 +
+              0.4 * math.sin(t * math.pi * 7.7));
+      final h = (size.height * amp).clamp(3.0, size.height);
+      final x = i * (barWidth + gap);
+      final y = (size.height - h) / 2;
+      paint.color = (i / count) <= progress ? played : rest;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            Rect.fromLTWH(x, y, barWidth, h),
+            Radius.circular(barWidth / 2)),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_VoiceWavePainter old) =>
+      old.progress != progress || old.played != played;
+}
+
 class _FileContent extends StatelessWidget {
   final String url;
   final bool dark;
@@ -2077,6 +2367,9 @@ class ChatComposer extends StatefulWidget {
   /// duration in seconds.
   final Future<void> Function(String videoPath, int seconds)? onSendVideo;
 
+  /// A recorded-and-uploaded voice note from the mic sheet.
+  final Future<void> Function(VoiceNoteResult voice)? onSendVoice;
+
   /// The reader is typing — throttled ping for the typing indicator.
   final VoidCallback? onTyping;
 
@@ -2091,6 +2384,7 @@ class ChatComposer extends StatefulWidget {
     required this.onSendImage,
     this.onSendFile,
     this.onSendVideo,
+    this.onSendVoice,
     this.onSendEmote,
     this.hint = 'Message…',
     this.enabled = true,
@@ -2256,6 +2550,18 @@ class _ChatComposerState extends State<ChatComposer> {
   }
 
   /// Any file format, through the BookNest picker.
+  Future<void> _recordVoice() async {
+    if (_uploading || widget.onSendVoice == null) return;
+    final voice = await showVoiceRecorder(context);
+    if (voice == null || !mounted) return;
+    setState(() => _uploading = true);
+    try {
+      await widget.onSendVoice!(voice);
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
   Future<void> _attachFile() async {
     if (_uploading || widget.onSendFile == null) return;
     try {
@@ -2329,12 +2635,14 @@ class _ChatComposerState extends State<ChatComposer> {
                   color: BookNestColors.cyan),
               title: const Text('Voice message',
                   style: TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: const Text('Hold to record — up to 2 minutes',
+              subtitle: const Text('Record, preview, send — up to 2 minutes',
                   style: TextStyle(fontSize: 12)),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                showVoiceRecorder(context);
-              },
+              onTap: widget.onSendVoice == null
+                  ? null
+                  : () {
+                      Navigator.pop(sheetContext);
+                      _recordVoice();
+                    },
             ),
             ListTile(
               leading: const Icon(Icons.folder_open_rounded,
