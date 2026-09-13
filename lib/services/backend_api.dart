@@ -463,6 +463,13 @@ class BackendApi {
       call('chat.deleteMessage',
           <String, dynamic>{'messageId': messageId, 'forEveryone': forEveryone});
 
+  // ── random chat: FIFO pair-up ────────────────────────────────────────────
+  Future<Map<String, dynamic>?> randomJoin() => call('random.join');
+
+  Future<Map<String, dynamic>?> randomStatus() => call('random.status');
+
+  Future<Map<String, dynamic>?> randomLeave() => call('random.leave');
+
   Future<Map<String, dynamic>?> markDmRead(String conversationId) =>
       call('dm.read', <String, dynamic>{'conversationId': conversationId});
 

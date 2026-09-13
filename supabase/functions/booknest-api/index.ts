@@ -2429,6 +2429,74 @@ Deno.serve(async (req: Request) => {
         return ok({ conversation: await ensureDirect(uid, peer) });
       }
 
+      // ── random chat: FIFO pair-up of waiting readers ────────────────────
+      // The queue is short-lived (10-minute stale purge on every join);
+      // matches become ordinary direct conversations (via: 'random') so
+      // every existing chat power — encryption-at-rest, retention, block,
+      // report, delete — applies unchanged.
+      case 'random.join': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        if (await isBanned(uid)) return fail('Your account is suspended — contact support');
+        const u = await dbFor('users');
+        const queue = u.collection('random_queue');
+        const now = new Date();
+        await queue.deleteMany({
+          joinedAt: { $lt: new Date(now.getTime() - 10 * 60 * 1000) },
+        });
+        const [myBlocked, waiting] = await Promise.all([
+          blockedSet(uid),
+          queue.find({ _id: { $ne: uid } })
+            .sort({ joinedAt: 1 }).limit(30).toArray(),
+        ]);
+        for (const w of waiting) {
+          const other = String(w._id);
+          if (myBlocked.has(other)) continue;
+          const otherBlocked = await blockedSet(other);
+          if (otherBlocked.has(uid)) continue;
+          await queue.deleteMany({ _id: { $in: [uid, other] } });
+          const conversation = await ensureDirect(uid, other);
+          try {
+            await (await dbFor('chats')).collection('conversations')
+              .updateOne(
+                { _id: new ObjectId(String(conversation.id)) },
+                { $set: { via: 'random', randomAt: now } });
+          } catch (_) { /* the chat works even if the stamp races */ }
+          return ok({ matched: true, conversation });
+        }
+        await queue.updateOne(
+          { _id: uid },
+          { $set: { joinedAt: now } },
+          { upsert: true });
+        return ok({ matched: false });
+      }
+
+      case 'random.status': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const u = await dbFor('users');
+        const still = await u.collection('random_queue').findOne({ _id: uid });
+        if (still) return ok({ matched: false, waiting: true });
+        const since = new Date(Date.now() - 5 * 60 * 1000);
+        const room = await (await dbFor('chats')).collection('conversations')
+          .findOne({
+            via: 'random',
+            memberIds: uid,
+            $or: [{ randomAt: { $gte: since } }, { createdAt: { $gte: since } }],
+          } as never,
+            { sort: { _id: -1 } } as never);
+        if (!room) return ok({ matched: false, waiting: true });
+        return ok({ matched: true, conversation: conversationView(room, uid) });
+      }
+
+      case 'random.leave': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        await (await dbFor('users')).collection('random_queue')
+          .deleteOne({ _id: uid });
+        return ok({ left: true });
+      }
+
       case 'dm.send': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);

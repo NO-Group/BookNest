@@ -324,6 +324,11 @@ class _DMListScreenState extends State<DMListScreen> {
                     icon: const Icon(Icons.edit_square),
                     tooltip: 'New chat',
                   ),
+                  IconButton.filledTonal(
+                    onPressed: () => context.push('/random-chat'),
+                    icon: const Icon(Icons.shuffle_rounded),
+                    tooltip: 'Random chat',
+                  ),
                 ],
               ),
             ),

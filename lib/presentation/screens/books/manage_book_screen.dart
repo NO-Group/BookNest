@@ -203,8 +203,8 @@ class _ManageBookScreenState extends State<ManageBookScreen> {
                           style: TextStyle(fontWeight: FontWeight.w800)),
                       const SizedBox(height: 4),
                       Text(
-                        'Tap the cover to upload. Cloudinary resizes and '
-                        'optimizes it automatically.',
+                        'Tap the cover to add art — it is sized and '
+                        'polished for you automatically.',
                         style: TextStyle(
                             color: theme.hintColor,
                             fontSize: 12.5,

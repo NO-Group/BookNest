@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.25.0+42 — 2026-09-13 · Random Chat + publish-clean runway
+
+**New — Random Chat:**
+- **Messages → shuffle icon → paired with one random reader** in
+  seconds: a FIFO waiting pool pairs readers as they arrive, with a
+  gentle searching screen (orbiting mark, rotating hints, stop
+  anytime). Matches become ordinary one-to-one conversations — so
+  blocking, reporting, deletion, retention and every chat power apply
+  unchanged. Banned readers can't join; blocked pairs never match;
+  stale queue entries purge themselves after 10 minutes.
+
+**Publishing runway cleared:**
+- **No developer-speak in the UI**: vendor names (Supabase, Cloudinary,
+  MongoDB) rewritten out of the author and privacy screens into reader
+  language; the book editor no longer talks about upload plumbing; the
+  connection screen no longer narrates internal settings; the About
+  page dropped its infrastructure rows. What remains is reader language
+  only — plus the owner-only update banner, which disappears for
+  everyone by design the moment the server is current.
+
+**Plus: `CHECKLIST.md`** — every owner action from the chat-backup
+release to publishing, click by click with proofs.
+
 ## 2.24.2+41 — 2026-09-13 · Calls connect everywhere (TURN)
 
 - **TURN relay, edge-minted**: new `calls.ice` action — the server

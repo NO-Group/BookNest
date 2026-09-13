@@ -83,13 +83,10 @@ class _ConnectionStatusScreenState extends State<ConnectionStatusScreen> {
             'Fully working — wallet, Jenny, likes and trends are live.'));
       } else if (mongo == 'not_configured' || mongo == 'unreachable') {
         setState(() => _services = const _LayerResult(_Health.down,
-            'The services are awake but their data connection needs one more '
-            'setting. This is being finished on the project side — check '
-            'back shortly.'));
+            'Services are warming up right now — check back shortly.'));
       } else if (data is Map && data['ok'] == true) {
         setState(() => _services = const _LayerResult(_Health.down,
-            'Responding, but this build can’t verify its data layer. Update '
-            'the app and recheck.'));
+            'We are updating the service — try again in a little while.'));
       } else {
         setState(() => _services = const _LayerResult(_Health.down,
             'Responded with an unexpected answer. Try again shortly.'));

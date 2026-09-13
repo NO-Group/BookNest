@@ -22,18 +22,18 @@ class PrivacyScreen extends StatelessWidget {
         children: [
           _Card(theme: theme, icon: Icons.lock_outline_rounded, title: 'Your account',
               body:
-                  'Your login is protected by Supabase authentication. We store '
+                  'Your login is protected with bank-grade authentication. We store '
                   'only the basics: username, display name, phone number (for '
                   'account recovery) and the profile photo you upload.'),
           _Card(theme: theme, icon: Icons.image_outlined, title: 'Images',
               body:
-                  'Profile photos and book covers are stored on Cloudinary and '
+                  'Profile photos and book covers are kept in secure cloud storage and '
                   'optimized automatically. We keep URLs, never your raw photos.'),
           _Card(theme: theme, icon: Icons.menu_book_rounded, title: 'Books & manuscripts',
               body:
                   'What you write belongs to you. Manuscripts, chapters, likes, '
                   'reviews and chats are stored in BookNest\'s document database '
-                  '(MongoDB) and are only visible to you unless you publish or '
+                  'privately and are only visible to you unless you publish or '
                   'share them.'),
           _Card(theme: theme, icon: Icons.lock_rounded, title: 'Sealed messages',
               body:

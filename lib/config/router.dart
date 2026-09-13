@@ -14,6 +14,7 @@ import '../presentation/screens/books/book_details_screen.dart';
 import '../presentation/screens/dms/dm_list_screen.dart';
 import '../presentation/screens/dms/dm_chat_screen.dart';
 import '../presentation/screens/chat/chat_screen.dart';
+import '../presentation/screens/chat/random_chat_screen.dart';
 import '../presentation/screens/reader/reader_screen.dart';
 import '../presentation/screens/wrapped/wrapped_screen.dart';
 import '../presentation/screens/settings/settings_screen.dart';
@@ -313,6 +314,10 @@ final GoRouter appRouter = GoRouter(
     // Telegram-style chat, opened full-screen (nav bar hidden).
     // `/chat/<conversationId>` continues a chat; `/chat/peer/<peerId>`
     // starts one (the edge function reuses the 1:1 conversation).
+    GoRoute(
+      path: '/random-chat',
+      builder: (context, state) => const RandomChatScreen(),
+    ),
     GoRoute(
       path: '/chat/peer/:peerId',
       builder: (context, state) => DMChatScreen(
