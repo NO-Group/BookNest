@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.24.2+41 — 2026-09-13 · Calls connect everywhere (TURN)
+
+- **TURN relay, edge-minted**: new `calls.ice` action — the server
+  hands the app STUN plus, when `TURN_URL`/`TURN_SECRET` exist, TURN
+  entries with **ephemeral HMAC credentials** (6-hour expiry, minted
+  per call, secret never leaves the server; Cloudflare-TURN/coTURN
+  compatible). Symmetric corporate NATs now connect through the relay
+  instead of failing. Without the env, STUN-only exactly as before —
+  setup is two dashboard secrets (guide: `ops/TURN_SETUP.md`), and the
+  app asks for fresh credentials before every call.
+
 ## 2.24.1+40 — 2026-09-13 · Calls & voice, hardened
 
 - **Call buttons redraw for real**: mic, camera and flip now nudge the

@@ -7,6 +7,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'backend_api.dart';
 import 'supabase_service.dart';
 
 /// BookNest Calls — 1:1 voice and video, pure peer-to-peer WebRTC.
@@ -264,12 +265,41 @@ class CallService {
     return lines.join('\r\n');
   }
 
+  /// STUN always; TURN relay with edge-minted ephemeral credentials as
+  /// soon as the server has TURN_URL/TURN_SECRET — symmetric-NAT proof.
+  /// Falls back to STUN-only on any failure so a call never blocks here.
+  Future<List<Map<String, dynamic>>> _iceServers() async {
+    const fallback = <Map<String, dynamic>>[
+      {'urls': 'stun:stun.l.google.com:19302'},
+      {'urls': 'stun:stun1.l.google.com:19302'},
+    ];
+    try {
+      final res = await BackendApi.instance.call('calls.ice');
+      final list = res?['iceServers'];
+      if (list is List && list.isNotEmpty) {
+        final servers = <Map<String, dynamic>>[];
+        for (final entry in list) {
+          if (entry is! Map) continue;
+          final server = <String, dynamic>{
+            'urls': entry['urls']?.toString() ?? '',
+          };
+          if (entry['username'] != null) {
+            server['username'] = entry['username'].toString();
+          }
+          if (entry['credential'] != null) {
+            server['credential'] = entry['credential'].toString();
+          }
+          if ((server['urls'] as String).isNotEmpty) servers.add(server);
+        }
+        if (servers.isNotEmpty) return servers;
+      }
+    } catch (_) {}
+    return fallback;
+  }
+
   Future<void> _createPeer() async {
     _pc = await createPeerConnection({
-      'iceServers': [
-        {'urls': 'stun:stun.l.google.com:19302'},
-        {'urls': 'stun:stun1.l.google.com:19302'},
-      ],
+      'iceServers': await _iceServers(),
       'iceCandidatePoolSize': 4,
     });
     _pc!.onTrack = (event) {

@@ -1166,6 +1166,37 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // ── calls: STUN + (when configured) TURN with ephemeral credentials ──
+      // The TURN secret never leaves the server; readers get a short-lived
+      // HMAC credential that expires on its own (Cloudflare-TURN/coTURN
+      // compatible static-auth scheme). Without the env, STUN-only.
+      case 'calls.ice': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const stun = [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+        ];
+        const turnUrl = Deno.env.get('TURN_URL');
+        const turnSecret = Deno.env.get('TURN_SECRET');
+        if (!turnUrl || !turnSecret) return ok({ iceServers: stun, turn: false });
+        const expiry = Math.floor(Date.now() / 1000) + 60 * 60 * 6;
+        const username = String(expiry);
+        const key = await crypto.subtle.importKey(
+          'raw', new TextEncoder().encode(turnSecret),
+          { name: 'HMAC', hash: 'SHA-1' }, false, ['sign'],
+        );
+        const sig = await crypto.subtle.sign(
+          'HMAC', key, new TextEncoder().encode(username));
+        let hex = '';
+        for (const b of new Uint8Array(sig)) hex += String.fromCharCode(b);
+        const credential = btoa(hex);
+        const turnServers = turnUrl.split(',').map((u) => u.trim())
+          .filter(Boolean)
+          .map((urls) => ({ urls, username, credential }));
+        return ok({ iceServers: [...stun, ...turnServers], turn: true });
+      }
+
       // ── resilience: RLS-exempt whitelisted write (ownership force-bound) ─
       case 'db.write': {
         const uid = await currentUserId(req);

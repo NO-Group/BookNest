@@ -68,6 +68,7 @@ class BackendApi {
     'chat.ensure': 'chats',
     'chat.pin': 'chats',
     'chat.rooms': 'chats',
+    'calls.ice': 'chats',
     'notifications.list': 'notifications',
     'reviews.list': 'books',
     'reviews.create': 'books',
