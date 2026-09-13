@@ -1,5 +1,46 @@
 # Changelog
 
+## 2.22.0+35 — 2026-09-13 · The "every lever works" round
+
+**Fixes — every reported point:**
+- **Post cards are responsive**: the action bar (views · like · comment
+  · reshare · delete/report) now reflows instead of overflowing on
+  narrow phones; long author names shrink with an ellipsis everywhere —
+  feed cards, bylines, comment rows. Nothing spills past the card.
+- **Liking posts works**: the like parser now reads the edge's wrapped
+  reply (`{ok, data:{likeCount}}`) — the mismatch made every like throw.
+  Reactions, read receipts, message deletes and chat lists invalidate
+  the right cache domains so nothing stale lingers after an action.
+- **Messages delete** (for me + for everyone), **reactions save**, and
+  **reports send**: server-side, the launch-era duplicate
+  `moderation.report` case was silently swallowing the real one (in a
+  JS switch the last case wins) — every report was rejected. Deduped.
+- **Custom emotes are never "images"**: last user-facing copy that
+  called them stickers/images is gone — they are Emotes everywhere.
+- **Real emoji art**: all 72 emotes now render **Twemoji** — the
+  professional Twitter open-source set (CC BY 4.0, attributed in
+  Settings → About and NOTICE) — bundled offline, with BookNest's glow,
+  shine and motion engine untouched and the hand-drawn painter kept as
+  an automatic fallback.
+- **Books screen loads again**: legacy books were invisible because the
+  shelf filters on status/moderation stamps they never had. The edge
+  now heals them on every cold start (published + approved), before
+  the migration early-return.
+- **Second profile is Reddit-style**: left-aligned avatar + name +
+  @handle, plain tappable stat counters (Books / Followers /
+  Following), Follow + Message pills, and Books/About tabs — replacing
+  the old centered layout. The follow state now loads truthfully on
+  open.
+- **Moderator console loads**: when auth-admin listing is unavailable
+  the edge falls back to the profiles table (100 per page), so the
+  users list always fills.
+- **Phone sync fixed at the root**: the phone pattern on the edge was
+  verified byte-by-byte and is correct (`\+?[0-9]{7,15}`).
+- **Dictionary lookups & trending + write fallbacks** now unwrap the
+  edge envelope too — five more silent mismatch points fixed.
+- Chat message deletions/reactions bust the chats cache; the composer,
+  sheets and toasts keep their existing contracts.
+
 ## 2.21.0+34 — 2026-09-11 · Production polish round
 
 **Upgrades:**

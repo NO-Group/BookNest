@@ -581,14 +581,20 @@ class _QuotePostCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                author,
-                style: const TextStyle(
-                  color: BookNestColors.lightTextSecondary,
-                  fontSize: 12,
+              // Flexible so long names shrink to "…" instead of shoving
+              // the action bar off the card.
+              Expanded(
+                child: Text(
+                  author,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: BookNestColors.lightTextSecondary,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 4),
               _PostActionButtons(post: post),
             ],
           ),
@@ -672,14 +678,18 @@ class _NewsPostCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Text(
-                      'By $author',
-                      style: const TextStyle(
-                        color: BookNestColors.lightTextSecondary,
-                        fontSize: 12,
+                    Expanded(
+                      child: Text(
+                        'By $author',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: BookNestColors.lightTextSecondary,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 6),
                     const Icon(Icons.arrow_forward, color: BookNestColors.cyan, size: 16),
                   ],
                 ),
@@ -962,14 +972,18 @@ class _ArticlePostCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              Text(
-                'By $author',
-                style: const TextStyle(
-                  color: BookNestColors.lightTextSecondary,
-                  fontSize: 12,
+              Expanded(
+                child: Text(
+                  'By $author',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: BookNestColors.lightTextSecondary,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 6),
               TextButton(
                 onPressed: () => context.push('/publish-details?bookId=${post['id']}'),
                 child: const Text(
@@ -1197,8 +1211,11 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
   @override
   Widget build(BuildContext context) {
     final muted = Theme.of(context).hintColor;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    // Wrap, not Row: on narrow phones the bar reflows to a second line
+    // instead of spilling past the card edge.
+    return Wrap(
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Icon(Icons.visibility_outlined, color: muted.withOpacity(.8), size: 18),
         const SizedBox(width: 4),
@@ -1214,6 +1231,9 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
             size: 20,
           ),
           tooltip: _liked ? 'Unlike' : 'Like',
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.all(4),
+          constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
           onPressed: _toggle,
         ),
         AnimatedCount(
@@ -1229,7 +1249,7 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
           borderRadius: BorderRadius.circular(18),
           onTap: _openComments,
           child: Padding(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(4),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1248,7 +1268,7 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
           borderRadius: BorderRadius.circular(18),
           onTap: _reshare,
           child: Padding(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(4),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1269,6 +1289,8 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
                 color: muted.withOpacity(.7), size: 18),
             tooltip: 'Delete post',
             visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
             onPressed: _deleteMyPost,
           )
         else
@@ -1277,6 +1299,8 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
                 color: muted.withOpacity(.7), size: 18),
             tooltip: 'Report post',
           visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.all(4),
+          constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
           onPressed: () {
             final id = widget.post is Map && widget.post['id'] != null
                 ? widget.post['id'].toString()
@@ -1721,10 +1745,14 @@ class _CommentRow extends StatelessWidget {
                       fontWeight: FontWeight.bold)),
             ),
             const SizedBox(width: 8),
-            Text(name,
-                style: const TextStyle(
-                    fontSize: 12.5, fontWeight: FontWeight.w700)),
-            const Spacer(),
+            Expanded(
+              child: Text(name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 12.5, fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(width: 6),
             GestureDetector(
               onTap: onReply,
               child: Text('Reply',

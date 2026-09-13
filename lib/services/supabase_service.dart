@@ -195,8 +195,11 @@ class SupabaseService {
           },
         );
         final data = res.data;
-        if (data is Map && data['row'] != null) {
-          return Map<String, dynamic>.from(data['row'] as Map);
+        final payload = data is Map && data['data'] is Map
+            ? data['data'] as Map
+            : (data is Map ? data : const <String, dynamic>{});
+        if (payload['row'] != null) {
+          return Map<String, dynamic>.from(payload['row'] as Map);
         }
         throw WriteException('Write rejected by the server.');
       } on WriteException {
@@ -239,7 +242,10 @@ class SupabaseService {
           },
         );
         final data = res.data;
-        if (data is Map && data['row'] != null) return;
+        final payload = data is Map && data['data'] is Map
+            ? data['data'] as Map
+            : (data is Map ? data : const <String, dynamic>{});
+        if (payload['row'] != null) return;
         throw WriteException('Update rejected by the server.');
       } on WriteException {
         rethrow;
@@ -263,8 +269,12 @@ class SupabaseService {
         body: {'action': 'feed.stats', 'postIds': postIds},
       );
       final data = res.data;
-      if (data is Map && data['stats'] is Map) {
-        final raw = data['stats'] as Map;
+      // Edge wraps results under 'data'; accept both shapes.
+      final payload = data is Map && data['data'] is Map
+          ? data['data'] as Map
+          : (data is Map ? data : const <String, dynamic>{});
+      if (payload['stats'] is Map) {
+        final raw = payload['stats'] as Map;
         return raw.map(
           (k, v) => MapEntry(
             k.toString(),
@@ -292,9 +302,14 @@ class SupabaseService {
         },
       );
       final data = res.data;
-      if (data is Map && data['likeCount'] is num) {
-        return (data['likeCount'] as num).toInt();
-      }
+      // The edge wraps results as {ok, data:{...}}; older replies were flat.
+      final likeCount = data is Map
+          ? ((data['data'] is Map
+                  ? (data['data'] as Map)['likeCount']
+                  : null) ??
+              data['likeCount'])
+          : null;
+      if (likeCount is num) return likeCount.toInt();
       throw WriteException(
           "BookNest couldn't complete that just now — please try again in a moment.");
     } on WriteException {
@@ -336,8 +351,11 @@ class SupabaseService {
         },
       );
       final data = res.data;
-      if (data is! Map || data['word'] is! Map) return null;
-      final w = Map<String, dynamic>.from(data['word'] as Map);
+      final payload = data is Map && data['data'] is Map
+          ? data['data'] as Map
+          : (data is Map ? data : const <String, dynamic>{});
+      if (payload['word'] is! Map) return null;
+      final w = Map<String, dynamic>.from(payload['word'] as Map);
       final meanings =
           ((w['meanings'] as List?) ?? const []).whereType<Map>().toList();
       final defs = <String>[];
@@ -385,8 +403,11 @@ class SupabaseService {
         body: {'action': 'dict.trending'},
       );
       final data = res.data;
-      if (data is Map && data['trending'] is List) {
-        return (data['trending'] as List).map((t) => t.toString()).toList();
+      final payload = data is Map && data['data'] is Map
+          ? data['data'] as Map
+          : (data is Map ? data : const <String, dynamic>{});
+      if (payload['trending'] is List) {
+        return (payload['trending'] as List).map((t) => t.toString()).toList();
       }
       return const [];
     } catch (error) {

@@ -478,6 +478,23 @@ let migrationMemo = false;
 async function migrateLegacy(req: Request): Promise<void> {
   if (migrationMemo) return;
   const meta = (await dbFor('books')).collection('meta');
+  // Heals legacy books (missing status / moderationStatus) on EVERY cold
+  // start — including already-migrated databases — so the shelf is never
+  // empty. Idempotent, and memoized below via migrationMemo.
+  if (!migrationMemo) {
+    try {
+      const booksCol = (await dbFor('books')).collection('books');
+      // Pure legacy docs: no status at all → publish + approve.
+      await booksCol.updateMany(
+        { $or: [{ status: { $in: [null, ''] } }, { status: { $exists: false } }] } as never,
+        { $set: { status: 'published', moderationStatus: 'approved' } });
+      // Partial legacy docs: published but never stamped by moderation.
+      await booksCol.updateMany(
+        { status: 'published',
+          $or: [{ moderationStatus: { $in: [null, ''] } }, { moderationStatus: { $exists: false } }] } as never,
+        { $set: { moderationStatus: 'approved' } });
+    } catch (_) { /* healed again on next cold start */ }
+  }
   const flag = await meta.findOne({ _id: 'legacy_migration_v1' });
   if (flag?.done === true) {
     migrationMemo = true;
@@ -4490,7 +4507,27 @@ Deno.serve(async (req: Request) => {
             users: (res.data?.users ?? []) as Record<string, unknown>[],
             total: undefined,
           };
-        } catch { /* fall back to prefs-only rows */ }
+        } catch { /* fall back to profiles rows */ }
+        if (authUsers.users.length === 0) {
+          // Auth admin unavailable — list from profiles instead so the
+          // console still shows every reader.
+          try {
+            const from = (page - 1) * perPage;
+            const pr = await serviceClient().from('profiles')
+              .select('id,username,display_name,avatar_url')
+              .order('created_at', { ascending: false })
+              .range(from, from + perPage - 1);
+            authUsers = {
+              users: (pr.data ?? []).map((r) => ({
+                id: String(r.id),
+                email: '',
+                phone: '',
+                username: r.username ?? '',
+                displayName: r.display_name ?? '',
+              })) as Record<string, unknown>[],
+            };
+          } catch { /* even profiles unreachable — empty page */ }
+        }
         const prefsCol = (await dbFor('users')).collection('user_prefs');
         const bansCol = (await dbFor('moderation')).collection('bans');
         const rows = [];
@@ -5282,26 +5319,9 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // ── launch: community safety — reports, blocks, account deletion ──
-      case 'moderation.report': {
-        const uid = await currentUserId(req);
-        if (!uid) return fail('Sign in required', 401);
-        const kinds = ['post', 'message', 'user', 'book', 'club'];
-        const kind = kinds.includes(String(p.kind)) ? String(p.kind) : null;
-        if (!kind) return fail('What you are reporting is unclear');
-        const targetId = typeof p.targetId === 'string' ? p.targetId.slice(0, 64) : '';
-        if (!targetId) return fail('A target is required');
-        const reasons = ['spam', 'harassment', 'hate', 'violence', 'sexual',
-          'misinformation', 'copyright', 'self_harm', 'illegal', 'other'];
-        const reason = reasons.includes(String(p.reason)) ? String(p.reason) : 'other';
-        const details = typeof p.details === 'string'
-          ? p.details.trim().slice(0, 500) : '';
-        await (await dbFor('moderation')).collection('reports').insertOne({
-          reporterId: uid, kind, targetId, reason, details,
-          status: 'open', createdAt: new Date(),
-        });
-        return ok({ reported: true });
-      }
+      // ── launch: community safety — blocks, account deletion ──────────
+      // (reports live in the single moderation.report case above; the
+      // duplicate here used to silently win and reject the app's fields)
 
       case 'dm.blocklist': {
         const uid = await currentUserId(req);

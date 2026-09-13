@@ -512,7 +512,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style:
                         TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
                 subtitle: const Text(
-                    'Emotes, animated stickers, translator and voice typing in chats',
+                    'BookNest Emotes, animated emotes, translator and voice typing in chats',
                     style: TextStyle(fontSize: 12)),
                 value: on,
                 activeColor: BookNestColors.cyan,

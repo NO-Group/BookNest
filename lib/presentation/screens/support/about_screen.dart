@@ -93,7 +93,9 @@ class AboutScreen extends StatelessWidget {
           const SizedBox(height: 22),
           Center(
             child: Text(
-              'Made with 💙 for readers everywhere.',
+              'Made with 💙 for readers everywhere.\n'
+              'Emote artwork: Twemoji by Twitter and the community '
+              '(CC BY 4.0).',
               textAlign: TextAlign.center,
               style: TextStyle(color: theme.hintColor, fontSize: 12.5, height: 1.5),
             ),

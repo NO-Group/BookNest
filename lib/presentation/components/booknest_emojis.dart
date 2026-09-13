@@ -391,8 +391,18 @@ class _BookNestEmojiViewState extends State<BookNestEmojiView>
                   motion: motion,
                 ),
                 foregroundPainter: _EmojiShinePainter(t: loop),
-                child: CustomPaint(
-                  painter: BookNestEmojiPainter(def, t: loop),
+                // Vendored Twemoji artwork (CC BY 4.0 — see NOTICE and
+                // Settings → About). The hand-drawn painter stays as the
+                // offline fallback if a piece of art is ever missing.
+                child: Image.asset(
+                  'assets/emotes/${def.code}.png',
+                  width: size.width,
+                  height: size.height,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder: (_, __, ___) => CustomPaint(
+                    painter: BookNestEmojiPainter(def, t: loop),
+                  ),
                 ),
               ),
             ),

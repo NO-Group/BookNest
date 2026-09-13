@@ -1,7 +1,7 @@
 name: booknest
 description: BookNest by N.O Group - The Digital Library Ecosystem for Bookworms
 publish_to: 'none'
-version: 2.21.0+34
+version: 2.22.0+35
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -65,3 +65,4 @@ flutter:
     - assets/logo/stylus_polished.svg
     - assets/logo/booknest_logo_new_transparent_dark_theme.png
     - assets/dictionary/words.json
+    - assets/emotes/
