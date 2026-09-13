@@ -1,0 +1,12 @@
+Live probe of the deployed booknest-api — 2026-09-13T10:04:14Z
+("Sign in required" = the action EXISTS on the server;
+ "Unknown action" = the deployed file predates it)
+
+ping               → {"ok":true,"data":{"databases":{"books":"booknest_books","social":"booknest_social","reviews":"booknest_reviews","chats":"booknest_chats","notifications":"booknest_notifications","users":"booknest_users","dictionary":"bo
+moderation.report  → {"ok":false,"error":"Sign in required"}
+dm.react           → {"ok":false,"error":"Sign in required"}
+chat.react         → {"ok":false,"error":"Sign in required"}
+dm.deleteMessage   → {"ok":false,"error":"Sign in required"}
+chat.deleteMessage → {"ok":false,"error":"Sign in required"}
+feed.like          → {"ok":false,"error":"Sign in required"}
+books.list         → {"ok":true,"data":{"books":[],"nextCursor":null}}
