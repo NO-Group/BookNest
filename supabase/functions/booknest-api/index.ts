@@ -475,6 +475,54 @@ const GROUP_KINDS = ['clubs', 'communities', 'organizations', 'schools'] as cons
 
 let migrationMemo = false;
 
+/** Real public-domain classics for brand-new shelves (first paragraphs,
+ * quoted faithfully). Ids are `seed-` prefixed so moderators can manage
+ * them exactly like any other book. */
+const SEED_BOOKS: Array<Record<string, string>> = [
+  {
+    id: 'seed-alice', title: "Alice's Adventures in Wonderland",
+    author: 'Lewis Carroll', genre: "Children's",
+    description: 'A curious girl tumbles down a rabbit hole into a world of talking animals, mad tea parties and a queen who loves beheadings — the founding classic of literary nonsense.',
+    chapterTitle: 'Down the Rabbit-Hole',
+    opening: 'Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, "and what is the use of a book," thought Alice, "without pictures or conversations?"\n\nSo she was considering in her own mind (as well as she could, for the hot day made her feel very sleepy and stupid), whether the pleasure of making a daisy-chain would be worth the trouble of getting up and picking the daisies, when suddenly a White Rabbit with pink eyes ran close by her.',
+  },
+  {
+    id: 'seed-pandp', title: 'Pride and Prejudice',
+    author: 'Jane Austen', genre: 'Romance',
+    description: 'Elizabeth Bennet spars with the proud Mr. Darcy in the most beloved Regency romance ever written — a comedy of manners, pride, and first impressions.',
+    chapterTitle: 'Chapter 1',
+    opening: 'It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.\n\nHowever little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered as the rightful property of some one or other of their daughters.\n\n"My dear Mr. Bennet," said his lady to him one day, "have you heard that Netherfield Park is let at last?"',
+  },
+  {
+    id: 'seed-tale', title: 'A Tale of Two Cities',
+    author: 'Charles Dickens', genre: 'Classics',
+    description: 'London and Paris, 1775: resurrection, revolution, and a sacrifice beyond reckoning in Dickens\' immortal story of two cities and one doomed love.',
+    chapterTitle: 'The Period',
+    opening: 'It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity, it was the season of Light, it was the season of Darkness, it was the spring of hope, it was the winter of despair, we had everything before us, we had nothing before us, we were all going direct to Heaven, we were all going direct the other way — in short, the period was so far like the present period, that some of its noisiest authorities insisted on its being received, for good or for evil, in the superlative degree of comparison only.',
+  },
+  {
+    id: 'seed-frankenstein', title: 'Frankenstein',
+    author: 'Mary Shelley', genre: 'Science Fiction',
+    description: 'Victor Frankenstein dares to fashion life from death — and is hunted by the wretched creature he abandons. The first great science-fiction novel, born from a nightmare.',
+    chapterTitle: 'Letter 1',
+    opening: '"You will rejoice to hear that no disaster has accompanied the commencement of an enterprise which you have regarded with such evil forebodings. I arrived here yesterday, and my first task is to assure my dear sister of my welfare and increasing confidence in the success of my undertaking.\n\nI am already far north of London, and as I walk in the streets of Petersburgh, I feel a cold northern breeze play upon my cheeks, which braces my nerves and fills me with delight."',
+  },
+  {
+    id: 'seed-timemachine', title: 'The Time Machine',
+    author: 'H. G. Wells', genre: 'Science Fiction',
+    description: 'A dinner-party demonstration becomes a voyage to the year 802,701 — where humanity has split into the gentle Eloi and the subterranean Morlocks.',
+    chapterTitle: 'Chapter 1',
+    opening: 'The Time Traveller (for so it will be convenient to speak of him) was expounding a recondite matter to us. His grey eyes shone and twinkled, and his usually pale face was flushed and animated. The fire burned brightly, and the soft radiance of the incandescent lights in the lilies of silver caught the bubbles that flashed and passed in our glasses.',
+  },
+  {
+    id: 'seed-study-scarlet', title: 'A Study in Scarlet',
+    author: 'Arthur Conan Doyle', genre: 'Crime',
+    description: 'A army surgeon home from the war rooms with a strange man who "beats the band" — the case that introduces Sherlock Holmes and Dr. Watson to the world.',
+    chapterTitle: 'Chapter 1 · Mr. Sherlock Holmes',
+    opening: 'In the year 1878 I took my degree of Doctor of Medicine of the University of London, and proceeded to Netley to go through the course prescribed for surgeons in the army. Having completed my studies there, I was duly attached to the Fifth Northumberland Fusiliers as Assistant Surgeon. The regiment was stationed in India at the time, and before I could join it, the second Afghan war had broken out.',
+  },
+];
+
 async function migrateLegacy(req: Request): Promise<void> {
   if (migrationMemo) return;
   const meta = (await dbFor('books')).collection('meta');
@@ -493,6 +541,46 @@ async function migrateLegacy(req: Request): Promise<void> {
         { status: 'published',
           $or: [{ moderationStatus: { $in: [null, ''] } }, { moderationStatus: { $exists: false } }] } as never,
         { $set: { moderationStatus: 'approved' } });
+      // A brand-new deployment may have an empty shelf — seed real
+      // public-domain classics so Discover is never blank. Idempotent:
+      // only runs when nothing published exists, and every seeded doc
+      // carries a `seed-` id the moderator can delete like any book.
+      const published = await booksCol.countDocuments({ status: 'published' });
+      if (published === 0) {
+        const chaptersCol = (await dbFor('books')).collection('chapters');
+        for (const s of SEED_BOOKS) {
+          try {
+            await booksCol.insertOne({
+              _id: s.id,
+              title: s.title,
+              authorName: s.author,
+              authorId: null,
+              description: s.description,
+              genre: s.genre,
+              coverUrl: null,
+              contentFormat: 'markdown',
+              moderationStatus: 'approved',
+              status: 'published',
+              clubId: null,
+              chaptersCount: 1,
+              likeCount: 0, bookmarkCount: 0, viewCount: 0,
+              reviewCount: 0, ratingSum: 0,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+            await chaptersCol.insertOne({
+              _id: `${s.id}-ch1`,
+              bookId: s.id,
+              chapterNumber: 1,
+              title: s.chapterTitle,
+              content: s.opening,
+              createdAt: new Date(),
+            });
+          } catch (e) {
+            if (!isDupKey(e)) throw e;
+          }
+        }
+      }
     } catch (_) { /* healed again on next cold start */ }
   }
   const flag = await meta.findOne({ _id: 'legacy_migration_v1' });

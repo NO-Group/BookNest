@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.22.2+37 — 2026-09-13 · Guaranteed shelf + hard proof
+
+- **The shelf can never be empty again**: on a fresh deployment the
+  server now seeds six real public-domain classics (Alice in
+  Wonderland, Pride and Prejudice, A Tale of Two Cities, Frankenstein,
+  The Time Machine, A Study in Scarlet) with their true opening
+  chapters — only when zero published books exist, removable by the
+  moderator like any other book.
+- **Hard proof of the server gap**: git archaeology on the launch-era
+  edge (the one still deployed per the failure screenshots) shows it
+  contains only 17 actions — moderation.report, dm.react,
+  dm.deleteMessage, the chat toolkit and the books heal simply do not
+  exist in it. No app update can invoke actions the server has never
+  heard of; the one-time edge paste (or the new Supabase Edge Deploy
+  workflow) remains the key for points 3/4/5/8/10 — and the owner
+  banner in About/Moderation shows the truth live.
+
 ## 2.22.1+36 — 2026-09-13 · The server-truth round
 
 **New — the app now tells you what's wrong:**
