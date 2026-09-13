@@ -68,7 +68,7 @@ class AboutScreen extends StatelessWidget {
           _Row(label: 'Built with', value: 'Flutter'),
           _Row(label: 'Cloud', value: 'Supabase · MongoDB · Cloudinary · R2'),
           _Row(label: 'By', value: 'N.O Group'),
-          const ServerStatusBanner(),
+          ServerStatusBanner(),
           const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,

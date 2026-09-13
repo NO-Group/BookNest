@@ -50,7 +50,7 @@ class ModerationScreen extends StatelessWidget {
         body: Column(
           children: [
             // Owner-only: shouts exactly when the deployed server is old.
-            const ServerStatusBanner(),
+            ServerStatusBanner(),
             Expanded(
               child: TabBarView(
                 children: [

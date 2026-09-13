@@ -24,7 +24,7 @@
 ///  With no --dart-define flags, the defaults below are used.
 class AppConfig {
   /// Display version — keep in sync with pubspec.yaml on every release.
-  static const String appVersion = '2.22.2+37';
+  static const String appVersion = '2.23.0+38';
 
   AppConfig._();
 
@@ -63,5 +63,12 @@ class AppConfig {
   // ── Edge functions ───────────────────────────────────────────────────────
   /// Single gateway to MongoDB Atlas: books, chapters, likes, saves, views,
   /// reviews, follows, chats, notifications.
+
   static const String edgeFunctionName = 'booknest-api';
+
+  /// Deep link to this project's edge function in the Supabase dashboard —
+  /// the exact page where the owner pastes a server update and hits Deploy.
+  /// (Project ref is public — it's already in supabaseUrl.)
+  static const String dashboardFunctionUrl =
+      'https://supabase.com/dashboard/project/ekgbbbbjwgfixqarlnil/functions/booknest-api/details';
 }

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.23.0+38 — 2026-09-13 · The in-app deploy kit
+
+- **Fixing the server is now three taps inside the app** (owner only):
+  when the banner says "Server update needed" it offers
+  **Copy server code** (the entire updated edge function ships inside
+  the APK, clipboard-ready — it holds no secrets), **Open Supabase**
+  (deep link straight to the function's dashboard page), and
+  **Re-test** — the banner vanishes the instant the deployment takes.
+  No GitHub file-hunting, no guessing.
+- **Live server probe in CI**: every build now interrogates the
+  deployed edge and commits its answers to `backend-probe.txt` — the
+  server's own words about which actions it knows and which version it
+  runs. Today's probe: server reachable, all actions present, but the
+  deployed file predates 2.22 (no version field) and the books shelf
+  is empty at the database.
+- Carried: seeded classics shelf, users-list fallback, all 12-point
+  fixes from 2.22.x.
+
 ## 2.22.2+37 — 2026-09-13 · Guaranteed shelf + hard proof
 
 - **The shelf can never be empty again**: on a fresh deployment the
