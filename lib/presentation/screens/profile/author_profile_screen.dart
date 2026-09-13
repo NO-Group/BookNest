@@ -116,7 +116,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
   }
 
   String get _username =>
-      _profile?['username']?.toString().trim().replaceAll(RegExp(r'^@'), '');
+      (_profile?['username']?.toString() ?? '').trim().replaceAll(RegExp(r'^@'), '');
 
   void _toggleFollow() {
     if (_followBusy) return;
