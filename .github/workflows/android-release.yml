@@ -137,7 +137,10 @@ jobs:
             git config user.name "booknest-ci"
             git add diag/build-error-tail.txt
             git commit -q -m "CI build diagnostics for ${GITHUB_SHA} [skip ci]"
-            git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
+            # The probe job may have pushed first — rebase and retry.
+            git pull --rebase -q origin "${GITHUB_REF_NAME}" || true
+            git push -q origin "HEAD:${GITHUB_REF_NAME}" ||
+              git push -q -f origin "HEAD:${GITHUB_REF_NAME}" || true
           fi
 
       - name: Upload build log artifact

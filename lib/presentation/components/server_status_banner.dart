@@ -59,7 +59,7 @@ class _ServerStatusBannerState extends State<ServerStatusBanner> {
   }
 
   Future<void> _openSupabase() async {
-    final uri = Uri.parse(AppConfig.supabaseDashboardFunctionUrl);
+    final uri = Uri.parse(AppConfig.dashboardFunctionUrl);
     try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (mounted) {
