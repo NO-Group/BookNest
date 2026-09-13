@@ -18,6 +18,53 @@ permissions:
   issues: write
 
 jobs:
+  # Knocks on the LIVE deployed edge function and commits its answers
+  # into the repo (backend-probe.txt). The deployed server tells us
+  # itself which actions it knows — no guessing, no logs needed.
+  probe-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Probe the deployed edge function
+        env:
+          FN_URL: https://ekgbbbbjwgfixqarlnil.supabase.co/functions/v1/booknest-api
+          ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrZ2JiYmJqd2dmaXhxYXJsbmlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3MDAzODEsImV4cCI6MjEwMzI3NjM4MX0.DTTcX2DOxME72qF0fJzcAPJAWPd64LmhYKtT2SOlRy0
+        run: |
+          probe() {
+            local label="$1" body="$2"
+            local out
+            out=$(curl -s --max-time 20 -X POST "$FN_URL" \
+              -H "Authorization: Bearer $ANON" \
+              -H "Content-Type: application/json" \
+              -d "$body" | head -c 220)
+            echo "$label → ${out:-<no answer>}"
+          }
+          {
+            echo "Live probe of the deployed booknest-api — $(date -u +%FT%TZ)"
+            echo "(\"Sign in required\" = the action EXISTS on the server;"
+            echo " \"Unknown action\" = the deployed file predates it)"
+            echo ""
+            probe "ping              " '{"action":"ping"}'
+            probe "moderation.report " '{"action":"moderation.report"}'
+            probe "dm.react          " '{"action":"dm.react"}'
+            probe "chat.react        " '{"action":"chat.react"}'
+            probe "dm.deleteMessage  " '{"action":"dm.deleteMessage"}'
+            probe "chat.deleteMessage" '{"action":"chat.deleteMessage"}'
+            probe "feed.like         " '{"action":"feed.like"}'
+            probe "books.list        " '{"action":"books.list","payload":{"limit":3}}'
+          } > backend-probe.txt
+          cat backend-probe.txt
+
+      - name: Commit the probe result
+        run: |
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git add backend-probe.txt
+          git diff --cached --quiet || git commit -q -m "Backend probe: live edge answers [skip ci]"
+          git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
+
   release-apk:
     runs-on: ubuntu-latest
     steps:
