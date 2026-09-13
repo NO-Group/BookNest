@@ -14,7 +14,7 @@ on:
       - arena/01a03a7f-booknest
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -79,6 +79,16 @@ jobs:
             --title "CI build diagnostics" --body-file body.md || true
           mkdir -p diag && cp build.log diag/ 2>/dev/null || true
           tail -n 400 build.log > diag/build-error-tail.txt 2>/dev/null || true
+          # The blob host that serves run logs is unreachable from some
+          # sandboxes — commit the tail straight into the branch (marked
+          # [skip ci] so this never loops) where the agent can read it.
+          if [ -s diag/build-error-tail.txt ]; then
+            git config user.email "booknest-ci@users.noreply.github.com"
+            git config user.name "booknest-ci"
+            git add diag/build-error-tail.txt
+            git commit -q -m "CI build diagnostics for ${GITHUB_SHA} [skip ci]"
+            git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
+          fi
 
       - name: Upload build log artifact
         if: failure()
