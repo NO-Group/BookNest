@@ -1,8 +1,11 @@
-Live probe of the deployed booknest-api — 2026-09-13T10:04:14Z
+Live probe of the deployed booknest-api — 2026-09-13T10:08:33Z
 ("Sign in required" = the action EXISTS on the server;
- "Unknown action" = the deployed file predates it)
+ "Unknown action" = the deployed file predates it;
+ ping's  field shows the deployed file's version)
 
-ping               → {"ok":true,"data":{"databases":{"books":"booknest_books","social":"booknest_social","reviews":"booknest_reviews","chats":"booknest_chats","notifications":"booknest_notifications","users":"booknest_users","dictionary":"bo
+ping               → {"ok":true,"data":{"databases":{"books":"booknest_books","social":"booknest_social","reviews":"booknest_reviews","chats":"booknest_chats","notifications":"booknest_notifications","users":"booknest_users","dictionary":"booknest_dictionary","feed":"booknest_feed","moderation":"booknest_moderation","groups":"booknest_groups","genres":"booknest_genres"},"time":"2026-09-13T10:08:33.853Z","db":"booknest_books","mongo":"ready"}}
+admin.users.list   → {"ok":false,"error":"Only the overall moderator can list readers"}
+moderation.list    → {"ok":false,"error":"Only the overall moderator can view reports"}
 moderation.report  → {"ok":false,"error":"Sign in required"}
 dm.react           → {"ok":false,"error":"Sign in required"}
 chat.react         → {"ok":false,"error":"Sign in required"}
