@@ -1194,6 +1194,93 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // ── library bulk import (public-domain classics) ─────────────────────
+      // Guarded by IMPORT_TOKEN env (constant-time compare) so the CI
+      // importer can stream batches, or by the overall moderator. Books
+      // upsert by deterministic id; chapters replace only when the text
+      // hash changes, so reruns are cheap and resumable.
+      case 'admin.importBooks': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const rows = Array.isArray(p.books) ? p.books : [];
+        if (rows.length === 0) return fail('No books in the batch');
+        if (rows.length > 40) return fail('Batch too large — send 40 or fewer');
+        const d = await dbFor('books');
+        const booksCol = d.collection('books');
+        const chaptersCol = d.collection('chapters');
+        let imported = 0;
+        let skipped = 0;
+        for (const row of rows) {
+          try {
+            const title = String(row.title ?? '').trim().slice(0, 200);
+            const author = String(row.author ?? 'Unknown').trim().slice(0, 120);
+            if (!title) { skipped += 1; continue; }
+            const slug = (title + '|' + author).toLowerCase()
+              .replace(/[^a-z0-9|]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 90);
+            const id = 'bulk-' + slug;
+            const chaptersRaw = Array.isArray(row.chapters) ? row.chapters : [];
+            const chapters = chaptersRaw.slice(0, 300).map((c, i) => ({
+              chapterNumber: Number(c.chapterNumber ?? i + 1) || i + 1,
+              title: String(c.title ?? `Chapter ${i + 1}`).slice(0, 160),
+              content: String(c.content ?? '').slice(0, 400_000),
+            })).filter((c) => c.content.length > 0);
+            if (chapters.length === 0) { skipped += 1; continue; }
+            const crypto_ = globalThis.crypto;
+            const digest = await crypto_.subtle.digest('SHA-256',
+              new TextEncoder().encode(chapters.map((c) => c.content).join('\u0000')));
+            const contentHash = [...new Uint8Array(digest)].slice(0, 16)
+              .map((b) => b.toString(16).padStart(2, '0')).join('');
+            const existing = await booksCol.findOne({ _id: id });
+            if (existing && existing.contentHash === contentHash) {
+              skipped += 1;
+              continue;
+            }
+            const now = new Date();
+            await booksCol.updateOne(
+              { _id: id },
+              { $set: {
+                  title,
+                  authorName: author,
+                  authorId: existing?.authorId ?? null,
+                  description: String(row.description ?? '').slice(0, 1200),
+                  genre: String(row.genre ?? 'Classics').slice(0, 40),
+                  coverUrl: existing?.coverUrl ?? null,
+                  contentFormat: 'markdown',
+                  moderationStatus: 'approved',
+                  status: 'published',
+                  contentHash,
+                  chaptersCount: chapters.length,
+                  updatedAt: now,
+                },
+                $setOnInsert: {
+                  clubId: null,
+                  likeCount: 0, bookmarkCount: 0, viewCount: 0,
+                  reviewCount: 0, ratingSum: 0,
+                  createdAt: now,
+                } } as never,
+              { upsert: true });
+            if (existing && existing.contentHash !== contentHash) {
+              await chaptersCol.deleteMany({ bookId: id });
+            }
+            for (const c of chapters) {
+              await chaptersCol.updateOne(
+                { bookId: id, chapterNumber: c.chapterNumber },
+                { $set: { title: c.title, content: c.content } },
+                { upsert: true });
+            }
+            imported += 1;
+          } catch (_) {
+            skipped += 1;
+          }
+        }
+        return ok({ imported, skipped });
+      }
+
       // ── calls: STUN + (when configured) TURN with ephemeral credentials ──
       // The TURN secret never leaves the server; readers get a short-lived
       // HMAC credential that expires on its own (Cloudflare-TURN/coTURN

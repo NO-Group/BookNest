@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.25.2+44 — 2026-09-13 · Gemini batch 1: instant mass library
+
+- **Library Import (one click)**: a new workflow pulls Project
+  Gutenberg's full catalog, keeps the most-read **Public-Domain-in-USA**
+  English titles, fetches every full text, strips the Gutenberg
+  wrapper, splits chapters, and streams 1,500+ real classics into the
+  shelf via the new token-guarded `admin.importBooks` edge action.
+  Idempotent (unchanged books skip), resumable, re-runnable; imported
+  books are ordinary shelf entries moderators can manage. Setup is one
+  `IMPORT_TOKEN` secret in two places (CHECKLIST step 3B).
+
 ## 2.25.1+43 — 2026-09-13 · Hardening pass (the rival-review round)
 
 - **Rate limits at the door**: messages (DMs and clubs) cap at 25 per

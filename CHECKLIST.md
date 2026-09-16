@@ -65,6 +65,31 @@ are that one click.
 
 ---
 
+## 3B · Seed the library instantly — 1,500+ real classics (one click)
+
+The shelf auto-seeds 6 classics; this fills it to a full library with
+the most-read public-domain books on Earth (Sherlock Holmes, Pride and
+Prejudice, The Art of War, Dracula, …), fetched and imported by GitHub
+— nothing hand-copied, fully legal (Public Domain in the USA).
+
+- [ ] First do steps 2–3 (the import rides the updated server).
+- [ ] Invent a long random password (from a password manager) — that's
+      your `IMPORT_TOKEN`.
+- [ ] Add it in **two places** with the same value:
+      - GitHub → Settings → Secrets → Actions → New secret:
+        `IMPORT_TOKEN`
+      - Supabase → Project Settings → Edge Functions → Secrets:
+        `IMPORT_TOKEN`
+- [ ] GitHub → **Actions → Library Import → Run workflow** → Run.
+- [ ] Wait for the green run (~10–40 min; it streams 1,500+ books in
+      batches and can be re-run anytime — unchanged books skip).
+
+**Proof:** the run summary says "imported 1500+"; the Books screen now
+needs scrolling. Moderators can delete any imported book like any other
+(all get `bulk-` ids and real titles/authors).
+
+---
+
 ## 4 · Calls that connect everywhere — TURN (4 min, one-time, optional but recommended)
 
 - [ ] First do steps 2–3 (TURN rides the updated server).
