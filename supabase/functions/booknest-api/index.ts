@@ -1110,6 +1110,34 @@ async function ensureDirect(a: string, b: string): Promise<Record<string, unknow
   }
 }
 
+/** Fixed-window rate limiter. Returns true when the caller is over the
+ * cap for this window. Fails OPEN — a limiter glitch must never take a
+ * feature down; abuse handling here is a speed bump, not a fortress. */
+async function hitLimit(
+  uid: string, bucket: string, max: number, windowMs: number,
+): Promise<boolean> {
+  try {
+    const col = (await dbFor('users')).collection('rate_limits');
+    const key = `${bucket}:${uid}`;
+    const now = new Date();
+    const doc = await col.findOne({ _id: key });
+    if (!doc || !(doc.windowStart instanceof Date) ||
+        now.getTime() - doc.windowStart.getTime() > windowMs) {
+      await col.updateOne(
+        { _id: key },
+        { $set: { count: 1, windowStart: now } },
+        { upsert: true });
+      return false;
+    }
+    const next = (Number(doc.count) || 0) + 1;
+    if (next > max) return true;
+    await col.updateOne({ _id: key }, { $set: { count: next } });
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
@@ -2438,12 +2466,18 @@ Deno.serve(async (req: Request) => {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         if (await isBanned(uid)) return fail('Your account is suspended — contact support');
+        if (await hitLimit(uid, 'random', 6, 60_000)) {
+          return fail('The pair-up is catching its breath — try again in a few seconds.', 429);
+        }
         const u = await dbFor('users');
         const queue = u.collection('random_queue');
         const now = new Date();
         await queue.deleteMany({
           joinedAt: { $lt: new Date(now.getTime() - 10 * 60 * 1000) },
         });
+        // Already seated? Keep the original timestamp — no churn spam.
+        const seated = await queue.findOne({ _id: uid });
+        if (seated) return ok({ matched: false });
         const [myBlocked, waiting] = await Promise.all([
           blockedSet(uid),
           queue.find({ _id: { $ne: uid } })
@@ -2501,6 +2535,9 @@ Deno.serve(async (req: Request) => {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
         if (await isBanned(uid)) return fail('Your account is suspended — contact support');
+        if (await hitLimit(uid, 'msg', 25, 10_000)) {
+          return fail('Easy there — take a short breather between messages.', 429);
+        }
         const d = await dbFor('chats');
         const type = ['text', 'book_share', 'image', 'file', 'voice', 'emoji', 'video']
           .includes(String(p.type)) ? String(p.type) : 'text';
@@ -2692,6 +2729,9 @@ Deno.serve(async (req: Request) => {
         }
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
+        if (await hitLimit(uid, 'msg', 25, 10_000)) {
+          return fail('Easy there — take a short breather between messages.', 429);
+        }
         const d = await dbFor('chats');
         const conversationId = typeof p.conversationId === 'string' ? p.conversationId : '';
         if (!isHexId(conversationId)) return fail('A valid conversationId is required');

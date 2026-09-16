@@ -101,7 +101,24 @@ are that one click.
 
 ---
 
-## 6 · Publish runway — already cleared
+## 6 · Move the signing identity into secrets (publish-critical, when ready)
+
+The signing key currently lives in the repo — fine while the repo is
+private, but it must move before publishing. The pipeline already
+prefers secrets when present (nothing breaks until you rotate):
+
+- [ ] Tell me "rotate the keystore" — I'll generate a fresh identity and
+      give you two base64 blobs to paste as GitHub secrets:
+      `KEYSTORE_BASE64` and `KEYSTORE_PROPERTIES_BASE64`.
+- [ ] I then remove the committed key files; CI keeps signing installs
+      so everyone's app keeps updating.
+
+**Proof:** newest green run's log shows "Signing with secret-provided
+identity."
+
+---
+
+## 7 · Publish runway — already cleared
 
 - [x] No developer-speak anywhere in the UI (vendor names, "paste",
       "deploy", "server setting" instructions — all rewritten or

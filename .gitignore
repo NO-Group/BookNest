@@ -43,6 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+# Signing identity — tracked today for shared CI/local signatures; moves to
+# CI secrets at publish rotation (see CHECKLIST.md). Once untracked, these
+# lines keep them out forever.
+/android/key/booknest-release.jks
+/android/key/booknest-keystore.properties
 
 # ── BookNest secrets — real credentials NEVER enter Git ──────────────────
 .env

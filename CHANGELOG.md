@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.25.1+43 — 2026-09-13 · Hardening pass (the rival-review round)
+
+- **Rate limits at the door**: messages (DMs and clubs) cap at 25 per
+  10 seconds and Random Chat pair-ups at 6 per minute — polite
+  "easy there" notes instead of silence. The limiter fails open, so a
+  glitch can never take a feature down. Queued readers who tap join
+  again no longer reset their place in line.
+- **Signing identity ready to move**: the build now prefers
+  `KEYSTORE_BASE64` + `KEYSTORE_PROPERTIES_BASE64` secrets when they
+  exist (publish-grade), falling back to the committed identity so CI
+  never breaks. The committed key files are now gitignore-listed for
+  the moment they're untracked (CHECKLIST step 6).
+
 ## 2.25.0+42 — 2026-09-13 · Random Chat + publish-clean runway
 
 **New — Random Chat:**
