@@ -83,13 +83,35 @@ class _WatermarkPainter extends CustomPainter {
     final int cols = (size.width / step).ceil() + 3;
     final int rows = (size.height / step).ceil() + 3;
 
+    // The wordmark is drawn once per tile under the book glyph — the
+    // pattern reads as branded, not stock.
+    final wordmark = TextPainter(
+      text: TextSpan(
+        text: 'BookNest',
+        style: TextStyle(
+          color: paint.color,
+          fontSize: 12.5,
+          height: 1,
+          fontStyle: FontStyle.italic,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 2.4,
+          fontFamily: 'Georgia',
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
     for (int row = -1; row < rows; row++) {
       for (int col = -1; col < cols; col++) {
         // Brick offset: every other row shifts half a tile.
         final double dx = col * step + (row.isOdd ? step / 2 : 0);
         final double dy = row * step;
-        _drawOpenBook(canvas, Offset(dx, dy), paint);
-        _drawSparkle(canvas, Offset(dx + step / 2, dy + step / 2), paint);
+        _drawOpenBook(canvas, Offset(dx, dy - 4), paint);
+        wordmark.paint(
+          canvas,
+          Offset(dx + (step - wordmark.width) / 2, dy + 18),
+        );
+        _drawSparkle(canvas, Offset(dx + step / 2, dy + step / 2 - 6), paint);
       }
     }
 

@@ -1241,6 +1241,10 @@ Deno.serve(async (req: Request) => {
               continue;
             }
             const now = new Date();
+            const cover = typeof row.coverUrl === 'string' &&
+                    row.coverUrl.startsWith('http')
+                ? row.coverUrl.slice(0, 500)
+                : (existing?.coverUrl ?? null);
             await booksCol.updateOne(
               { _id: id },
               { $set: {
@@ -1249,7 +1253,7 @@ Deno.serve(async (req: Request) => {
                   authorId: existing?.authorId ?? null,
                   description: String(row.description ?? '').slice(0, 1200),
                   genre: String(row.genre ?? 'Classics').slice(0, 40),
-                  coverUrl: existing?.coverUrl ?? null,
+                  coverUrl: cover,
                   contentFormat: 'markdown',
                   moderationStatus: 'approved',
                   status: 'published',

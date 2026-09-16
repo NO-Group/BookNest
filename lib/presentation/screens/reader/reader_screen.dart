@@ -486,9 +486,11 @@ class _ReaderScreenState extends State<ReaderScreen>
       case 1:
         return false; // Paper
       case 2:
-        return false; // Sepia
+        return false; // Mist
       case 3:
         return true; // Ink
+      case 4:
+        return true; // Black
       default:
         return systemDark; // Night follows the app
     }
@@ -497,11 +499,13 @@ class _ReaderScreenState extends State<ReaderScreen>
   Color _pageBackground(bool systemDark) {
     switch (_readerTheme) {
       case 1:
-        return const Color(0xFFFBFBF8);
+        return const Color(0xFFFBFBF8); // Paper
       case 2:
-        return const Color(0xFFF4E9D8);
+        return const Color(0xFFEEF1F5); // Mist
       case 3:
-        return const Color(0xFF0B1626);
+        return const Color(0xFF0B1626); // Ink
+      case 4:
+        return Colors.black; // Black (OLED)
       default:
         return systemDark
             ? BookNestColors.darkChatBackground
@@ -514,9 +518,11 @@ class _ReaderScreenState extends State<ReaderScreen>
       case 1:
         return BookNestColors.navyDeep;
       case 2:
-        return const Color(0xFF3E3427);
+        return const Color(0xFF2A3442); // slate ink on cool gray
       case 3:
         return const Color(0xFFE8EDF5);
+      case 4:
+        return const Color(0xFFC9D2DE);
       default:
         return systemDark
             ? BookNestColors.darkTextPrimary
@@ -859,7 +865,7 @@ class _ReaderScreenState extends State<ReaderScreen>
               const SizedBox(height: 8),
               Row(
                 children: [
-                  for (var i = 0; i < 4; i++)
+                  for (var i = 0; i < 5; i++)
                     Expanded(
                       child: GestureDetector(
                         onTap: () {
@@ -867,15 +873,16 @@ class _ReaderScreenState extends State<ReaderScreen>
                           _saveReaderPrefs();
                         },
                         child: Container(
-                          margin: EdgeInsets.only(right: i < 3 ? 8 : 0),
+                          margin: EdgeInsets.only(right: i < 4 ? 8 : 0),
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
                             color: [
                               Colors.black87,
                               const Color(0xFFFBFBF8),
-                              const Color(0xFFF4E9D8),
+                              const Color(0xFFEEF1F5),
                               const Color(0xFF0B1626),
+                              Colors.black,
                             ][i],
                             border: Border.all(
                               width: _readerTheme == i ? 2.2 : 1,
@@ -893,12 +900,13 @@ class _ReaderScreenState extends State<ReaderScreen>
                                       color: [
                                         Colors.white,
                                         BookNestColors.navyDeep,
-                                        const Color(0xFF3E3427),
+                                        const Color(0xFF2A3442),
                                         const Color(0xFFE8EDF5),
+                                        const Color(0xFFC9D2DE),
                                       ][i])),
                               const SizedBox(height: 3),
                               Text(
-                                ['Night', 'Paper', 'Sepia', 'Ink'][i],
+                                ['Night', 'Paper', 'Mist', 'Ink', 'Black'][i],
                                 style: TextStyle(
                                     fontSize: 10.5,
                                     color: _readerTheme == i
@@ -1056,7 +1064,8 @@ class _ReaderScreenState extends State<ReaderScreen>
           Container(
             color: pageBg,
             child: WatermarkBackground(
-              opacity: dark ? 0.03 : 0.04,
+              color: pageText,
+              opacity: pageDark ? 0.05 : 0.06,
               spacing: 168,
               child: SafeArea(
                 bottom: false,

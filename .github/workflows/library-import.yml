@@ -52,6 +52,44 @@ jobs:
           TOKEN = os.environ['IMPORT_TOKEN']
           TARGET = max(1500, min(2500, int(os.environ.get('TARGET') or '1600')))
 
+          # Hand-written one-liners for the most-read classics — keyed by
+          # Gutenberg id. Everything else gets an honest generated line.
+          CURATED = {
+              '1342': 'A country family swirls into uproar when a wealthy, proud stranger and his even prouder friend move into the neighbourhood — the most beloved romance in the English language.',
+              '84': 'A student of natural philosophy assembles life from death, then learns his creation wants an answer from him. The founding masterpiece of science fiction.',
+              '11': 'A bored girl follows a waistcoated rabbit down a hole and into a world where tea is always hot, logic is upside down, and the Queen wants everyone headless.',
+              '1661': 'The first twelve adventures of Sherlock Holmes and Dr. Watson — the stories that invented modern detective fiction.',
+              '2097': 'The full casebook of the world\'s only consulting detective, gathered in one volume.',
+              '2701': 'A whaling captain\'s one-legged hunt for the white whale that took his leg — a storm of obsession, humour and the sea.',
+              '345': 'A young lawyer travels to Count Dracula\'s castle and unleashes an ancient hunger on modern Europe. The novel that defined the vampire.',
+              '43': 'A respectable doctor drinks a formula that splits him in two — and one half enjoys it.',
+              '174': 'A beautiful young man stays miraculously young while his portrait grows old and wicked in the attic.',
+              '98': 'Two cities, one revolution, and a substitute at the guillotine — Dickens at his most soaring.',
+              '1400': 'An orphan climbs from the marshes to London society on the strength of a mystery benefactor — Pip\'s rise and reckoning.',
+              '46': 'A cold miser is visited by three spirits on Christmas Eve and given one last chance.',
+              '76': 'A boy and a runaway raft drift down the Mississippi while the country\'s conscience travels with them.',
+              '55': 'A farm girl, a scarecrow, a tin man and a lion follow the yellow road to the Emerald City.',
+              '16': 'The boy who refused to grow up, and the window he always comes back to.',
+              '120': 'An innkeeper\'s son finds a treasure map in a dead man\'s chest and sails with the most dangerous crew afloat.',
+              '158': 'Emma Woodhouse is handsome, clever and rich — and never wrong, which gets everyone into trouble.',
+              '161': 'Two sisters with very different temperaments navigate love, ruin and reputation.',
+              '141': 'Fanny Price, sent away to live with rich relations, learns the price of saying no.',
+              '1260': 'A plain, penniless governess with an unbreakable spine meets a house with a locked attic.',
+              '768': 'On the wild Yorkshire moors, two families destroy each other with a love that outlives death.',
+              '2600': 'Napoleon\'s era seen through Russian drawing rooms and battlefields — the widest novel ever written.',
+              '996': 'A gentleman reads too many chivalric romances and decides the world needs him to fix it. The first modern novel.',
+              '1184': 'Wronged and imprisoned, Edmond Dantès returns rich, unrecognisable, and very patient.',
+              '135': 'Jean Valjean steals a loaf of bread and spends the rest of an epic lifetime earning his soul.',
+              '219': 'A river journey into the Congo, and into what civilization pretends not to be.',
+              '2591': 'The fairy tales collected by the Brothers Grimm — sharp, strange, and original recipe.',
+              '1952': 'A woman rest-cured in a nursery bedroom documents her own unraveling — the classic of interior horror.',
+              '2814': 'Fifteen portraits of Dublin life, each ending in a small, devastating epiphany.',
+              '2542': 'A wife must choose between the shelter of her marriage and becoming a person — the door-slam heard round the world.',
+              '1727': 'The ten-year homecoming of the man of twists and turns, told with wine-dark patience.',
+              '6130': 'Rage of Achilles, war of kings — the fountainhead of Western literature.',
+              '2148': 'The complete tales and poems of Edgar Allan Poe — ravens, tell-tale hearts and all.',
+          }
+
           GENRE_MAP = [
               ('detective', 'Crime'), ('crime', 'Crime'), ('mystery', 'Crime'),
               ('science fiction', 'Science Fiction'), ('utopias', 'Science Fiction'),
@@ -113,13 +151,30 @@ jobs:
                   if downloads < 20:
                       continue
                   subjects = [s for s in (r.get('Subjects') or '').split(';') if s.strip()]
+                  author = re.sub(r'\s+', ' ', r['Authors']).split(' and ')[0].strip()
+                  # Catalog order is "Last, First" — readers expect "First Last".
+                  if ',' in author:
+                      last, _, first = author.partition(',')
+                      author = f'{first.strip()} {last.strip()}'.strip()
+                  title = re.sub(r'\s+', ' ', r['Title']).strip()
+                  # Drop catalog extras: "(illustrated)", "(with audio)", trailing bits.
+                  title = re.sub(r'\s*\([^)]{0,60}\)', '', title).strip(' ;:,')
+                  gid = r['Text #'].strip()
+                  curated = CURATED.get(gid)
+                  if curated:
+                      description = curated
+                  else:
+                      description = (f'A beloved {genre_of(subjects).lower()} classic '
+                                     f'by {author or "a classic author"}, among the '
+                                     f'most-read public-domain books in the world — '
+                                     f'presented here in full.')
                   pool.append({
-                      'id': r['Text #'].strip(),
-                      'title': re.sub(r'\s+', ' ', r['Title']).strip(),
-                      'author': re.sub(r'\s+', ' ', r['Authors']).split(' and ')[0].strip(),
+                      'id': gid,
+                      'title': title,
+                      'author': author,
                       'downloads': downloads,
                       'genre': genre_of(subjects),
-                      'description': ' | '.join(s.strip() for s in subjects[:3])[:400],
+                      'description': description[:400],
                   })
               except Exception:
                   continue
@@ -153,6 +208,44 @@ jobs:
                   return [{'chapterNumber': 1, 'title': 'Full text', 'content': text[:380000]}]
               return chapters[:300]
 
+          CLOUD = 'deqdmwlt7'
+          PRESET = 'BookNest'
+
+          def upload_cover(gid, slug):
+              """Fetches Gutenberg's cover art and hosts it on BookNest's
+              media library. Returns the hosted URL, or None."""
+              img = http_get(
+                  f'https://www.gutenberg.org/cache/epub/{gid}/pg{gid}.cover.medium.jpg')
+              if img is None or len(img) < 900:
+                  return None
+              boundary = 'bn' + hashlib.md5(slug.encode()).hexdigest()[:16]
+              parts = []
+              for name, value in (
+                      ('upload_preset', PRESET),
+                      ('folder', 'booknest/covers'),
+                      ('public_id', f'bulk-{slug}')):
+                  parts.append(
+                      f'--{boundary}\r\nContent-Disposition: form-data; '
+                      f'name="{name}"\r\n\r\n{value}\r\n'.encode())
+              parts.append(
+                  f'--{boundary}\r\nContent-Disposition: form-data; '
+                  f'name="file"; filename="{gid}.jpg"\r\n'
+                  f'Content-Type: image/jpeg\r\n\r\n'.encode() + img + b'\r\n')
+              parts.append(f'--{boundary}--\r\n'.encode())
+              body = b''.join(parts)
+              req = urllib.request.Request(
+                  f'https://api.cloudinary.com/v1_1/{CLOUD}/image/upload',
+                  data=body, method='POST',
+                  headers={'Content-Type': f'multipart/form-data; boundary={boundary}',
+                           'User-Agent': 'BookNest-library/1.0'})
+              try:
+                  with urllib.request.urlopen(req, timeout=45) as r:
+                      out = json.loads(r.read().decode())
+                  url = out.get('secure_url')
+                  return url if isinstance(url, str) and url.startswith('https://') else None
+              except Exception:
+                  return None
+
           def post_batch(books):
               body = json.dumps({'action': 'admin.importBooks',
                                  'importToken': TOKEN, 'books': books}).encode()
@@ -183,11 +276,17 @@ jobs:
                   fails += 1
                   continue
               chapters = split_chapters(text)
+              slug = (b['title'] + '|' + b['author']).lower()
+              slug = re.sub(r'[^a-z0-9|]+', '-', slug).strip('-')[:90]
+              cover = upload_cover(gid, slug) if total_imported < 4000 else None
+              if cover:
+                  print(f'cover ok: {b["title"][:40]}')
               batch.append({
                   'title': b['title'][:200],
                   'author': b['author'][:120],
                   'genre': b['genre'],
                   'description': b['description'],
+                  'coverUrl': cover,
                   'chapters': chapters,
               })
               size = sum(len(c['content']) for c in chapters)

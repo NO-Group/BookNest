@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.25.3+45 — 2026-09-13 · Imported books, dignified + reader brand & themes
+
+**Imports no longer feel imported:**
+- **Real covers**: the importer fetches each book's cover art and hosts
+  it on BookNest's media library — shelves show actual jackets, not
+  bare tiles.
+- **Proper names**: catalog "Dickens, Charles" becomes "Charles
+  Dickens"; titles shed catalog extras like "(illustrated)".
+- **Curated one-liners**: the ~32 most-read classics get hand-written,
+  reader-facing descriptions; every other import gets an honest,
+  well-formed line instead of raw catalog subject strings.
+- The edge now accepts and stores the importer's cover URLs.
+
+**Reader, more beautiful:**
+- **Watermark with a name**: the whisper pattern now carries an italic
+  serif **BookNest** wordmark woven under every book glyph, tinted to
+  match the reading theme (previously it could vanish against dark
+  pages).
+- **Five background themes, palette-true**: Night (follows the app),
+  Paper, **Mist** (new, cool gray), Ink (navy), and **Black** (OLED) —
+  Sepia retired from the picker per the BookNest color law.
+
 ## 2.25.2+44 — 2026-09-13 · Gemini batch 1: instant mass library
 
 - **Library Import (one click)**: a new workflow pulls Project
