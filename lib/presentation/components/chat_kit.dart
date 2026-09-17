@@ -1072,7 +1072,7 @@ class _VideoContentState extends State<_VideoContent> {
     final width =
         (MediaQuery.sizeOf(context).width * .72).clamp(220.0, 340.0);
     final c = _controller;
-    final aspect = _ready && c!.value.aspectRatio > 0
+    final aspect = _ready && c != null && c.value.aspectRatio > 0
         ? c.value.aspectRatio
         : 16 / 9;
     return GestureDetector(
@@ -1094,7 +1094,7 @@ class _VideoContentState extends State<_VideoContent> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                if (_ready) VideoPlayer(c),
+                if (_ready) VideoPlayer(c!),
                 if (!_ready)
                   Positioned.fill(
                     child: CachedNetworkImage(
@@ -1141,7 +1141,7 @@ class _VideoContentState extends State<_VideoContent> {
                           child: const Icon(Icons.play_arrow_rounded,
                               color: Colors.white, size: 34),
                         )
-                else if (!c.value.isPlaying)
+                else if (c == null || !c.value.isPlaying)
                   Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
@@ -1177,7 +1177,7 @@ class _VideoContentState extends State<_VideoContent> {
                     child: Row(
                       children: [
                         ValueListenableBuilder<VideoPlayerValue>(
-                          valueListenable: c,
+                          valueListenable: c!,
                           builder: (context, value, _) {
                             final duration =
                                 value.duration.inMilliseconds.toDouble();
@@ -1202,7 +1202,7 @@ class _VideoContentState extends State<_VideoContent> {
                                   inactiveColor: Colors.white24,
                                   onChanged: duration == 0
                                       ? null
-                                      : (v) => c.seekTo(
+                                      : (v) => c!.seekTo(
                                             Duration(
                                                 milliseconds: v.round()),
                                           ),
@@ -1213,7 +1213,7 @@ class _VideoContentState extends State<_VideoContent> {
                         ),
                         const SizedBox(width: 6),
                         ValueListenableBuilder<VideoPlayerValue>(
-                          valueListenable: c,
+                          valueListenable: c!,
                           builder: (context, value, _) => InkWell(
                             onTap: () {
                               final speeds = const [1.0, 1.5, 2.0];
@@ -1222,7 +1222,7 @@ class _VideoContentState extends State<_VideoContent> {
                                       speeds.length];
                               setState(() {
                                 _speed = next;
-                                c.setPlaybackSpeed(next);
+                                c!.setPlaybackSpeed(next);
                               });
                             },
                             child: Text(
@@ -1238,13 +1238,13 @@ class _VideoContentState extends State<_VideoContent> {
                         ),
                         const SizedBox(width: 4),
                         ValueListenableBuilder<VideoPlayerValue>(
-                          valueListenable: c,
+                          valueListenable: c!,
                           builder: (context, value, _) => InkWell(
-                            onTap: () => c.value.volume > 0
-                                ? c.setVolume(0)
-                                : c.setVolume(1),
+                            onTap: () => c!.value.volume > 0
+                                ? c!.setVolume(0)
+                                : c!.setVolume(1),
                             child: Icon(
-                              c.value.volume > 0
+                              c!.value.volume > 0
                                   ? Icons.volume_up_rounded
                                   : Icons.volume_off_rounded,
                               color: Colors.white.withOpacity(.85),

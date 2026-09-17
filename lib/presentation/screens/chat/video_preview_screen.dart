@@ -92,6 +92,7 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
+    final ready = _ready && controller != null;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -134,19 +135,19 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
                         ],
                       ),
                     )
-                  : !(_ready && controller != null)
+                  : !ready
                       ? const CircularProgressIndicator(
                           color: BookNestColors.cyan)
                       : GestureDetector(
                           onTap: () => setState(() {
-                            controller.value.isPlaying
-                                ? controller.pause()
-                                : controller.play();
+                            controller!.value.isPlaying
+                                ? controller!.pause()
+                                : controller!.play();
                           }),
                           child: AspectRatio(
                             aspectRatio:
-                                controller.value.aspectRatio > 0
-                                    ? controller.value.aspectRatio
+                                controller!.value.aspectRatio > 0
+                                    ? controller!.value.aspectRatio
                                     : 16 / 9,
                             child: Stack(
                               alignment: Alignment.center,
