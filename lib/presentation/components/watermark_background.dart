@@ -53,6 +53,52 @@ class WatermarkBackground extends StatelessWidget {
   }
 }
 
+/// The same BookNest glyph pattern as [WatermarkBackground], but painted
+/// OVER the child instead of behind it — for rich surfaces (profile
+/// banners, covers) that bring their own artwork and must show the
+/// wordmark pattern on top.
+class WatermarkOverlay extends StatelessWidget {
+  final Widget child;
+
+  /// Glyph strength.
+  final double opacity;
+
+  /// Tile size in logical pixels. Larger → sparser pattern.
+  final double spacing;
+
+  /// Glyph tint. Defaults to white in dark mode, navy in light mode.
+  final Color? color;
+
+  const WatermarkOverlay({
+    super.key,
+    required this.child,
+    this.opacity = 0.09,
+    this.spacing = 132,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        child,
+        Positioned.fill(
+          child: CustomPaint(
+            painter: _WatermarkPainter(
+              color: color ??
+                  (dark ? const Color(0xFFFFFFFF) : BookNestColors.navyDeep),
+              opacity: opacity,
+              spacing: spacing,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _WatermarkPainter extends CustomPainter {
   final Color color;
   final double opacity;

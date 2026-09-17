@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.25.4+46 — 2026-09-17 · The dual profile: the author face arrives
+
+- **Two profile designs, one screen.** Every profile now renders
+  according to its owner's mode. Readers keep the familiar identity
+  layout; **authors get the second design** — visually modelled on the
+  profile screens of the big community apps:
+  - Full-bleed **banner**: a per-user navy/cyan blend (deterministic —
+    the same profile always shows the same banner) with the BookNest
+    wordmark pattern painted over it.
+  - **Avatar overlapping the banner edge**, ringed, with calls and the
+    options menu floating on the banner.
+  - **Stat chips**: books, followers, following, gems and a "Joined"
+    date, pill-style and tappable where they open lists.
+  - **Works & About tabs**: works as outlined cards with cover, genre,
+    description teaser and live rating/likes; About adds the joined
+    date and gem balance.
+- New reusable `WatermarkOverlay` — the wordmark pattern painted over
+  artwork instead of behind it (used by the author banner).
+- Mode lookup now fails open: a network hiccup shows the reader layout
+  rather than an error.
+
 ## 2.25.3+45 — 2026-09-13 · Imported books, dignified + reader brand & themes
 
 **Imports no longer feel imported:**
