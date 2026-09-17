@@ -3,12 +3,15 @@ import 'dart:io';
 import 'dart:typed_data' show BytesBuilder;
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdfx/pdfx.dart' as pdfx;
+import 'package:video_player/video_player.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/cloudinary_service.dart';
 
 /// One piece of media in a conversation — enough for the viewer to
 /// page through an album and label the file.
@@ -31,6 +34,9 @@ class MediaItem {
 
   bool get isImage =>
       ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'heic'].contains(extension);
+  bool get isVideo => [
+        'mp4', 'mov', 'webm', 'mkv', 'm4v', 'avi', '3gp',
+      ].contains(extension);
   bool get isPdf => extension == 'pdf';
   bool get isAudio =>
       ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'oga', 'flac', 'opus'].contains(extension);
@@ -168,7 +174,48 @@ class _PhotoAlbumViewerState extends State<_PhotoAlbumViewer> {
               setState(() => _index = i);
             },
             itemBuilder: (context, i) {
+              // Videos own their page — playback instead of zoom.
+              if (widget.items[i].isVideo) {
+                return Center(
+                  child: i == _index
+                      ? _VideoPlayerPane.network(
+                          url: widget.items[i].url,
+                          name: widget.items[i].name,
+                        )
+                      : _VideoPoster(url: widget.items[i].url),
+                );
+              }
               final zoom = _zoom ??= TransformationController();
+              final media = CachedNetworkImage(
+                imageUrl: CloudinaryService.transformUrl(
+                    widget.items[i].url,
+                    width: 1200),
+                fit: BoxFit.contain,
+                memCacheWidth: 1200,
+                fadeInDuration: const Duration(milliseconds: 180),
+                progressIndicatorBuilder: (context, _, progress) {
+                  final expected = (progress.downloaded ??
+                      0);
+                  final total =
+                      (progress.totalSize ?? 0);
+                  return Center(
+                    child: CircularProgressIndicator(
+                      value: total > 0 ? expected / total : null,
+                      color: BookNestColors.cyan,
+                    ),
+                  );
+                },
+                errorWidget: (_, __, ___) => const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.broken_image_outlined,
+                        color: Colors.white38, size: 44),
+                    SizedBox(height: 10),
+                    Text('This photo could not be loaded.',
+                        style: TextStyle(color: Colors.white38)),
+                  ],
+                ),
+              );
               return InteractiveViewer(
                 transformationController: zoom,
                 maxScale: 6,
@@ -176,34 +223,9 @@ class _PhotoAlbumViewerState extends State<_PhotoAlbumViewer> {
                   child: i == _index
                       ? GestureDetector(
                           onDoubleTap: _doubleTapZoom,
-                          child: Image.network(
-                            widget.items[i].url,
-                            fit: BoxFit.contain,
-                            loadingBuilder: (context, child, progress) {
-                              if (progress == null) return child;
-                              final expected = (progress.expectedTotalBytes ?? 1);
-                              return Center(
-                                child: CircularProgressIndicator(
-                                  value: expected > 0
-                                      ? progress.cumulativeBytesLoaded / expected
-                                      : null,
-                                  color: BookNestColors.cyan,
-                                ),
-                              );
-                            },
-                            errorBuilder: (_, __, ___) => const Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.broken_image_outlined,
-                                    color: Colors.white38, size: 44),
-                                SizedBox(height: 10),
-                                Text('This photo could not be loaded.',
-                                    style: TextStyle(color: Colors.white38)),
-                              ],
-                            ),
-                          ),
+                          child: media,
                         )
-                      : Image.network(widget.items[i].url, fit: BoxFit.contain),
+                      : media,
                 ),
               );
             },
@@ -230,7 +252,7 @@ class _PhotoAlbumViewerState extends State<_PhotoAlbumViewer> {
                           ),
                           if (widget.items.length > 1)
                             Text(
-                              'Photo ${_index + 1} of ${widget.items.length}  ·  pinch to zoom',
+                              '${item.isVideo ? 'Video' : 'Photo'} ${_index + 1} of ${widget.items.length}  ·  swipe for more',
                               style: const TextStyle(
                                   color: Colors.white54, fontSize: 11.5),
                             )
@@ -358,6 +380,9 @@ class _MediaFileViewerState extends State<MediaFileViewer> {
           child: Image.file(file, fit: BoxFit.contain),
         ),
       );
+    }
+    if (item.isVideo) {
+      return _VideoPlayerPane.file(file: file, name: item.name);
     }
     if (item.isPdf) return _PdfPane(file: file, dark: dark);
     if (item.isAudio) return _AudioPane(file: file, dark: dark, name: item.name);
@@ -838,5 +863,212 @@ Future<File?> downloadMedia(String url) async {
     return await _downloadToCache(url, null);
   } catch (_) {
     return null;
+  }
+}
+
+// ── Video playback (viewer pages: album + file) ──────────────────────────────
+
+/// Full video playback inside the viewer — one controller, honest
+/// states, cyan controls. Used for both streamed-album videos and
+/// downloaded file attachments.
+class _VideoPlayerPane extends StatefulWidget {
+  final String? url;
+  final File? file;
+  final String name;
+
+  const _VideoPlayerPane.network({required this.url, required this.name})
+      : file = null;
+  const _VideoPlayerPane.file({required File this.file, required this.name})
+      : url = null;
+
+  @override
+  State<_VideoPlayerPane> createState() => _VideoPlayerPaneState();
+}
+
+class _VideoPlayerPaneState extends State<_VideoPlayerPane> {
+  VideoPlayerController? _controller;
+  bool _ready = false;
+  bool _failed = false;
+  bool _muted = false;
+  double _speed = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _open();
+  }
+
+  Future<void> _open() async {
+    final controller = widget.url != null
+        ? VideoPlayerController.networkUrl(Uri.parse(widget.url!))
+        : VideoPlayerController.file(widget.file!);
+    _controller = controller;
+    try {
+      await controller.initialize();
+      if (!mounted) return;
+      setState(() => _ready = true);
+      await controller.play();
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    }
+    controller.addListener(() {
+      if (mounted) setState(() {});
+    });
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  String _two(int v) => v.toString().padLeft(2, '0');
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    if (_failed || controller == null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Icon(Icons.videocam_off_rounded, color: Colors.white38, size: 44),
+          SizedBox(height: 10),
+          Text('This video could not be played.',
+              style: TextStyle(color: Colors.white38)),
+        ],
+      );
+    }
+    if (!_ready) {
+      return const CircularProgressIndicator(color: BookNestColors.cyan);
+    }
+    final value = controller.value;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: () => setState(() {
+            value.isPlaying ? controller.pause() : controller.play();
+          }),
+          child: AspectRatio(
+            aspectRatio:
+                value.aspectRatio > 0 ? value.aspectRatio : 16 / 9,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                VideoPlayer(controller),
+                if (!value.isPlaying)
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: BookNestColors.navyDeep.withOpacity(.55),
+                    ),
+                    padding: const EdgeInsets.all(14),
+                    child: const Icon(Icons.play_arrow_rounded,
+                        color: Colors.white, size: 40),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 6, 18, 4),
+          child: Row(
+            children: [
+              InkWell(
+                onTap: () => setState(() {
+                  _muted = !_muted;
+                  controller.setVolume(_muted ? 0 : 1);
+                }),
+                child: Icon(
+                    _muted
+                        ? Icons.volume_off_rounded
+                        : Icons.volume_up_rounded,
+                    color: Colors.white70,
+                    size: 21),
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 3.5,
+                    thumbShape:
+                        const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    overlayShape:
+                        const RoundSliderOverlayShape(overlayRadius: 11),
+                  ),
+                  child: Slider(
+                    value: value.position.inMilliseconds
+                        .toDouble()
+                        .clamp(0, value.duration.inMilliseconds.toDouble()),
+                    max: value.duration.inMilliseconds.toDouble() == 0
+                        ? 1
+                        : value.duration.inMilliseconds.toDouble(),
+                    activeColor: BookNestColors.cyan,
+                    inactiveColor: Colors.white24,
+                    onChanged: (v) =>
+                        controller.seekTo(Duration(milliseconds: v.round())),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              InkWell(
+                onTap: () {
+                  const speeds = [1.0, 1.5, 2.0];
+                  final next =
+                      speeds[(speeds.indexOf(_speed) + 1) % speeds.length];
+                  setState(() {
+                    _speed = next;
+                    controller.setPlaybackSpeed(next);
+                  });
+                },
+                child: Text('${_speed}x',
+                    style: const TextStyle(
+                        color: BookNestColors.cyan,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800)),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '${value.position.inMinutes}:${_two(value.position.inSeconds % 60)} / '
+                '${value.duration.inMinutes}:${_two(value.duration.inSeconds % 60)}',
+                style: const TextStyle(color: Colors.white54, fontSize: 11.5),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The quiet poster tile for album pages that are not front and center —
+/// the video's own first-seconds frame when Cloudinary can serve one.
+class _VideoPoster extends StatelessWidget {
+  final String url;
+  const _VideoPoster({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 16 / 9,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CachedNetworkImage(
+            imageUrl: CloudinaryService.videoThumb(url),
+            fit: BoxFit.cover,
+            errorWidget: (_, __, ___) => Container(
+              color: BookNestColors.navyDeep,
+              child: const Icon(Icons.movie_rounded,
+                  color: Colors.white24, size: 42),
+            ),
+          ),
+          const Center(
+            child: Icon(Icons.play_arrow_rounded,
+                color: Colors.white70, size: 42),
+          ),
+        ],
+      ),
+    );
   }
 }

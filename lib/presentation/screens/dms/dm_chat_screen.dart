@@ -389,15 +389,18 @@ class _DMChatScreenState extends State<DMChatScreen> {
     await _load();
   }
 
-  /// Every photo in this conversation, in order — the media viewer's
-  /// album so readers can swipe through the whole gallery in-app.
+  /// Every photo and video in this conversation, in order — the media
+  /// viewer's album so readers can swipe through the whole gallery
+  /// in-app, videos playing right on their pages.
   List<MediaItem> _photoAlbum() {
     final photos = <MediaItem>[];
     for (final m in _messages) {
       final url = m['mediaUrl']?.toString() ?? '';
-      if ((m['type']?.toString() ?? '') == 'image' && url.startsWith('http')) {
+      final type = m['type']?.toString() ?? '';
+      if ((type == 'image' || type == 'video') && url.startsWith('http')) {
         photos.add(MediaItem(url: url,
-            name: m['fileName']?.toString() ?? 'Photo',
+            name: m['fileName']?.toString() ??
+                (type == 'video' ? 'Video' : 'Photo'),
             fileSize: (m['fileSize'] as num?)?.toInt()));
       }
     }
@@ -807,6 +810,14 @@ class _DMChatScreenState extends State<DMChatScreen> {
                                 onOpenBook: () =>
                                     _openBook(message['bookId']?.toString()),
                                 onOpenImage: () {
+                                  final album = _photoAlbum();
+                                  final tapped = message['mediaUrl']?.toString() ?? '';
+                                  var at = album.indexWhere((m) => m.url == tapped);
+                                  if (at == -1) at = 0;
+                                  openChatPhoto(context, tapped,
+                                      album: album, initialIndex: at);
+                                },
+                                onOpenVideo: () {
                                   final album = _photoAlbum();
                                   final tapped = message['mediaUrl']?.toString() ?? '';
                                   var at = album.indexWhere((m) => m.url == tapped);

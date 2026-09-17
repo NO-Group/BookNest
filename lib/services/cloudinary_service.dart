@@ -102,6 +102,18 @@ class CloudinaryService {
     }
   }
 
+  /// Poster frame for a Cloudinary video URL: the frame at the 1-second
+  /// mark, delivered as a right-sized JPEG. Non-video URLs come back
+  /// unchanged — callers show their own placeholder if the poster
+  /// cannot load.
+  static String videoThumb(String url, {int width = 640}) {
+    final marker = '/video/upload/';
+    final index = url.indexOf(marker);
+    if (index == -1) return url;
+    return url.replaceFirst(
+        marker, '${marker}so_1,w_$width,c_fill,f_jpg/');
+  }
+
   /// transformUrl(url, width: 320) where url is a secure_url from uploadImage.
   static String transformUrl(String url, {int? width, int? height}) {
     final marker = '/upload/';

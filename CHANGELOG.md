@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.25.5+47 — 2026-09-17 · Videos that play, previews before send, speed
+
+**Videos now actually play:**
+- Chat video bubbles no longer spin up a video decoder for every clip
+  on screen (the old all-at-once init could exhaust the phone's
+  decoders → "Video unavailable"). Now: the bubble shows the video's
+  own poster frame and plays only when tapped — scrub, 1×/1.5×/2×
+  speed, mute and fullscreen theater included.
+- The media viewer learned video: the chat album pages photos AND
+  clips (full player on each video page), and file attachments of any
+  video type open in the viewer too.
+- Gallery videos can now be picked at all (new "Gallery video" in the
+  attach sheet) — before, only in-app recordings could be sent.
+
+**Preview before every send, with the right tools:**
+- Gallery photos now always pass through the photo studio (filters,
+  light, rotate/flip) before sending — the camera already did.
+- Videos (recorded or picked) get a preview screen: play it back,
+  scrub, check the size, send or discard.
+- Files get a preview card: type icon, exact size, and a rename box —
+  the one edit a document needs.
+
+**Faster + more aggressive caching:**
+- Chat photos, viewer pages and posters now load through the image
+  CDN at display size and land in the disk cache — repeat views paint
+  instantly and never re-download.
+- Previously-seen feeds, shelves, chat lists and book pages keep
+  answering instantly for up to 24 h while a quiet background refresh
+  keeps them truthful (writes and pull-to-refresh still bust the
+  cache immediately).
+
 ## 2.25.4+46 — 2026-09-17 · The dual profile: the author face arrives
 
 - **Two profile designs, one screen.** Every profile now renders

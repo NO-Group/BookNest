@@ -32,11 +32,15 @@ class BackendApi {
   // on the network when we have seen the answer before, and any write
   // in the same domain drops the cache so fresh data is never hidden.
   static const Duration _cacheTtl = Duration(seconds: 60);
-  static const Duration _staleTtl = Duration(minutes: 10);
+  // Aggressive: a seen answer keeps answering instantly for a full
+  // day while a quiet background refresh keeps it truthful. Writes
+  // in the same domain and pull-to-refresh still drop the cache.
+  static const Duration _staleTtl = Duration(hours: 24);
   final Set<String> _revalidating = {};
   static const Set<String> _cacheable = {
     'posts.list',
     'books.list',
+    'books.get',
     'dm.list',
     'chat.rooms',
     'notifications.list',
@@ -48,6 +52,7 @@ class BackendApi {
     'posts.reshare': 'posts',
     'posts.comments.create': 'posts',
     'books.list': 'books',
+    'books.get': 'books',
     'books.publish': 'books',
     'books.update': 'books',
     'books.remix': 'books',

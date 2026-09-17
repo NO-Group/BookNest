@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -18,7 +19,10 @@ import '../../services/reader_profile.dart';
 import '../screens/chat/voice_recorder_sheet.dart';
 import '../screens/chat/camera_screen.dart';
 import '../screens/chat/file_picker_screen.dart';
+import '../screens/chat/file_preview_screen.dart';
 import '../screens/chat/media_viewer_screen.dart';
+import '../screens/chat/photo_edit_screen.dart';
+import '../screens/chat/video_preview_screen.dart';
 import '../../services/backend_api.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/supabase_service.dart';
@@ -199,6 +203,7 @@ class ChatBubble extends StatefulWidget {
   final VoidCallback? onOpenBook;
   final VoidCallback? onOpenImage;
   final VoidCallback? onOpenFile;
+  final VoidCallback? onOpenVideo;
   final ValueChanged<String>? onReact;
   final VoidCallback? onForward;
   final VoidCallback? onInfo;
@@ -231,6 +236,7 @@ class ChatBubble extends StatefulWidget {
     this.onOpenBook,
     this.onOpenImage,
     this.onOpenFile,
+    this.onOpenVideo,
     this.onReact,
     this.onForward,
     this.onInfo,
@@ -513,8 +519,10 @@ class _ChatBubbleState extends State<ChatBubble>
     } else if (_type == 'video' &&
         _mediaUrl.startsWith('http') &&
         !_deletedForEveryone) {
-      // Our own player — videos play right inside the chat.
-      content = _VideoContent(url: _mediaUrl, dark: dark);
+      // Our own player — videos play right inside the chat, and the
+      // corner arrow opens the full viewer album.
+      content = _VideoContent(
+          url: _mediaUrl, dark: dark, onOpen: widget.onOpenVideo);
     } else if (_type == 'voice' &&
         _mediaUrl.startsWith('http') &&
         !_deletedForEveryone) {
@@ -989,57 +997,93 @@ class _ReplyStrip extends StatelessWidget {
 class _VideoContent extends StatefulWidget {
   final String url;
   final bool dark;
-  const _VideoContent({required this.url, required this.dark});
+  final VoidCallback? onOpen;
+  const _VideoContent(
+      {required this.url, required this.dark, this.onOpen});
   @override
   State<_VideoContent> createState() => _VideoContentState();
 }
 
 class _VideoContentState extends State<_VideoContent> {
-  late final VideoPlayerController _controller;
+  VideoPlayerController? _controller;
   double _speed = 1.0;
   bool _ready = false;
   bool _failed = false;
+  bool _loading = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
-      ..initialize().then((_) {
-        if (!mounted) return;
-        setState(() => _ready = true);
-      }).catchError((_) {
-        if (mounted) setState(() => _failed = true);
+  /// Nothing is decoded until the reader taps play: a long chat never
+  /// opens a dozen decoders at once, and data is only spent on videos
+  /// someone actually wants to see. The poster is the video's own
+  /// early frame, so the bubble still looks like the video.
+  Future<void> _start() async {
+    if (_controller != null || _loading) return;
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+    final controller =
+        VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    try {
+      await controller.initialize();
+      if (!mounted) {
+        try {
+          await controller.dispose();
+        } catch (_) {}
+        return;
+      }
+      controller.addListener(() {
+        if (mounted) setState(() {});
       });
-    _controller.addListener(() {
-      if (mounted) setState(() {});
+      setState(() {
+        _controller = controller;
+        _ready = true;
+        _loading = false;
+      });
+      await controller.play();
+    } catch (_) {
+      try {
+        await controller.dispose();
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _failed = true;
+        });
+      }
+    }
+  }
+
+  void _toggle() {
+    final c = _controller;
+    if (c == null || !_ready) return;
+    setState(() {
+      c.value.isPlaying ? c.pause() : c.play();
     });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final width = (MediaQuery.sizeOf(context).width * .72)
-        .clamp(220.0, 340.0);
-    final aspect = _ready && _controller.value.aspectRatio > 0
-        ? _controller.value.aspectRatio
+    final width =
+        (MediaQuery.sizeOf(context).width * .72).clamp(220.0, 340.0);
+    final c = _controller;
+    final aspect = _ready && c!.value.aspectRatio > 0
+        ? c.value.aspectRatio
         : 16 / 9;
     return GestureDetector(
       onTap: () {
-        if (!_ready) return;
-        setState(() {
-          _controller.value.isPlaying
-              ? _controller.pause()
-              : _controller.play();
-        });
+        if (_failed || !_ready) {
+          _start();
+          return;
+        }
+        _toggle();
       },
-      onDoubleTap: _ready
-          ? () => _openFullscreen(context)
-          : null,
+      onDoubleTap: _ready ? () => _openFullscreen(context) : null,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: Container(
@@ -1050,30 +1094,54 @@ class _VideoContentState extends State<_VideoContent> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                if (_ready)
-                  VideoPlayer(_controller)
-                else if (_failed)
+                if (_ready) VideoPlayer(c),
+                if (!_ready)
+                  Positioned.fill(
+                    child: CachedNetworkImage(
+                      imageUrl: CloudinaryService.videoThumb(widget.url),
+                      fit: BoxFit.cover,
+                      memCacheWidth: 640,
+                      fadeInDuration: const Duration(milliseconds: 150),
+                      errorWidget: (_, __, ___) => Container(
+                        color: BookNestColors.navyDeep,
+                        child: const Icon(Icons.movie_rounded,
+                            color: Colors.white24, size: 40),
+                      ),
+                    ),
+                  ),
+                if (_failed)
                   Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.videocam_off_rounded,
+                    children: const [
+                      Icon(Icons.videocam_off_rounded,
                           color: Colors.white54, size: 30),
-                      const SizedBox(height: 6),
-                      Text('Video unavailable',
+                      SizedBox(height: 6),
+                      Text('Tap to try again',
                           style: TextStyle(
                               fontSize: 12,
-                              color: Colors.white.withOpacity(.7))),
-                      const SizedBox(height: 14),
+                              color: Colors.white70)),
+                      SizedBox(height: 14),
                     ],
                   )
-                else
-                  const SizedBox(
-                    width: 26,
-                    height: 26,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: BookNestColors.cyan),
-                  ),
-                if (_ready && !_controller.value.isPlaying)
+                else if (!_ready)
+                  _loading
+                      ? const SizedBox(
+                          width: 26,
+                          height: 26,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: BookNestColors.cyan))
+                      : Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color:
+                                BookNestColors.navyDeep.withOpacity(.55),
+                          ),
+                          padding: const EdgeInsets.all(12),
+                          child: const Icon(Icons.play_arrow_rounded,
+                              color: Colors.white, size: 34),
+                        )
+                else if (!c.value.isPlaying)
                   Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
@@ -1083,6 +1151,24 @@ class _VideoContentState extends State<_VideoContent> {
                     child: const Icon(Icons.play_arrow_rounded,
                         color: Colors.white, size: 34),
                   ),
+                if (widget.onOpen != null)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Material(
+                      color: Colors.black.withOpacity(.35),
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: widget.onOpen,
+                        child: const Padding(
+                          padding: EdgeInsets.all(5),
+                          child: Icon(Icons.open_in_full_rounded,
+                              color: Colors.white, size: 15),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (_ready)
                   Positioned(
                     left: 10,
@@ -1091,7 +1177,7 @@ class _VideoContentState extends State<_VideoContent> {
                     child: Row(
                       children: [
                         ValueListenableBuilder<VideoPlayerValue>(
-                          valueListenable: _controller,
+                          valueListenable: c,
                           builder: (context, value, _) {
                             final duration =
                                 value.duration.inMilliseconds.toDouble();
@@ -1101,8 +1187,9 @@ class _VideoContentState extends State<_VideoContent> {
                                   trackHeight: 3.5,
                                   thumbShape: const RoundSliderThumbShape(
                                       enabledThumbRadius: 6),
-                                  overlayShape: const RoundSliderOverlayShape(
-                                      overlayRadius: 11),
+                                  overlayShape:
+                                      const RoundSliderOverlayShape(
+                                          overlayRadius: 11),
                                 ),
                                 child: Slider(
                                   value: duration == 0
@@ -1115,7 +1202,7 @@ class _VideoContentState extends State<_VideoContent> {
                                   inactiveColor: Colors.white24,
                                   onChanged: duration == 0
                                       ? null
-                                      : (v) => _controller.seekTo(
+                                      : (v) => c.seekTo(
                                             Duration(
                                                 milliseconds: v.round()),
                                           ),
@@ -1126,47 +1213,43 @@ class _VideoContentState extends State<_VideoContent> {
                         ),
                         const SizedBox(width: 6),
                         ValueListenableBuilder<VideoPlayerValue>(
-                          valueListenable: _controller,
+                          valueListenable: c,
                           builder: (context, value, _) => InkWell(
                             onTap: () {
                               final speeds = const [1.0, 1.5, 2.0];
-                              final next =
-                                  speeds[(speeds.indexOf(_speed) + 1) %
+                              final next = speeds[
+                                  (speeds.indexOf(_speed) + 1) %
                                       speeds.length];
                               setState(() {
                                 _speed = next;
-                                _controller.setPlaybackSpeed(next);
+                                c.setPlaybackSpeed(next);
                               });
                             },
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 3),
-                              child: Text(
-                                '${_speed}×',
-                                style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: _speed == 1.0
-                                        ? Colors.white.withOpacity(.85)
-                                        : BookNestColors.cyan),
-                              ),
+                            child: Text(
+                              '${_speed}x',
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: _speed == 1.0
+                                      ? Colors.white.withOpacity(.85)
+                                      : BookNestColors.cyan),
                             ),
                           ),
                         ),
                         const SizedBox(width: 4),
-                        InkWell(
-                          onTap: () => setState(() {
-                            _controller.value.volume > 0
-                                ? _controller.setVolume(0)
-                                : _controller.setVolume(1);
-                          }),
-                          child: Icon(
-                            _controller.value.volume > 0
-                                ? Icons.volume_up_rounded
-                                : Icons.volume_off_rounded,
-                            color: Colors.white.withOpacity(.85),
-                            size: 18,
+                        ValueListenableBuilder<VideoPlayerValue>(
+                          valueListenable: c,
+                          builder: (context, value, _) => InkWell(
+                            onTap: () => c.value.volume > 0
+                                ? c.setVolume(0)
+                                : c.setVolume(1),
+                            child: Icon(
+                              c.value.volume > 0
+                                  ? Icons.volume_up_rounded
+                                  : Icons.volume_off_rounded,
+                              color: Colors.white.withOpacity(.85),
+                              size: 18,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1191,7 +1274,7 @@ class _VideoContentState extends State<_VideoContent> {
     Navigator.of(context).push(PageRouteBuilder<void>(
       opaque: false,
       barrierColor: Colors.black,
-      pageBuilder: (_, __, ___) => _VideoFullscreen(controller: _controller),
+      pageBuilder: (_, __, ___) => _VideoFullscreen(controller: _controller!),
     ));
   }
 }
@@ -1319,22 +1402,23 @@ class _ImageContent extends StatelessWidget {
             maxWidth: MediaQuery.sizeOf(context).width * .72,
             maxHeight: 320,
           ),
-          child: Image.network(
-            url,
+          // CDN-sized + disk-cached: repeat views paint instantly and a
+          // chat photo never downloads heavier than it is shown.
+          child: CachedNetworkImage(
+            imageUrl: CloudinaryService.transformUrl(url, width: 720),
             fit: BoxFit.cover,
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-              return Container(
-                width: 220,
-                height: 160,
-                color: Colors.white.withOpacity(.05),
-                child: const Center(
-                  child: CircularProgressIndicator(
-                      color: BookNestColors.cyan, strokeWidth: 2),
-                ),
-              );
-            },
-            errorBuilder: (_, __, ___) => Container(
+            memCacheWidth: 720,
+            fadeInDuration: const Duration(milliseconds: 180),
+            placeholder: (_, __) => Container(
+              width: 220,
+              height: 160,
+              color: Colors.white.withOpacity(.05),
+              child: const Center(
+                child: CircularProgressIndicator(
+                    color: BookNestColors.cyan, strokeWidth: 2),
+              ),
+            ),
+            errorWidget: (_, __, ___) => Container(
               width: 220,
               height: 120,
               color: Colors.white.withOpacity(.05),
@@ -2475,22 +2559,23 @@ class _ChatComposerState extends State<ChatComposer> {
         maxWidth: 1600,
       );
       if (picked == null || !mounted) return;
+      // Straight into the studio: every gallery photo is previewed and
+      // may be polished (filters, light, crop-ish tools) before send.
+      final edited =
+          await Navigator.of(context, rootNavigator: true).push<Uint8List>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => PhotoEditScreen(photo: picked),
+        ),
+      );
+      if (!mounted || edited == null) return;
       setState(() {
         _uploading = true;
         _photoName = picked.name;
       });
-      final bytes = await picked.readAsBytes();
       await _rememberInRecents(
-          picked.name.isNotEmpty ? picked.name : 'photo.jpg', bytes);
-      final extension =
-          picked.name.contains('.') ? picked.name.split('.').last.toLowerCase() : 'jpg';
-      await widget.onSendImage(
-        bytes,
-        (extension == 'jpg' || extension == 'jpeg' ||
-                extension == 'png' || extension == 'webp')
-            ? extension
-            : 'jpg',
-      );
+          picked.name.isNotEmpty ? picked.name : 'photo.jpg', edited);
+      await widget.onSendImage(edited, 'png');
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -2526,7 +2611,7 @@ class _ChatComposerState extends State<ChatComposer> {
     }
   }
 
-  /// Record inside the BookNest camera → upload → send as video.
+  /// Record inside the BookNest camera → preview it → send.
   Future<void> _snapVideo() async {
     if (_uploading || widget.onSendVideo == null) return;
     String? path;
@@ -2536,14 +2621,37 @@ class _ChatComposerState extends State<ChatComposer> {
       path = null;
     }
     if (!mounted || path == null || path.isEmpty) return;
+    final checked = await openVideoPreview(context, path);
+    if (!mounted || checked == null || checked.isEmpty) return;
     setState(() => _uploading = true);
     try {
-      await widget.onSendVideo!(path, 0);
+      await widget.onSendVideo!(checked, 0);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text(
                 'The video could not be attached — please try again.')));
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  /// Gallery video — pick, watch it back, then send.
+  Future<void> _attachVideoFromGallery() async {
+    if (_uploading || widget.onSendVideo == null) return;
+    try {
+      final picked = await _picker.pickVideo(source: ImageSource.gallery);
+      if (picked == null || !mounted || picked.path.isEmpty) return;
+      final checked = await openVideoPreview(context, picked.path);
+      if (!mounted || checked == null || checked.isEmpty) return;
+      setState(() => _uploading = true);
+      await widget.onSendVideo!(checked, 0);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'That video could not be attached — please try another one.')));
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -2581,12 +2689,19 @@ class _ChatComposerState extends State<ChatComposer> {
     try {
       final choice = await pickBookNestFile(context);
       if (choice == null || !mounted) return;
+      // Preview before send: what it is, how big, and a rename box.
+      final sendName = await openFilePreview(
+        context,
+        name: choice.name,
+        size: choice.size,
+      );
+      if (!mounted || sendName == null || sendName.isEmpty) return;
       setState(() {
         _uploading = true;
-        _photoName = choice.name;
+        _photoName = sendName;
       });
-      await _rememberInRecents(choice.name, choice.bytes);
-      await widget.onSendFile!(choice.name, choice.bytes);
+      await _rememberInRecents(sendName, choice.bytes);
+      await widget.onSendFile!(sendName, choice.bytes);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -2629,6 +2744,20 @@ class _ChatComposerState extends State<ChatComposer> {
                 Navigator.pop(sheetContext);
                 _attachFromGallery();
               },
+            ),
+            ListTile(
+              leading: const Icon(Icons.video_library_outlined,
+                  color: BookNestColors.cyan),
+              title: const Text('Gallery video',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Pick a video — watch it back, then send',
+                  style: TextStyle(fontSize: 12)),
+              onTap: widget.onSendVideo == null
+                  ? null
+                  : () {
+                      Navigator.pop(sheetContext);
+                      _attachVideoFromGallery();
+                    },
             ),
             ListTile(
               leading: const Icon(Icons.movie_creation_outlined,
