@@ -11,47 +11,14 @@ If no such version exists, report the issue to the plugin. If necessary, here is
 an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
 
 If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
-lib/state/chat_providers.dart:694:80: Error: Unexpected token ';'.
-    .<ConversationsController, ConversationsState>(ConversationsController.new);
-                                                                               ^
-lib/state/chat_providers.dart:694:76: Error: Expected a type, but got 'new'.
-    .<ConversationsController, ConversationsState>(ConversationsController.new);
-                                                                           ^^^
-lib/state/chat_providers.dart:694:79: Error: Expected an identifier, but got ')'.
-Try inserting an identifier before ')'.
-    .<ConversationsController, ConversationsState>(ConversationsController.new);
-                                                                              ^
-lib/state/chat_providers.dart:694:80: Error: Expected a function body or '=>'.
-Try adding {}.
-    .<ConversationsController, ConversationsState>(ConversationsController.new);
-                                                                               ^
-lib/state/chat_providers.dart:694:80: Error: Expected ';' after this.
-    .<ConversationsController, ConversationsState>(ConversationsController.new);
-                                                                               ^
-lib/state/chat_providers.dart:13:8: Error: Error when reading 'lib/screens/chat/voice_recorder_sheet.dart': No such file or directory
-import '../screens/chat/voice_recorder_sheet.dart' show VoiceNoteResult;
-       ^
 lib/presentation/screens/dms/dm_chat_screen.dart:52:3: Error: Type 'ChatSource' not found.
   ChatSource get _source => ChatSource.dm(
   ^^^^^^^^^^
-lib/state/chat_providers.dart:440:29: Error: Type 'VoiceNoteResult' not found.
-  Future<String?> sendVoice(VoiceNoteResult voice, {String? replyToId}) async {
-                            ^^^^^^^^^^^^^^^
-lib/state/chat_providers.dart:694:52: Error: 'ConversationsController.new' can't be used as a type because 'ConversationsController' doesn't refer to an import prefix.
-    .<ConversationsController, ConversationsState>(ConversationsController.new);
-                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/state/chat_providers.dart:694:6: Error: Expected an identifier, but got '<'.
-Try inserting an identifier before '<'.
-    .<ConversationsController, ConversationsState>(ConversationsController.new);
-     ^
 lib/presentation/screens/dms/dm_chat_screen.dart:52:29: Error: The getter 'ChatSource' isn't defined for the type '_DMChatScreenState'.
  - '_DMChatScreenState' is from 'package:booknest/presentation/screens/dms/dm_chat_screen.dart' ('lib/presentation/screens/dms/dm_chat_screen.dart').
 Try correcting the name to the name of an existing getter, or defining a getter or field named 'ChatSource'.
   ChatSource get _source => ChatSource.dm(
                             ^^^^^^^^^^
-lib/state/chat_providers.dart:440:29: Error: 'VoiceNoteResult' isn't a type.
-  Future<String?> sendVoice(VoiceNoteResult voice, {String? replyToId}) async {
-                            ^^^^^^^^^^^^^^^
 Target kernel_snapshot_program failed: Exception
 
 
@@ -67,6 +34,6 @@ Execution failed for task ':app:compileFlutterBuildRelease'.
 > Run with --scan to generate a Build Scan (Powered by Develocity).
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 1m 28s
-Running Gradle task 'assembleRelease'...                           89.2s
+BUILD FAILED in 1m 22s
+Running Gradle task 'assembleRelease'...                           83.6s
 Gradle task assembleRelease failed with exit code 1
