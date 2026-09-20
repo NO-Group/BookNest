@@ -99,6 +99,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     WakelockPlus.disable().catchError((_) {});
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge).catchError((_) {});
     WidgetsBinding.instance.removeObserver(this);
+    _logStreak(quiet: true);
     super.dispose();
   }
 
@@ -107,7 +108,13 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _flushProgress();
-      _logStreak();
+      _logStreak(quiet: true);
+      // Verified reading time: the clock stops the moment the app is
+      // backgrounded, switched away, or the device locks — desk-farming
+      // minutes earns nothing.
+      _readingTime.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      _readingTime.start();
     }
   }
 
@@ -355,12 +362,16 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   /// Feeds the daily reading streak (+2 gems on the first read of the day).
-  Future<void> _logStreak() async {
+  /// Flushes the minutes read since the last flush. Each flush sends
+  /// only its own delta (the stopwatch resets after a successful send),
+  /// so a whole day of reading adds up truthfully. [quiet] skips the
+  /// celebration — used when leaving the screen or the foreground.
+  Future<void> _logStreak({bool quiet = false}) async {
     final minutes = _readingTime.elapsedMilliseconds ~/ 60000;
-    if (minutes < 1 && !_readingTime.isRunning) return;
     if (minutes < 1) return;
     final res = await BackendApi.instance.call('streak.log', {'minutes': minutes});
-    if (!mounted || res == null) return;
+    if (res != null) _readingTime.reset();
+    if (!mounted || res == null || quiet) return;
     final awarded = (res['gemsAwarded'] as num?)?.toInt() ?? 0;
     if (awarded > 0 && !_streakCelebrated) {
       _streakCelebrated = true;

@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.26.0+48 — 2026-09-17 · The money engine: Paystack store, plans, honest reading time
+
+**The BookNest Store is live (Wallet → BookNest Store):**
+- **Gem packs** — 100 / 500 / 1,000 / 5,000 / 10,000 gems. Prices are
+  fixed catalog values in **₦ and $** (never converted at runtime);
+  pick your currency with the ₦/$ switch.
+- **Reader & BookWorm plans** — monthly / 6-month / yearly. Reader:
+  20% off unlocks + 5 unlimited-access books. BookWorm: everything
+  Reader gets + **10 unlimited books** + a **monthly gem allowance
+  from verified reading time** (minutes ÷ 12).
+- **Payments are Paystack end-to-end**: the app sends only a product
+  id — the server reads the real price from the catalog, opens the
+  checkout (card or bank transfer), and gems/plans land ONLY after
+  Paystack verification (verify + signed webhook, both idempotent).
+  Price tampering is refused server-side.
+- Unlimited-access books are assigned **once per subscription period**,
+  server-side, seeded per reader — refreshing cannot reroll them.
+
+**Verified reading time (BookWorm allowance fuel) — now honest:**
+- The reading clock **stops** the moment the app is backgrounded or
+  the device locks (it never did before — that was farmable).
+- Reading minutes now **accumulate all day** (before, only the first
+  sync of each day was ever recorded) and sync in deltas capped at
+  12 tracked hours per day.
+
+**Cold start:** an empty library now shows the arrival card ("The ink
+is still drying…") instead of a bare "no books" line. The real fix is
+already in your hands: run the **Library Import** (checklist 3B) to
+fill 1,500+ classics in one click.
+
+**Owner setup (checklist 3C):** paste the monetization SQL, add the
+Paystack secret key, and the webhook URL — all dashboard clicks.
+
 ## 2.25.5+47 — 2026-09-17 · Videos that play, previews before send, speed
 
 **Videos now actually play:**

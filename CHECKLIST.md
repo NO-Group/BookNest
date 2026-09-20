@@ -90,6 +90,37 @@ needs scrolling. Moderators can delete any imported book like any other
 
 ---
 
+---
+
+## 3C · Switch on money: Paystack + the price catalog (10 min)
+
+- [ ] **Fill the shelves FIRST** — if you have not done step 3B yet
+      (Library Import), do it now. An empty library is the one thing
+      that drives readers away, and 3B fixes it with one click.
+- [ ] **supabase.com** dashboard → **SQL Editor** → **New query**.
+- [ ] On GitHub (branch `arena/01a03a7f-booknest`) open
+      **`supabase/migrations/20260806000005_monetization_catalog.sql`**
+      → **Raw** → select all → copy → paste into the SQL Editor →
+      **Run**. You should see "Success. No rows returned".
+      This creates the fixed ₦/$ price catalog (11 products × 2
+      currencies). Prices are edited HERE from now on — never in the app.
+- [ ] **Paystack**: sign up / sign in at **paystack.com** →
+      **Settings → API Keys & Webhooks** → copy your **Secret Key**
+      (starts `sk_test_` while testing, `sk_live_` when you go live).
+- [ ] Back in Supabase: **Edge Functions → booknest-api → Secrets** →
+      add a secret: name **`PAYSTACK_SECRET_KEY`**, value = the key you
+      copied.
+- [ ] Still in Paystack → **Webhooks** → **Add webhook URL** → paste:
+      `https://ekgbbbbjwgfixqarlnil.supabase.co/functions/v1/booknest-api`
+      and tick **Charge success**. This is how payments confirm even if
+      a reader closes the app mid-checkout.
+- [ ] Open the app → **Wallet → BookNest Store** → buy the **100 Gems**
+      pack with the TEST key → pay with Paystack's test card → the gems
+      should land in your wallet within a minute.
+
+**Proof:** gems land in the wallet after a test payment; the webhook
+URL shows as active in Paystack.
+
 ## 4 · Calls that connect everywhere — TURN (4 min, one-time, optional but recommended)
 
 - [ ] First do steps 2–3 (TURN rides the updated server).

@@ -225,6 +225,54 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
                       child: Builder(builder: (context) {
                         final books = _filter(_books);
                         if (books.isEmpty) {
+                          // A truly empty shelf gets the arrival card —
+                          // an empty-looking library must never look broken.
+                          if (_books.isEmpty) {
+                            return ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              children: [
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(28, 60, 28, 40),
+                                  child: Column(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(18),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: BookNestColors.cyan
+                                              .withOpacity(.12),
+                                          border: Border.all(
+                                              color: BookNestColors.cyan
+                                                  .withOpacity(.4)),
+                                        ),
+                                        child: const Icon(
+                                            Icons.history_edu_rounded,
+                                            color: BookNestColors.cyan,
+                                            size: 34),
+                                      ),
+                                      const SizedBox(height: 18),
+                                      const Text('The ink is still drying…',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 17)),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'The first wave of stories is being '
+                                        'inked and shipped to this shelf. It '
+                                        'will not stay empty for long.',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            color: muted,
+                                            fontSize: 13.5,
+                                            height: 1.4),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          }
                           return ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
                             children: [

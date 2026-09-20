@@ -5,6 +5,7 @@
 // MongoDB (booknest_users.gem_ledger) via the wallet.* edge actions.
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'dart:ui';
 
 import 'package:intl/intl.dart';
@@ -220,6 +221,12 @@ class _WalletScreenState extends State<WalletScreen> {
                           ),
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 14),
+                    GradientButton(
+                      label: 'BookNest Store · gems & plans',
+                      icon: Icons.storefront_rounded,
+                      onPressed: () => context.push('/store'),
                     ),
                     const SizedBox(height: 24),
                     const SectionHeader(title: 'Recent activity'),

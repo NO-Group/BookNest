@@ -61,6 +61,7 @@ export const DB_NAMES = {
   moderation: 'booknest_moderation', // UGC reports from the community
   groups: 'booknest_groups', // clubs, communities, organizations, schools
   genres: 'booknest_genres', // moderator-curated book + club genre shelves
+  payments: 'booknest_payments', // orders + paystack references (money ledger)
 } as const;
 
 type Domain = keyof typeof DB_NAMES;
@@ -104,6 +105,13 @@ async function ensureIndexes(
 ): Promise<void> {
   try {
     switch (domain) {
+      case 'payments':
+        await Promise.all([
+          database.collection('orders').createIndex({ reference: 1 }, { unique: true }),
+          database.collection('orders').createIndex({ userId: 1, createdAt: -1 }),
+          database.collection('subscriptions').createIndex({ userId: 1 }, { unique: true }),
+        ]);
+        break;
       case 'moderation':
         await Promise.all([
           database.collection('reports').createIndex({ reporterId: 1, createdAt: -1 }),
@@ -1160,12 +1168,213 @@ Deno.serve(async (req: Request) => {
   }
   if (req.method !== 'POST') return fail('Use POST', 405);
 
+  const rawBody = await req.text();
+  // Paystack webhooks land on this same URL, authenticated by their
+  // HMAC-SHA512 signature header — never by our {action} envelope.
+  const paystackSig = req.headers.get('x-paystack-signature');
+  if (paystackSig) return paystackWebhook(rawBody, paystackSig);
   let body: { action?: string; payload?: Record<string, unknown> };
   try {
-    body = await req.json();
+    body = JSON.parse(rawBody);
   } catch {
     return fail('Invalid JSON body');
   }
+
+  // ── monetization: fixed catalog, Paystack, subscriptions, allowance ────
+  // Prices live ONLY here and in the catalog table — the app sends a
+  // product id and never an amount. All money is integer minor units
+  // (USD cents / NGN kobo); floating point never touches payment math.
+  const CATALOG: Array<{
+    productId: string; kind: 'gems' | 'plan'; label: string;
+    gems: number; plan: string | null; periodDays: number; unlimited: number;
+    prices: Record<string, number>;
+  }> = [
+    { productId: 'gems_100', kind: 'gems', label: '100 Gems', gems: 100, plan: null, periodDays: 0, unlimited: 0, prices: { USD: 100, NGN: 136200 } },
+    { productId: 'gems_500', kind: 'gems', label: '500 Gems', gems: 500, plan: null, periodDays: 0, unlimited: 0, prices: { USD: 475, NGN: 646950 } },
+    { productId: 'gems_1000', kind: 'gems', label: '1,000 Gems', gems: 1000, plan: null, periodDays: 0, unlimited: 0, prices: { USD: 900, NGN: 1225800 } },
+    { productId: 'gems_5000', kind: 'gems', label: '5,000 Gems', gems: 5000, plan: null, periodDays: 0, unlimited: 0, prices: { USD: 4899, NGN: 6672438 } },
+    { productId: 'gems_10000', kind: 'gems', label: '10,000 Gems', gems: 10000, plan: null, periodDays: 0, unlimited: 0, prices: { USD: 9666, NGN: 13165092 } },
+    { productId: 'reader_monthly', kind: 'plan', label: 'Reader · Monthly', gems: 0, plan: 'reader', periodDays: 30, unlimited: 5, prices: { USD: 833, NGN: 1135121 } },
+    { productId: 'reader_six_month', kind: 'plan', label: 'Reader · 6 Months', gems: 0, plan: 'reader', periodDays: 182, unlimited: 5, prices: { USD: 4998, NGN: 6810725 } },
+    { productId: 'reader_yearly', kind: 'plan', label: 'Reader · Yearly', gems: 0, plan: 'reader', periodDays: 365, unlimited: 5, prices: { USD: 9999, NGN: 13625537 } },
+    { productId: 'bookworm_monthly', kind: 'plan', label: 'BookWorm · Monthly', gems: 0, plan: 'bookworm', periodDays: 30, unlimited: 10, prices: { USD: 1266, NGN: 1725267 } },
+    { productId: 'bookworm_six_month', kind: 'plan', label: 'BookWorm · 6 Months', gems: 0, plan: 'bookworm', periodDays: 182, unlimited: 10, prices: { USD: 7594, NGN: 10348799 } },
+    { productId: 'bookworm_yearly', kind: 'plan', label: 'BookWorm · Yearly', gems: 0, plan: 'bookworm', periodDays: 365, unlimited: 10, prices: { USD: 14999, NGN: 20440037 } },
+  ];
+
+  function monthKeyUtc(d = new Date()): string {
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+
+  function paystackSecret(): string {
+    return (Deno.env.get('PAYSTACK_SECRET_KEY') ?? '').trim();
+  }
+
+  /// The live catalog: the Postgres table when it exists, the fixed
+  /// built-in list otherwise. Same values either way — one source of
+  /// truth in spirit, zero surprise in price.
+  async function catalogProduct(productId: string) {
+    try {
+      const { data, error } = await serviceClient().from('monetization_catalog')
+        .select('*').eq('product_id', productId);
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const prices: Record<string, number> = {};
+        for (const row of data) prices[String(row.currency_code)] = Number(row.amount_in_minor_units);
+        return {
+          productId,
+          kind: String(data[0].kind ?? 'gems') as 'gems' | 'plan',
+          label: String(data[0].label ?? productId),
+          gems: Number(data[0].gems ?? 0),
+          plan: data[0].plan ? String(data[0].plan) : null,
+          periodDays: Number(data[0].period_days ?? 0),
+          unlimited: Number(data[0].unlimited_books ?? 0),
+          prices,
+        };
+      }
+    } catch { /* table not created yet — the fixed catalog answers */ }
+    return CATALOG.find((c) => c.productId === productId) ?? null;
+  }
+
+  async function paystackInit(order: { email: string; amountMinor: number; currency: string; reference: string }) {
+    const res = await fetch('https://api.paystack.co/transaction/initialize', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${paystackSecret()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: order.email,
+        amount: order.amountMinor,
+        currency: order.currency,
+        reference: order.reference,
+        metadata: { reference: order.reference },
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const body = await res.json().catch(() => null);
+    if (res.status === 200 && body?.status === true && typeof body.data?.authorization_url === 'string') {
+      return body.data.authorization_url as string;
+    }
+    throw new Error(String(body?.message ?? `Paystack initialize failed (${res.status})`));
+  }
+
+  /// One fulfillment path for verify + webhook. Idempotent: an order
+  /// pays exactly once, whatever arrives first.
+  async function fulfillOrder(reference: string): Promise<{ fulfilled: boolean; error?: string }> {
+    const orders = (await dbFor('payments')).collection('orders');
+    const order = await orders.findOne({ reference });
+    if (!order) return { fulfilled: false, error: 'Unknown reference' };
+    if (order.status === 'paid') return { fulfilled: true };
+
+    const secret = paystackSecret();
+    if (!secret) return { fulfilled: false, error: 'Payments are not configured yet' };
+    const res = await fetch(
+      `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+      {
+        headers: { Authorization: `Bearer ${secret}` },
+        signal: AbortSignal.timeout(15000),
+      },
+    );
+    const body = await res.json().catch(() => null);
+    const data = body?.data;
+    if (!data || data.status !== 'success') {
+      if (data?.status === 'failed') {
+        await orders.updateOne({ reference }, { $set: { status: 'failed' } });
+      }
+      return { fulfilled: false, error: 'Payment not completed yet' };
+    }
+
+    const product = await catalogProduct(String(order.productId));
+    const expected = product ? Number(product.prices[String(order.currency)] ?? 0) : 0;
+    if (!product || expected === 0 || Number(data.amount) !== expected) {
+      // Price tampering or a stale order — refuse fulfillment loudly.
+      await orders.updateOne({ reference }, { $set: { status: 'review', paystackAmount: Number(data.amount) } });
+      return { fulfilled: false, error: 'Payment amount did not match the catalog' };
+    }
+
+    const uid = String(order.userId);
+    if (product.kind === 'gems') {
+      await grantGems(uid, product.gems, 'purchase');
+    } else {
+      // Plan: extend from the current period when renewing, and assign
+      // the unlimited picks once per period (seeded, never rerollable).
+      const subs = (await dbFor('payments')).collection('subscriptions');
+      const now = new Date();
+      const prev = await subs.findOne({ userId: uid });
+      const renewing = !!prev && prev.plan === product.plan &&
+        new Date(String(prev.periodEnds)) > now;
+      const base = renewing ? new Date(String(prev!.periodEnds)) : now;
+      const periodEnds = new Date(base.getTime() + product.periodDays * 86400000);
+      const periodStart = renewing ? new Date(String(prev!.periodStart)) : now;
+      let assignedBooks: string[] | null = prev?.assignedBooks ?? null;
+      const samePeriod = !!prev && renewing &&
+        String(prev?.assignedSeed ?? '') === periodStart.toISOString() &&
+        prev?.assignedPlan === product.plan;
+      if (!samePeriod && product.unlimited > 0) {
+        const pool = await (await dbFor('books')).collection('books')
+          .find({ moderationStatus: 'approved', status: 'published' }, { projection: { _id: 1 } })
+          .limit(300).toArray();
+        let seed = 0;
+        const seedText = `${uid}:${periodStart.toISOString()}`;
+        for (const ch of seedText) seed = (seed * 31 + ch.charCodeAt(0)) & 0x7fffffff;
+        const shuffle = [...pool];
+        for (let i = shuffle.length - 1; i > 0; i--) {
+          seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+          const j = seed % (i + 1);
+          [shuffle[i], shuffle[j]] = [shuffle[j], shuffle[i]];
+        }
+        assignedBooks = shuffle.slice(0, product.unlimited).map((b) => String(b._id));
+      }
+      await subs.updateOne(
+        { userId: uid },
+        {
+          $set: {
+            userId: uid,
+            plan: product.plan,
+            status: 'active',
+            periodStart: periodStart.toISOString(),
+            periodEnds: periodEnds.toISOString(),
+            unlimitedMax: product.unlimited,
+            assignedPlan: product.plan,
+            assignedSeed: periodStart.toISOString(),
+            ...(assignedBooks ? { assignedBooks } : {}),
+            updatedAt: now,
+          },
+        },
+        { upsert: true },
+      );
+    }
+    await orders.updateOne({ reference }, { $set: { status: 'paid', paidAt: new Date() } });
+    return { fulfilled: true };
+  }
+
+  async function paystackWebhook(raw: string, signature: string): Promise<Response> {
+    const secret = paystackSecret();
+    if (!secret) return fail('Payments are not configured yet', 503);
+    const key = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-512' }, false, ['sign'],
+    );
+    const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw));
+    const expected = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    if (expected.length !== signature.length) return fail('Bad signature', 401);
+    let diff = 0;
+    for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+    if (diff !== 0) return fail('Bad signature', 401);
+    let event: { event?: string; data?: { reference?: string } };
+    try {
+      event = JSON.parse(raw);
+    } catch {
+      return fail('Invalid JSON body');
+    }
+    if (event.event === 'charge.success' && typeof event.data?.reference === 'string') {
+      try {
+        await fulfillOrder(event.data.reference);
+      } catch { /* the next webhook retry or an app verify will land it */ }
+    }
+    return json({ ok: true, data: { received: true } });
+  }
+
   const action = body.action ?? '';
   // Accept both shapes: BackendApi sends { action, payload }, while the
   // writeRow/updateRow fallbacks send fields at the top level.
@@ -1399,6 +1608,141 @@ Deno.serve(async (req: Request) => {
             reason: String(r.reason ?? ''),
             createdAt: r.createdAt,
           })),
+        });
+      }
+
+      // ── store: catalog + paystack purchases + subscriptions ────────────
+      case 'wallet.catalog': {
+        const products = [];
+        for (const def of CATALOG) {
+          const live = await catalogProduct(def.productId);
+          products.push(live ?? def);
+        }
+        return ok({ products });
+      }
+
+      case 'payments.initialize': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const product = await catalogProduct(String(p.productId ?? ''));
+        if (!product) return fail('Unknown product', 404);
+        const currency = String(p.currency ?? 'NGN').toUpperCase() === 'USD' ? 'USD' : 'NGN';
+        const amountMinor = Number(product.prices[currency] ?? 0);
+        if (amountMinor <= 0) return fail('This product is not sold in that currency yet');
+        if (!paystackSecret()) {
+          return fail('Card payments are not switched on yet — check back shortly', 503);
+        }
+        let email = '';
+        try {
+          const auth = await serviceClient().auth.admin.getUserById(uid);
+          email = String(auth.data?.user?.email ?? '');
+        } catch { /* fall through */ }
+        if (!email) {
+          try {
+            const prof = await serviceClient().from('profiles')
+              .select('email').eq('id', uid).maybeSingle();
+            email = String(prof.data?.email ?? '');
+          } catch { /* fall through */ }
+        }
+        if (!email) email = `reader-${uid.slice(0, 12)}@booknest.app`;
+        const reference = `BN-${uid.slice(0, 8)}-${Date.now().toString(36)}`;
+        await (await dbFor('payments')).collection('orders').insertOne({
+          reference, userId: uid, productId: product.productId,
+          kind: product.kind, currency, amountMinor,
+          status: 'initialized', createdAt: new Date(),
+        });
+        const checkoutUrl = await paystackInit({ email, amountMinor, currency, reference });
+        return ok({ checkoutUrl, reference });
+      }
+
+      case 'payments.verify': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const reference = String(p.reference ?? '');
+        if (!/^[A-Za-z0-9-]{6,80}$/.test(reference)) return fail('A valid reference is required');
+        const order = await (await dbFor('payments')).collection('orders')
+          .findOne({ reference });
+        if (!order || order.userId !== uid) return fail('Unknown reference', 404);
+        const result = await fulfillOrder(reference);
+        const fresh = await (await dbFor('payments')).collection('orders')
+          .findOne({ reference });
+        const prof = await serviceClient().from('profiles')
+          .select('gems').eq('id', uid).maybeSingle();
+        return ok({
+          status: String(fresh?.status ?? 'initialized'),
+          fulfilled: result.fulfilled,
+          error: result.error ?? null,
+          gems: prof.error ? 0 : Number(prof.data?.gems ?? 0),
+        });
+      }
+
+      case 'sub.status': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const sub = await (await dbFor('payments')).collection('subscriptions')
+          .findOne({ userId: uid });
+        const now = new Date();
+        const active = !!sub && sub.status === 'active' &&
+          new Date(String(sub.periodEnds)) > now;
+        const monthKey = monthKeyUtc();
+        const logs = await (await dbFor('social')).collection('reading_logs')
+          .find({ userId: uid, day: { $regex: `^${monthKey}` } })
+          .toArray();
+        const monthMinutes = logs.reduce((sum, r) => sum + Number(r.minutes ?? 0), 0);
+        const allowanceGems = Math.floor(monthMinutes / 12);
+        const ledger = (await dbFor('users')).collection('gem_ledger');
+        const grantedRows = await ledger.find({
+          userId: uid, reason: 'bookworm_allowance', day: monthKey,
+        }).toArray();
+        const grantedGems = grantedRows.reduce((sum, r) => sum + Number(r.delta ?? 0), 0);
+        return ok({
+          active,
+          plan: active ? String(sub!.plan) : null,
+          periodEnds: active ? String(sub!.periodEnds) : null,
+          unlimitedBooks: active && Array.isArray(sub!.assignedBooks)
+            ? sub!.assignedBooks.map(String)
+            : [],
+          unlimitedMax: active ? Number(sub!.unlimitedMax ?? 0) : 0,
+          discountPct: active ? 20 : 0,
+          allowance: {
+            monthMinutes,
+            allowanceGems,
+            grantedGems,
+            pendingGems: Math.max(0, allowanceGems - grantedGems),
+          },
+        });
+      }
+
+      // BookWorm monthly reading allowance: verified reading minutes ÷ 12,
+      // granted as the difference not yet paid — never double-granted.
+      case 'reading.allowance': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const sub = await (await dbFor('payments')).collection('subscriptions')
+          .findOne({ userId: uid });
+        const now = new Date();
+        const active = !!sub && sub.status === 'active' &&
+          new Date(String(sub.periodEnds)) > now;
+        if (!active || sub!.plan !== 'bookworm') {
+          return fail('An active BookWorm subscription is required for the reading allowance');
+        }
+        const monthKey = monthKeyUtc();
+        const logs = await (await dbFor('social')).collection('reading_logs')
+          .find({ userId: uid, day: { $regex: `^${monthKey}` } })
+          .toArray();
+        const monthMinutes = logs.reduce((sum, r) => sum + Number(r.minutes ?? 0), 0);
+        const allowanceGems = Math.floor(monthMinutes / 12);
+        const ledger = (await dbFor('users')).collection('gem_ledger');
+        const grantedRows = await ledger.find({
+          userId: uid, reason: 'bookworm_allowance', day: monthKey,
+        }).toArray();
+        const grantedGems = grantedRows.reduce((sum, r) => sum + Number(r.delta ?? 0), 0);
+        const pending = Math.max(0, allowanceGems - grantedGems);
+        let gems = 0;
+        if (pending > 0) gems = await grantGems(uid, pending, 'bookworm_allowance', monthKey);
+        return ok({
+          monthMinutes, allowanceGems, grantedGems: grantedGems + pending,
+          pendingGems: 0, granted: pending, gems,
         });
       }
 
@@ -2098,8 +2442,16 @@ Deno.serve(async (req: Request) => {
         const existing = await col.findOne({ userId: uid, day });
         let created = false;
         if (!existing) {
-          await col.insertOne({ userId: uid, day, minutes, createdAt: new Date() });
+          await col.insertOne({ userId: uid, day, minutes: 0, createdAt: new Date() });
           created = true;
+        }
+        // Every flush adds its own delta (the app resets its stopwatch
+        // after each), capped at 12 tracked hours per day — farm-proof.
+        if (minutes > 0) {
+          const capped = Math.min(minutes, Math.max(0, 720 - Number(existing?.minutes ?? 0)));
+          if (capped > 0) {
+            await col.updateOne({ userId: uid, day }, { $inc: { minutes: capped } });
+          }
         }
         let gemsAwarded = 0;
         if (created) {

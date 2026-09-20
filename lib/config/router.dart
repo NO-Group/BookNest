@@ -19,6 +19,7 @@ import '../presentation/screens/reader/reader_screen.dart';
 import '../presentation/screens/wrapped/wrapped_screen.dart';
 import '../presentation/screens/settings/settings_screen.dart';
 import '../presentation/screens/wallet/wallet_screen.dart';
+import '../presentation/screens/wallet/store_screen.dart';
 import '../presentation/screens/jenny/jenny_screen.dart';
 import '../presentation/screens/dictionary/dictionary_screen.dart';
 import '../presentation/screens/dictionary/word_detail_screen.dart';
@@ -202,6 +203,7 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/status', builder: (context, state) => const ConnectionStatusScreen()),
     GoRoute(path: '/permissions', builder: (context, state) => const PermissionsScreen()),
     GoRoute(path: '/wallet', builder: (context, state) => const WalletScreen()),
+    GoRoute(path: '/store', builder: (context, state) => const StoreScreen()),
     GoRoute(path: '/jenny', builder: (context, state) => const JennyScreen()),
     GoRoute(
       path: '/dictionary',
