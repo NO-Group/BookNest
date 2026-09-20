@@ -1,32 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
-import '../../../services/backend_api.dart';
 import '../../../services/genre_service.dart';
-import '../../../services/supabase_service.dart';
+import '../../../state/book_providers.dart';
 import '../../components/booknest_ui.dart' show BookNestLoader, TagChip, kBookNestGenres;
 import '../../components/skeleton_kit.dart';
 
-class BooksLibraryScreen extends StatefulWidget {
+class BooksLibraryScreen extends ConsumerStatefulWidget {
   const BooksLibraryScreen({super.key});
 
   @override
-  State<BooksLibraryScreen> createState() => _BooksLibraryScreenState();
+  ConsumerState<BooksLibraryScreen> createState() =>
+      _BooksLibraryScreenState();
 }
 
-class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
+/// The face of the shelf: search and genre chips are presentation state;
+/// the books themselves come from the shared catalog provider.
+class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
 
   final TextEditingController _search = TextEditingController();
-  List<Map<String, dynamic>> _books = const [];
-  bool _loading = true;
   final Set<String> _selectedGenres = {};
 
   @override
   void initState() {
     super.initState();
-    _load();
     _search.addListener(() => setState(() {}));
     GenreService.instance.load().then((_) {
       if (mounted) setState(() {});
@@ -37,18 +37,6 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
   void dispose() {
     _search.dispose();
     super.dispose();
-  }
-
-  Future<void> _load() async {
-    final res = await BackendApi.instance.call('books.list', {'limit': 50});
-    if (!mounted) return;
-    setState(() {
-      _books = (res?['books'] as List?)
-              ?.map((e) => Map<String, dynamic>.from(e as Map))
-              .toList() ??
-          const [];
-      _loading = false;
-    });
   }
 
   List<Map<String, dynamic>> _filter(List<Map<String, dynamic>> books) {
@@ -141,7 +129,12 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
+    // The shelf lives outside the UI — this widget only paints it.
+    final catalog = ref.watch(booksCatalogProvider);
+    final bool _loading = catalog.loading;
+    final List<Map<String, dynamic>> _books = catalog.books;
     final theme = Theme.of(context);
     final muted = theme.brightness == Brightness.dark
         ? BookNestColors.darkTextSecondary
@@ -221,7 +214,9 @@ class _BooksLibraryScreenState extends State<BooksLibraryScreen> {
                   ? const BookShelfSkeleton()
                   : RefreshIndicator(
                       color: BookNestColors.cyan,
-                      onRefresh: _load,
+                      onRefresh: () => ref
+                          .read(booksCatalogProvider.notifier)
+                          .refresh(),
                       child: Builder(builder: (context) {
                         final books = _filter(_books);
                         if (books.isEmpty) {

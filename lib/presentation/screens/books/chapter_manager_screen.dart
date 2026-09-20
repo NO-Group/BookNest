@@ -1,80 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
-import '../../../services/supabase_service.dart';
+import '../../../services/book_repository.dart';
 import '../../components/booknest_ui.dart';
+import '../../../state/book_providers.dart';
 
 /// Chapter manager — reorderable-feeling list of a book's chapters with
-/// add / edit / delete. Reads MongoDB (edge API); falls back to the
-/// transitional Supabase chapter row while the cutover is in progress.
-class ChapterManagerScreen extends StatefulWidget {
+/// add / edit / delete. Data comes from [manageBookProvider]; the
+/// legacy-episode fallback lives inside the repository, not here.
+class ChapterManagerScreen extends ConsumerStatefulWidget {
   final String bookId;
 
   const ChapterManagerScreen({super.key, required this.bookId});
 
   @override
-  State<ChapterManagerScreen> createState() => _ChapterManagerScreenState();
+  ConsumerState<ChapterManagerScreen> createState() =>
+      _ChapterManagerScreenState();
 }
 
-class _ChapterManagerScreenState extends State<ChapterManagerScreen> {
-  List<Map<String, dynamic>> _chapters = [];
-  bool _loading = true;
-  bool _offline = false;
-  String _title = '';
-
+class _ChapterManagerScreenState extends ConsumerState<ChapterManagerScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final book = await BackendApi.instance.fetchBook(widget.bookId);
-    if (!mounted) return;
-    if (book != null) {
-      final info = book['book'] as Map? ?? {};
-      setState(() {
-        _title = info['title']?.toString() ?? '';
-        _chapters = (book['chapters'] as List? ?? [])
-            .map((row) => Map<String, dynamic>.from(row as Map))
-            .toList();
-        _loading = false;
-        _offline = false;
-      });
-      return;
-    }
-    // Graceful fallback: transitional Supabase chapters.
-    try {
-      final bookRow = await SupabaseService()
-          .client
-          .from('club_books')
-          .select('title')
-          .eq('id', widget.bookId)
-          .maybeSingle();
-      final chapters = await SupabaseService()
-          .client
-          .from('book_chapters')
-          .select('chapter_number, title')
-          .eq('club_book_id', widget.bookId)
-          .order('chapter_number', ascending: true);
-      if (!mounted) return;
-      setState(() {
-        _title = bookRow?['title']?.toString() ?? '';
-        _chapters = (chapters as List)
-            .map((row) => Map<String, dynamic>.from(row as Map))
-            .map((row) => {
-                  'chapterNumber': row['chapter_number'],
-                  'title': row['title'],
-                })
-            .toList();
-        _loading = false;
-        _offline = true;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
   }
 
   Future<void> _deleteChapter(Map<String, dynamic> chapter) async {
@@ -97,16 +47,21 @@ class _ChapterManagerScreenState extends State<ChapterManagerScreen> {
       ),
     );
     if (confirmed != true || number == 0) return;
-    await BackendApi.instance
+    await BookRepository.instance
         .deleteChapter(bookId: widget.bookId, chapterNumber: number);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_offline ? 'Cloud not connected — nothing deleted.' : 'Chapter deleted.')));
-    if (!_offline) _load();
+        const SnackBar(content: Text('Chapter deleted.')));
+    ref.invalidate(manageBookProvider(widget.bookId));
   }
 
   @override
   Widget build(BuildContext context) {
+    final managed = ref.watch(manageBookProvider(widget.bookId));
+    final List<Map<String, dynamic>> _chapters = managed.asData?.value.chapters ?? const [];
+    final String _title = managed.asData?.value.book?['title']?.toString() ?? '';
+    final bool _loading = managed.isLoading;
+    final bool _offline = managed.asData?.value.fromLegacyFallback ?? false;
     final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: theme.brightness == Brightness.dark

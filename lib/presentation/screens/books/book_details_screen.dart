@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
@@ -10,84 +11,40 @@ import 'book_editor_screen.dart';
 import '../../components/booknest_ui.dart';
 import '../../components/report_sheet.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/book_repository.dart';
 import '../../../services/supabase_service.dart';
+import '../../../state/book_providers.dart';
 
 /// Store-style book landing page. Reading opens the immersive Reader.
-class BookDetailsScreen extends StatefulWidget {
+/// The page's data lives in [bookDetailProvider] — this widget paints it.
+class BookDetailsScreen extends ConsumerStatefulWidget {
   final String bookId;
   const BookDetailsScreen({super.key, required this.bookId});
 
   @override
-  State<BookDetailsScreen> createState() => _BookDetailsScreenState();
+  ConsumerState<BookDetailsScreen> createState() => _BookDetailsScreenState();
 }
 
-class _BookDetailsScreenState extends State<BookDetailsScreen> {
+class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
   String? _viewerId;
-  Map<String, dynamic>? _book;
-  Map<String, dynamic>? _progress;
-  List<Map<String, dynamic>> _recommended = [];
-  bool _loading = true;
   bool _saved = false;
   bool _liked = false;
-  List<_Review> _reviews = [];
+
+  /// The watched provider state, cached here so helpers outside build
+  /// read the same truth the tree is showing.
+  BookDetailState _detail = const BookDetailState();
+
+  Map<String, dynamic>? get _book => _detail.book;
+  Map<String, dynamic>? get _progress => _detail.progress;
+  List<Map<String, dynamic>> get _recommended => _detail.recommended;
+  bool get _loading => _detail.loading;
+  List<_Review> get _reviews =>
+      _detail.reviews.map(_Review.fromRow).toList();
 
   @override
   void initState() {
     super.initState();
     _viewerId = SupabaseService().client.auth.currentUser?.id;
-    _load();
-  }
-
-  Future<void> _load() async {
-    // Optimistic analytics: counted once per user per day server-side; a
-    // silent no-op until the edge function is deployed.
-    unawaited(BackendApi.instance.recordView(widget.bookId));
-    try {
-      final results = await Future.wait([
-        BackendApi.instance.fetchBook(widget.bookId),
-        BackendApi.instance.call('books.list', {'limit': 8}),
-        BackendApi.instance.call('reader.progress.get', {'bookId': widget.bookId}),
-        BackendApi.instance.call('reviews.list', {'bookId': widget.bookId, 'limit': 12}),
-      ]);
-      if (!mounted) return;
-      final bookRes = results[0];
-      final rows = ((bookRes?['chapters'] as List?) ?? const []);
-      final related = ((results[1]?['books'] as List?) ?? const []);
-      setState(() {
-        final b = bookRes?['book'];
-        _book = b is Map
-            ? Map<String, dynamic>.from(b)
-            : null;
-        final progressData =
-            (results[2] as Map<String, dynamic>?)?['progress'];
-        _progress = progressData is Map
-            ? Map<String, dynamic>.from(progressData)
-            : null;
-        _reviews = (((results[3] as Map<String, dynamic>?)?['reviews'] as List?) ?? const [])
-            .map((row) => _Review.fromRow(Map<String, dynamic>.from(row as Map)))
-            .toList();
-        if (_book != null && rows.isNotEmpty) {
-          _book!['chapters'] = rows;
-        }
-        _recommended = related
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .where((b) => b['id'] != widget.bookId)
-            .take(5)
-            .toList();
-        _loading = false;
-      });
-    } catch (_) { if (mounted) setState(() => _loading = false); }
-  }
-
-  Future<void> _loadReviews() async {
-    final res = await BackendApi.instance
-        .call('reviews.list', {'bookId': widget.bookId, 'limit': 12});
-    if (!mounted || res == null) return;
-    setState(() {
-      _reviews = (((res['reviews'] as List?) ?? const []))
-          .map((row) => _Review.fromRow(Map<String, dynamic>.from(row as Map)))
-          .toList();
-    });
   }
 
   void _notice(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
@@ -106,12 +63,12 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
   /// behaviour) until the booknest-api edge function is deployed.
   void _toggleSave() {
     setState(() => _saved = !_saved);
-    unawaited(BackendApi.instance.setBookmark(widget.bookId, _saved));
+    unawaited(BookRepository.instance.setBookmark(widget.bookId, _saved));
   }
 
   void _toggleLike() {
     setState(() => _liked = !_liked);
-    unawaited(BackendApi.instance.setLike(widget.bookId, _liked));
+    unawaited(BookRepository.instance.setLike(widget.bookId, _liked));
   }
 
   void _share() {
@@ -197,7 +154,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               Row(children: List.generate(5, (index) => IconButton(onPressed: () => setSheetState(() => rating = index + 1), icon: Icon(index < rating ? Icons.star_rounded : Icons.star_outline_rounded, color: BookNestColors.cyan)))),
               TextField(controller: controller, autofocus: true, minLines: 3, maxLines: 6, decoration: const InputDecoration(hintText: 'Tell readers what you think…')),
               const SizedBox(height: 14),
-              SizedBox(width: double.infinity, child: ElevatedButton(onPressed: () { final text = controller.text.trim(); if (text.isEmpty) return; Navigator.pop(sheetContext); unawaited(BackendApi.instance.createReview(widget.bookId, rating, text, displayName: _viewerName).then((_) => _loadReviews())); _notice('Your review has been posted.'); }, child: const Text('Post review'))),
+              SizedBox(width: double.infinity, child: ElevatedButton(onPressed: () { final text = controller.text.trim(); if (text.isEmpty) return; Navigator.pop(sheetContext); unawaited(ref.read(bookDetailProvider(widget.bookId).notifier).postReview(rating, text, displayName: _viewerName).then((_) => _notice('Your review has been posted.'))); }, child: const Text('Post review'))),
             ]),
           ),
         ),
@@ -207,6 +164,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _detail = ref.watch(bookDetailProvider(widget.bookId));
     final theme = Theme.of(context);
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator(color: BookNestColors.cyan)));
     if (_book == null) return Scaffold(appBar: AppBar(), body: const Center(child: Text('This book is no longer available.')));
@@ -304,14 +262,25 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                       onPressed: () async {
                         final edited = await context.push<bool>(
                             '/editor/book/${widget.bookId}');
-                        if (edited == true && mounted) _load();
+                        if (edited == true && mounted) {
+                          ref
+                              .read(bookDetailProvider(widget.bookId)
+                                  .notifier)
+                              .refresh();
+                        }
                       },
                       icon: const Icon(Icons.edit_rounded, size: 18),
                       label: const Text('Edit book'),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Expanded(child: _BoostButton(book: book, onBoosted: _load)),
+                  Expanded(
+                      child: _BoostButton(
+                          book: book,
+                          onBoosted: () => ref
+                              .read(bookDetailProvider(widget.bookId)
+                                  .notifier)
+                              .refresh())),
                 ])
               else
                 Row(children: [
@@ -423,8 +392,8 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
             ? 'Remix draft created — $carried chapters carried. You earned 10 gems!'
             : 'Sequel draft created — $carried chapters carried. You earned 10 gems!')));
     if (newId.isNotEmpty && mounted) {
-      final book = await BackendApi.instance.fetchBook(newId);
-      final b = book?['book'];
+      final loaded = await BookRepository.instance.get(newId);
+      final b = loaded?.book;
       if (b is Map && mounted) {
         await Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (routeContext) => BookEditorScreen.edit(
@@ -432,7 +401,9 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
         ));
       }
     }
-    if (mounted) _load();
+    if (mounted) {
+      ref.read(bookDetailProvider(widget.bookId).notifier).refresh();
+    }
   }
 
 }
@@ -773,8 +744,8 @@ class _BoostButtonState extends State<_BoostButton> {
     );
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
-    final res = await BackendApi.instance
-        .call('gems.spend', {'kind': 'boost_book', 'bookId': widget.book['id']?.toString() ?? ''});
+    final res = await BookRepository.instance
+        .boost(widget.book['id']?.toString() ?? '');
     if (!mounted) return;
     setState(() => _busy = false);
     if (res == null) {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -6,7 +7,8 @@ import 'package:intl/intl.dart';
 import '../../../config/app_state.dart';
 import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
-import '../../../services/backend_api.dart';
+import '../../../services/book_repository.dart';
+import '../../../state/book_providers.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 import 'book_details_screen.dart' show BookShareSheet;
@@ -17,65 +19,38 @@ import 'book_details_screen.dart' show BookShareSheet;
 /// `book_chapters` by [bookId], then renders the first chapter's raw Markdown.
 /// Like / Save persist through the booknest-api edge function with optimistic
 /// UI; Share opens the in-app contact picker (never the clipboard).
-class PublishDetailsScreen extends StatefulWidget {
+class PublishDetailsScreen extends ConsumerStatefulWidget {
   final String bookId;
 
   const PublishDetailsScreen({super.key, required this.bookId});
 
   @override
-  State<PublishDetailsScreen> createState() => _PublishDetailsScreenState();
+  ConsumerState<PublishDetailsScreen> createState() =>
+      _PublishDetailsScreenState();
 }
 
-class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
-  Map<String, dynamic>? _book;
-  List<Map<String, dynamic>> _chapters = [];
-  int _chapterIndex = 0;
-  bool _isLoading = true;
+/// A read-only landing preview of a book, fed by [manageBookProvider].
+class _PublishDetailsScreenState extends ConsumerState<PublishDetailsScreen> {
   bool _liked = false;
   bool _saved = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadBook();
-  }
-
-  Future<void> _loadBook() async {
-    try {
-      final res = await BackendApi.instance.fetchBook(widget.bookId);
-      final bookResponse = res?['book'];
-      final chaptersResponse = ((res?['chapters'] as List?) ?? const [])
-          .map((c) => {
-                'chapter_number': (c as Map)['chapterNumber'],
-                'title': c['title'],
-                'content': null,
-              })
-          .toList();
-
-      if (!mounted) return;
-
-      setState(() {
-        _book = bookResponse == null
-            ? null
-            : Map<String, dynamic>.from(bookResponse);
-        _chapters = chaptersResponse.isEmpty
-            ? []
-            : chaptersResponse
-                .map((row) => Map<String, dynamic>.from(row as Map))
-                .toList();
-        _chapterIndex = 0;
-        _isLoading = false;
-        if (_book == null) _error = 'This book could not be found.';
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _error = 'Could not load this book: $e';
-      });
+  String? get _error {
+    final managed = ref.watch(manageBookProvider(widget.bookId));
+    if (!managed.hasValue) return null;
+    if (managed.value!.book == null) {
+      return 'This book could not be found.';
     }
+    return null;
   }
+
+  Map<String, dynamic>? get _book =>
+      ref.watch(manageBookProvider(widget.bookId)).asData?.value.book;
+  List<Map<String, dynamic>> get _chapters =>
+      ref.watch(manageBookProvider(widget.bookId)).asData?.value.chapters ??
+      const [];
+  bool get _isLoading =>
+      ref.watch(manageBookProvider(widget.bookId)).isLoading;
+
+  int _chapterIndex = 0;
 
   void _guard(ActionHandler action) {
     AuthGuard.run(context, action);
@@ -84,12 +59,12 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
   /// Optimistic toggles — flip instantly, persist in the background.
   void _toggleLike() {
     setState(() => _liked = !_liked);
-    BackendApi.instance.setLike(widget.bookId, _liked);
+    BookRepository.instance.setLike(widget.bookId, _liked);
   }
 
   void _toggleBookmark() {
     setState(() => _saved = !_saved);
-    BackendApi.instance.setBookmark(widget.bookId, _saved);
+    BookRepository.instance.setBookmark(widget.bookId, _saved);
   }
 
   void _openShareSheet() {
@@ -175,7 +150,8 @@ class _PublishDetailsScreenState extends State<PublishDetailsScreen> {
               ),
               const SizedBox(height: 24),
               OutlinedButton.icon(
-                onPressed: _loadBook,
+                onPressed: () =>
+                    ref.invalidate(manageBookProvider(widget.bookId)),
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry'),
               ),

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.26.2+50 — 2026-09-19 · The repository pattern for books
+
+- Books now speak through one **BookRepository**: the shelf, a single
+  book with its chapters, likes, saves, views, reviews, boosts and
+  chapter deletion all live in one data layer — screens never touch
+  the backend directly anymore (the same split the chat engine got).
+- The last direct SQL in a view (the transitional `club_books`
+  fallback inside the chapter manager) moved into the repository where
+  it belongs — no UI file queries a database anymore.
+- Riverpod providers for book state: the shared shelf catalog, the
+  per-book detail payload (book + chapters + progress + reviews +
+  recommendations) and the writer-tools loader — any future surface
+  (home rails, mini previews) watches the same data in one line.
+- Converted: the library, the book landing page, the chapter manager
+  and the publish preview — all now faces only, their data reactive
+  from outside.
+
 ## 2.26.1+49 — 2026-09-18 · The chat engine, rebuilt outside the UI (Riverpod)
 
 - Chat is no longer welded to its screens: the whole real-time engine —
