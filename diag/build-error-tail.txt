@@ -11,14 +11,20 @@ If no such version exists, report the issue to the plugin. If necessary, here is
 an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
 
 If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
-lib/presentation/screens/dms/dm_chat_screen.dart:52:3: Error: Type 'ChatSource' not found.
-  ChatSource get _source => ChatSource.dm(
-  ^^^^^^^^^^
-lib/presentation/screens/dms/dm_chat_screen.dart:52:29: Error: The getter 'ChatSource' isn't defined for the type '_DMChatScreenState'.
- - '_DMChatScreenState' is from 'package:booknest/presentation/screens/dms/dm_chat_screen.dart' ('lib/presentation/screens/dms/dm_chat_screen.dart').
-Try correcting the name to the name of an existing getter, or defining a getter or field named 'ChatSource'.
-  ChatSource get _source => ChatSource.dm(
-                            ^^^^^^^^^^
+lib/presentation/screens/books/book_details_screen.dart:400:47: Error: The argument type 'Map<String, dynamic>?' can't be assigned to the parameter type 'Map<dynamic, dynamic>'.
+ - 'Map' is from 'dart:core'.
+              book: Map<String, dynamic>.from(b)),
+                                              ^
+lib/presentation/screens/books/chapter_manager_screen.dart:94:24: Error: The method '_load' isn't defined for the type '_ChapterManagerScreenState'.
+ - '_ChapterManagerScreenState' is from 'package:booknest/presentation/screens/books/chapter_manager_screen.dart' ('lib/presentation/screens/books/chapter_manager_screen.dart').
+Try correcting the name to the name of an existing method, or defining a method named '_load'.
+          if (mounted) _load();
+                       ^^^^^
+lib/presentation/screens/books/chapter_manager_screen.dart:186:48: Error: The method '_load' isn't defined for the type '_ChapterManagerScreenState'.
+ - '_ChapterManagerScreenState' is from 'package:booknest/presentation/screens/books/chapter_manager_screen.dart' ('lib/presentation/screens/books/chapter_manager_screen.dart').
+Try correcting the name to the name of an existing method, or defining a method named '_load'.
+                                  if (mounted) _load();
+                                               ^^^^^
 Target kernel_snapshot_program failed: Exception
 
 
@@ -34,6 +40,6 @@ Execution failed for task ':app:compileFlutterBuildRelease'.
 > Run with --scan to generate a Build Scan (Powered by Develocity).
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 1m 22s
-Running Gradle task 'assembleRelease'...                           83.6s
+BUILD FAILED in 1m 16s
+Running Gradle task 'assembleRelease'...                           76.7s
 Gradle task assembleRelease failed with exit code 1
