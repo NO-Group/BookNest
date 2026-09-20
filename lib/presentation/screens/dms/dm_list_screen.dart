@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -11,8 +12,8 @@ import '../../../services/chat_backup_service.dart';
 import '../../components/booknest_ui.dart';
 import '../../components/skeleton_kit.dart';
 import '../../../config/theme.dart';
-import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
+import '../../../state/chat_providers.dart';
 
 /// Telegram-style conversation list.
 ///
@@ -22,27 +23,29 @@ import '../../../services/supabase_service.dart';
 /// Before the edge function is deployed the screen degrades gracefully:
 /// it says so honestly and offers the contact directory to start chats,
 /// which then run in local-echo mode inside [DMChatScreen].
-class DMListScreen extends StatefulWidget {
+class DMListScreen extends ConsumerStatefulWidget {
   const DMListScreen({super.key});
 
   @override
-  State<DMListScreen> createState() => _DMListScreenState();
+  ConsumerState<DMListScreen> createState() => _DMListScreenState();
 }
 
-class _DMListScreenState extends State<DMListScreen> {
-  bool _loading = true;
-  bool _cloudReady = false;
-  List<Map<String, dynamic>> _conversations = [];
-  final List<Map<String, dynamic>> _restored = [];
+class _DMListScreenState extends ConsumerState<DMListScreen> {
+  // The inbox lives in the shared conversations provider — the same
+  // engine any future chat surface can reuse.
+  ConversationsState get _inbox => ref.watch(conversationsProvider);
+  bool get _loading => _inbox.loading;
+  bool get _cloudReady => _inbox.cloudReady;
+  List<Map<String, dynamic>> get _conversations => _inbox.conversations;
+  List<Map<String, dynamic>> get _restored => _inbox.restored;
+  Map<String, Map<String, dynamic>> get _people => _inbox.people;
   bool _restoreAvailable = false;
-  Map<String, Map<String, dynamic>> _people = {};
   Future<List<Map<String, dynamic>>>? _directory;
 
   @override
   void initState() {
     super.initState();
     _directory = _loadDirectory();
-    _load();
     // WhatsApp-style housekeeping: run a due backup silently, then surface
     // any restored-only history and a cloud backup (if one exists).
     ChatBackupService.instance.maybeRunScheduled().catchError((_) => null);
@@ -67,102 +70,6 @@ class _DMListScreenState extends State<DMListScreen> {
 
   String? get viewerId => SupabaseService().auth.currentUser?.id;
 
-  Future<void> _load() async {
-    final res = await BackendApi.instance.listConversations();
-    if (!mounted) return;
-    if (res == null) {
-      setState(() {
-        _loading = false;
-        _cloudReady = false;
-      });
-      return;
-    }
-    final conversations = (res['conversations'] as List? ?? [])
-        .map((row) => Map<String, dynamic>.from(row as Map))
-        .toList();
-    final peerIds = conversations
-        .map((c) => c['peerId']?.toString() ?? '')
-        .where((id) => id.isNotEmpty)
-        .toSet()
-        .toList();
-    final people = <String, Map<String, dynamic>>{};
-    if (peerIds.isNotEmpty) {
-      try {
-        final rows = await SupabaseService()
-            .client
-            .from('profiles')
-            .select('id, username, display_name, avatar_url')
-            .inFilter('id', peerIds);
-        for (final row in rows as List) {
-          final person = Map<String, dynamic>.from(row as Map);
-          people[person['id']?.toString() ?? ''] = person;
-        }
-      } catch (_) {}
-    }
-    // Fold in conversations that live only in this device's vault (they
-    // are older than the server's sync window — restored from backup).
-    final serverIds = conversations
-        .map((c) => c['id']?.toString() ?? '')
-        .where((id) => id.isNotEmpty)
-        .toSet();
-    final restoredOnly = <Map<String, dynamic>>[];
-    final extraPeers = <String>{};
-    for (final key in ChatStore.instance.conversationIds) {
-      if (!key.startsWith('dm:')) continue;
-      final id = key.substring(3);
-      if (serverIds.contains(id)) continue;
-      final meta = ChatStore.instance.meta(key) ?? const {};
-      final peerId = meta['peerId']?.toString() ?? '';
-      final last = ChatStore.instance.lastMessage(key);
-      if (last == null) continue;
-      restoredOnly.add({
-        'id': id,
-        'peerId': peerId,
-        'restored': true,
-        'lastMessage': {
-          'senderId': last['senderId']?.toString() ?? '',
-          'type': last['type']?.toString() ?? 'text',
-          'text': last['text']?.toString() ?? '',
-          'createdAt': last['createdAt']?.toString() ?? '',
-        },
-        'updatedAt': last['createdAt']?.toString() ?? '',
-      });
-      if (peerId.isNotEmpty) extraPeers.add(peerId);
-    }
-    if (extraPeers.isNotEmpty) {
-      try {
-        final rows = await SupabaseService()
-            .client
-            .from('profiles')
-            .select('id, username, display_name, avatar_url')
-            .inFilter('id', extraPeers.toList());
-        for (final row in rows as List) {
-          final person = Map<String, dynamic>.from(row as Map);
-          people[person['id']?.toString() ?? ''] = person;
-        }
-      } catch (_) {}
-    }
-    restoredOnly.sort((a, b) {
-      final at = DateTime.tryParse(a['updatedAt'] ?? '');
-      final bt = DateTime.tryParse(b['updatedAt'] ?? '');
-      if (at == null || bt == null) return 0;
-      return bt.compareTo(at);
-    });
-    if (mounted) {
-      setState(() {
-        _conversations = conversations;
-        _people = people;
-        _cloudReady = true;
-        _loading = false;
-        _restored
-          ..clear()
-          ..addAll(restoredOnly);
-      });
-    }
-  }
-
-  /// Shows the restore banner on a fresh install when a Google backup
-  /// exists and this device's vault is still empty.
   Future<void> _scanVault() async {
     try {
       if (ChatStore.instance.conversationIds.isNotEmpty) return;
@@ -224,7 +131,7 @@ class _DMListScreenState extends State<DMListScreen> {
               ? 'Restored $count message${count == 1 ? '' : 's'} — welcome '
                   'back to your history.'
               : 'The backup was empty — nothing to restore.')));
-      _load();
+      ref.read(conversationsProvider.notifier).refresh();
     } on BackupPassphraseWrong {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -338,7 +245,8 @@ class _DMListScreenState extends State<DMListScreen> {
                   ? const RowsSkeleton(count: 6)
                   : RefreshIndicator(
                       color: BookNestColors.cyan,
-                      onRefresh: _load,
+                      onRefresh: () =>
+                          ref.read(conversationsProvider.notifier).refresh(),
                       child: _cloudReady
                           ? _buildConversationList(theme, dark)
                           : _buildFallback(theme, dark),

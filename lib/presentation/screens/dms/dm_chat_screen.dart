@@ -1,7 +1,5 @@
-import 'dart:async';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
@@ -13,45 +11,51 @@ import '../../components/report_sheet.dart';
 import '../chat/media_viewer_screen.dart';
 import '../../components/booknest_emojis.dart';
 import '../../../services/reader_profile.dart';
-import '../../../services/backend_api.dart';
 import '../../../services/call_service.dart';
 import '../calls/call_screen.dart';
-import '../../../services/inbox_watcher.dart';
 import '../../../services/typing_broadcaster.dart';
 import '../../../services/supabase_service.dart';
+import '../../../services/backend_api.dart';
+import '../../../services/inbox_watcher.dart';
+import '../../../state/chat_providers.dart';
 
 /// 1:1 chat on the BookNest watermark canvas — glass bubbles, delivery
 /// ticks, day separators, photos via Cloudinary and rich book-share cards.
 ///
-/// Opened either with a [conversationId] (existing chat) or a [peerId]
-/// (starts a chat — the edge function creates/reuses the 1:1 conversation).
-/// Messages live in MongoDB via the edge function; the reader's profile
-/// (name/avatar) comes from Supabase.
-class DMChatScreen extends StatefulWidget {
+/// The engine (messages, sends, reactions, receipts, the live poll)
+/// lives in [chatControllerProvider] — this widget is only the face.
+class DMChatScreen extends ConsumerStatefulWidget {
   final String? conversationId;
   final String? peerId;
 
   const DMChatScreen({super.key, this.conversationId, this.peerId});
 
   @override
-  State<DMChatScreen> createState() => _DMChatScreenState();
+  ConsumerState<DMChatScreen> createState() => _DMChatScreenState();
 }
 
-class _DMChatScreenState extends State<DMChatScreen> {
+class _DMChatScreenState extends ConsumerState<DMChatScreen> {
   final ScrollController _scroll = ScrollController();
 
-  String? _conversationId;
+  /// Mirror of the live conversation id for leave-time housekeeping
+  /// (dispose must not touch the provider).
+  String? _convMirror;
+
   Map<String, dynamic>? _peer;
-  List<Map<String, dynamic>> _messages = [];
   bool _searching = false;
   final TextEditingController _searchController = TextEditingController();
   Map<String, dynamic>? _replyTo;
   String _themeId = 'classic';
   double _themeDim = 0;
-  Timer? _poll;
-  bool _loading = true;
   bool _cloudOfflineAnnounced = false;
-  int _lastCount = -1;
+
+  ChatSource get _source => ChatSource.dm(
+      conversationId: widget.conversationId,
+      peerId: widget.peerId,
+      title: _peerName);
+
+  ChatController get _engine =>
+      ref.read(chatControllerProvider(_source).notifier);
 
   String get _viewerId => SupabaseService().auth.currentUser?.id ?? '';
 
@@ -75,6 +79,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
   @override
   void initState() {
     super.initState();
+    _convMirror = widget.conversationId;
     _loadTheme();
     // Sealed messaging: identity + the peer's public key, silently.
     if ((widget.peerId ?? '').isNotEmpty) {
@@ -82,23 +87,21 @@ class _DMChatScreenState extends State<DMChatScreen> {
     }
     ReaderProfile.ensureLoaded();
     _loadPeerBadges();
-    _conversationId = widget.conversationId;
-    final openConv = _conversationId;
+    final openConv = widget.conversationId;
     if (openConv != null) InboxWatcher.instance.enter(openConv);
     if (openConv != null) {
-      TypingBroadcaster.instance.enter(openConv, myId: _viewerId ?? '');
+      TypingBroadcaster.instance.enter(openConv, myId: _viewerId);
     }
     _loadPeer();
-    _load();
-    _poll = Timer.periodic(const Duration(seconds: 4), (_) => _load());
   }
 
   @override
   void dispose() {
-    final openConv = _conversationId;
-    if (openConv != null) InboxWatcher.instance.leave(openConv);
+    final openConv = _convMirror;
+    if (openConv != null && openConv.isNotEmpty) {
+      InboxWatcher.instance.leave(openConv);
+    }
     TypingBroadcaster.instance.leave();
-    _poll?.cancel();
     _scroll.dispose();
     _searchController.dispose();
     ChatStore.instance.flush();
@@ -112,18 +115,20 @@ class _DMChatScreenState extends State<DMChatScreen> {
       final row = await SupabaseService()
           .client
           .from('profiles')
-          .select('id, username, display_name, avatar_url')
+          .select('username, display_name, avatar_url')
           .eq('id', id)
           .maybeSingle();
-      if (!mounted || row == null) return;
-      setState(() => _peer = Map<String, dynamic>.from(row));
+      if (!mounted) return;
+      setState(() {
+        _peer = row == null ? null : Map<String, dynamic>.from(row as Map);
+      });
     } catch (_) {
       // Peer profile is cosmetic — the chat still works without it.
     }
   }
 
   String get _conversationKey =>
-      'dm:${_conversationId ?? widget.conversationId ?? widget.peerId}';
+      'dm:${_convMirror ?? widget.conversationId ?? widget.peerId}';
 
   Future<void> _loadTheme() async {
     final id =
@@ -137,113 +142,35 @@ class _DMChatScreenState extends State<DMChatScreen> {
     }
   }
 
-  Future<void> _startCall({required bool video}) async {
-    final peer = widget.peerId;
-    if (peer == null || peer.isEmpty) return;
-    final service = CallService.instance;
-    if (service.status != CallStatus.idle) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Already in a call.')));
-      return;
-    }
-    await service.startCall(
-        peerId: peer, peerName: _peerName, video: video);
-    if (!mounted) return;
-    CallScreen.open(context);
-  }
-
   Future<void> _editTheme() async {
     await showChatThemePicker(context, conversationKey: _conversationKey);
     _loadTheme();
   }
 
-  /// This conversation's key in the on-device vault.
-  String get _vaultKey {
-    final conversationId = _conversationId;
-    return (conversationId == null || conversationId.isEmpty)
-        ? 'peer:${widget.peerId}'
-        : 'dm:$conversationId';
-  }
+  String? _peerCountry;
+  String? _peerGender;
 
-  Future<void> _rememberInVault(List<Map<String, dynamic>> messages) async {
+  Future<void> _loadPeerBadges() async {
+    final peer = widget.peerId;
+    if (peer == null || peer.isEmpty) return;
     try {
-      await ChatStore.instance.setMeta(_vaultKey, {
-        'type': 'dm',
-        'peerId': widget.peerId,
-        'title': _peerName,
-      });
-      await ChatStore.instance.replace(_vaultKey, messages);
-      // The conversation earned its real id after the first send — move
-      // any peer-keyed history over.
-      if (_conversationId != null && _vaultKey.startsWith('dm:')) {
-        await ChatStore.instance.rename('peer:${widget.peerId}', _vaultKey);
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _load() async {
-    final conversationId = _conversationId;
-    if (conversationId == null) {
-      if (mounted) setState(() => _loading = false);
-      return;
-    }
-    final res = await BackendApi.instance.listMessages(conversationId);
-    if (!mounted) return;
-    if (res == null) {
-      if (!_cloudOfflineAnnounced) {
-        _cloudOfflineAnnounced = true;
-        setState(() => _loading = false);
-      }
-      return;
-    }
-    var messages = (res['messages'] as List? ?? [])
-        .map((row) => Map<String, dynamic>.from(row as Map))
-        .toList();
-    // Open sealed envelopes — the words never existed on our servers.
-    for (var i = 0; i < messages.length; i++) {
-      final raw = messages[i]['text']?.toString() ?? '';
-      if (DmCrypto.isEnvelope(raw)) {
-        final opened = DmCrypto.instance.open(raw);
-        messages[i] = {
-          ...messages[i],
-          'text': opened ?? '🔒 Sealed message',
-          'sealed': opened != null,
-        };
-      }
-    }
-    final serverCount = messages.length;
-    // Merge the on-device vault: restored or older history appears above
-    // the server's sync window — WhatsApp-style.
-    try {
-      final stored = await ChatStore.instance.load(_vaultKey);
-      final serverIds =
-          messages.map((m) => m['id']?.toString() ?? '').toSet();
-      final older = stored
-          .where((m) => !serverIds.contains(m['id']?.toString() ?? ''))
-          .toList();
-      if (older.isNotEmpty) {
-        messages = [...older, ...messages]..sort((a, b) {
-            final at = DateTime.tryParse(a['createdAt']?.toString() ?? '');
-            final bt = DateTime.tryParse(b['createdAt']?.toString() ?? '');
-            if (at == null || bt == null) return 0;
-            return at.compareTo(bt);
-          });
-      }
-    } catch (_) {}
-    final grew = serverCount > _lastCount && _lastCount >= 0;
-    _lastCount = serverCount;
-    // Real read receipts: everything from the peer is marked read while
-    // this chat is open.
-    if (conversationId != null) BackendApi.instance.markDmRead(conversationId);
-    if (mounted) {
+      final res = await BackendApi.instance.fetchUserProfile(userId: peer);
+      final profile = res?['profile'];
+      if (!mounted || profile is! Map) return;
       setState(() {
-        _messages = messages;
-        _loading = false;
+        _peerCountry = profile['countryCode']?.toString();
+        if ((_peerCountry ?? '').isEmpty) _peerCountry = null;
+        _peerGender = profile['gender']?.toString();
+        if ((_peerGender ?? '').isEmpty) _peerGender = null;
       });
-    }
-    _rememberInVault(messages);
-    if (grew || _scroll.hasClients) _jumpToBottom();
+    } catch (_) {}
   }
+
+  String _nameOfReader(String uid) =>
+      uid == widget.peerId ? _peerName : 'You';
+
+  void _notice(String text) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
   void _jumpToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -256,266 +183,69 @@ class _DMChatScreenState extends State<DMChatScreen> {
     });
   }
 
-  void _notice(String text) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-
   Future<void> _sendText(String text) async {
-    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
-    setState(() => _messages.add({
-          'id': localId,
-          'senderId': _viewerId,
-          'type': 'text',
-          'text': text,
-          'createdAt': DateTime.now().toIso8601String(),
-          'pending': true,
-        }));
-    _jumpToBottom();
-
     final replying = _replyTo;
-    // Seal when both sides support it — otherwise send plainly (never a
-    // fake lock).
-    var wireText = text;
-    String? previewText;
-    final sealPeer = widget.peerId;
-    if (sealPeer != null && sealPeer.isNotEmpty) {
-      try {
-        final sealed = await DmCrypto.instance.seal(sealPeer, text);
-        if (sealed != null) {
-          wireText = sealed;
-          previewText = '🔒 Encrypted message';
-        }
-      } catch (_) {}
-    }
-    final res = await BackendApi.instance.sendMessage(
-      conversationId: _conversationId,
-      peerId: widget.peerId,
-      type: 'text',
-      text: wireText,
-      previewText: previewText,
+    if (mounted) setState(() => _replyTo = null);
+    final notice = await _engine.sendText(
+      text,
       replyToId:
           replying != null && !replying['id'].toString().startsWith('local-')
               ? replying['id'].toString()
               : null,
     );
-    if (mounted) setState(() => _replyTo = null);
     if (!mounted) return;
-    if (res == null) {
-      _markLocal(localId, failed: true);
-      if (!_cloudOfflineAnnounced) {
-        _cloudOfflineAnnounced = true;
-        _notice('Message kept on this device — it syncs once the '
-            'BookNest cloud is connected.');
-      }
-      return;
+    if (notice != null && !_cloudOfflineAnnounced) {
+      _cloudOfflineAnnounced = true;
+      _notice(notice);
     }
-    _conversationId ??=
-        res['conversationId']?.toString() ?? widget.conversationId;
-    await _load();
   }
 
   Future<void> _sendImage(bytes, String extension) async {
-    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
-    setState(() => _messages.add({
-          'id': localId,
-          'senderId': _viewerId,
-          'type': 'image',
-          'text': '',
-          'createdAt': DateTime.now().toIso8601String(),
-          'pending': true,
-        }));
-    _jumpToBottom();
-
-    final url = await uploadChatImage(bytes, extension);
-    if (!mounted) return;
-    if (url == null) {
-      _markLocal(localId, failed: true);
-      _notice('The photo could not be uploaded — please try again.');
-      return;
-    }
-    final res = await BackendApi.instance.sendMessage(
-      conversationId: _conversationId,
-      peerId: widget.peerId,
-      type: 'image',
-      text: '',
-      mediaUrl: url,
-    );
-    if (!mounted) return;
-    if (res == null) {
-      _markLocal(localId, failed: true);
-      _notice('The photo could not be delivered — please try again.');
-      return;
-    }
-    _conversationId ??=
-        res['conversationId']?.toString() ?? widget.conversationId;
-    await _load();
+    final notice = await _engine.sendImage(bytes, extension);
+    if (!mounted || notice == null) return;
+    _notice(notice);
   }
 
   Future<void> _sendFile(String filename, bytes) async {
-    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
-    setState(() => _messages.add({
-          'id': localId,
-          'senderId': _viewerId,
-          'type': 'file',
-          'text': filename,
-          'createdAt': DateTime.now().toIso8601String(),
-          'pending': true,
-        }));
-    _jumpToBottom();
-
-    final url = await uploadChatFile(filename, bytes);
-    if (!mounted) return;
-    if (url == null) {
-      _markLocal(localId, failed: true);
-      _notice('The file could not be uploaded — please try again.');
-      return;
-    }
-    final res = await BackendApi.instance.sendMessage(
-      conversationId: _conversationId,
-      peerId: widget.peerId,
-      type: 'file',
-      text: filename,
-      mediaUrl: url,
-      fileName: filename,
-      fileSize: bytes.length,
-    );
-    if (!mounted) return;
-    if (res == null) {
-      _markLocal(localId, failed: true);
-      _notice('The file could not be delivered — please try again.');
-      return;
-    }
-    _conversationId ??=
-        res['conversationId']?.toString() ?? widget.conversationId;
-    await _load();
+    final notice = await _engine.sendFile(filename, bytes);
+    if (!mounted || notice == null) return;
+    _notice(notice);
   }
 
-  /// Every photo and video in this conversation, in order — the media
-  /// viewer's album so readers can swipe through the whole gallery
-  /// in-app, videos playing right on their pages.
-  List<MediaItem> _photoAlbum() {
-    final photos = <MediaItem>[];
-    for (final m in _messages) {
-      final url = m['mediaUrl']?.toString() ?? '';
-      final type = m['type']?.toString() ?? '';
-      if ((type == 'image' || type == 'video') && url.startsWith('http')) {
-        photos.add(MediaItem(url: url,
-            name: m['fileName']?.toString() ??
-                (type == 'video' ? 'Video' : 'Photo'),
-            fileSize: (m['fileSize'] as num?)?.toInt()));
-      }
-    }
-    return photos;
-  }
-
-  /// Records stay local until the upload answers — honest states only.
   Future<void> _sendVideo(String videoPath, int seconds) async {
-    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
-    final file = File(videoPath);
-    final size = await file.length();
-    setState(() => _messages.add({
-          'id': localId,
-          'senderId': _viewerId,
-          'type': 'video',
-          'text': '',
-          'mediaUrl': videoPath,
-          'fileName': 'clip.mp4',
-          'fileSize': size,
-          'createdAt': DateTime.now().toIso8601String(),
-          'pending': true,
-        }));
-    _jumpToBottom();
-    final bytes = await file.readAsBytes();
-    final url = await uploadChatFile('clip-${DateTime.now().millisecondsSinceEpoch}.mp4', bytes);
-    if (!mounted) return;
-    if (url == null) {
-      _markLocal(localId, failed: true);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-              'The video could not be uploaded — press the message to retry '
-              'once your connection is back.')));
-      return;
-    }
     final replying = _replyTo;
-    final res = await BackendApi.instance.sendMessage(
-      conversationId: _conversationId,
-      peerId: widget.peerId,
-      type: 'video',
-      text: '',
-      mediaUrl: url,
-      fileName: 'clip.mp4',
-      fileSize: size,
+    if (mounted) setState(() => _replyTo = null);
+    final notice = await _engine.sendVideo(
+      videoPath,
       replyToId:
           replying != null && !replying['id'].toString().startsWith('local-')
               ? replying['id'].toString()
               : null,
     );
-    if (mounted) setState(() => _replyTo = null);
-    if (!mounted) return;
-    if (res == null) {
-      _markLocal(localId, failed: true);
-      return;
-    }
-    _conversationId ??= res['conversationId']?.toString() ?? widget.conversationId;
-    await _load();
+    if (!mounted || notice == null) return;
+    _notice(notice);
   }
 
-  Future<void> _reactToMessage(String messageId, String code) async {
-    if (messageId.isEmpty || messageId.startsWith('local-')) return;
-    // Optimistic: the reaction lands instantly, like every modern chat.
-    final idx = _messages.indexWhere((m) => m['id'] == messageId);
-    if (idx == -1) return;
-    final before = Map<String, dynamic>.from(_messages[idx]);
-    final reactions = Map<String, String>.from(
-        (_messages[idx]['reactions'] as Map? ?? {}).map(
-            (k, v) => MapEntry(k.toString(), v.toString())));
-    if (_viewerId.isEmpty) return;
-    setState(() {
-      if (reactions[_viewerId] == code) {
-        reactions.remove(_viewerId);
-      } else {
-        reactions[_viewerId] = code;
-      }
-      _messages[idx]['reactions'] = reactions;
-    });
-    final res = await BackendApi.instance.reactDmMessage(messageId, code);
-    if (!mounted) return;
-    if (res == null) {
-      // Roll back only on failure.
-      final at = _messages.indexWhere((m) => m['id'] == messageId);
-      if (at != -1) {
-        setState(() => _messages[at] = before);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('The reaction could not be saved — please try again.')));
-      }
-    } else {
-      // Reconcile with the server's truth.
-      final at = _messages.indexWhere((m) => m['id'] == messageId);
-      if (at != -1) {
-        final ok = res['reacted'];
-        final merged = Map<String, String>.from(
-            (_messages[at]['reactions'] as Map? ?? {}).map(
-                (k, v) => MapEntry(k.toString(), v.toString())));
-        if (ok == false) {
-          merged.remove(_viewerId);
-        } else if (ok == true) {
-          merged[_viewerId] = code;
-        }
-        setState(() => _messages[at]['reactions'] = merged);
-      }
-    }
+  Future<void> _sendVoiceNote(VoiceNoteResult voice) async {
+    final notice = await _engine.sendVoice(voice);
+    if (!mounted || notice == null) return;
+    _notice(notice);
   }
 
-  Future<void> _deleteMessage(String messageId, {required bool forEveryone}) async {
-    if (messageId.isEmpty || messageId.startsWith('local-')) return;
-    final res = await BackendApi.instance
-        .deleteDmMessage(messageId, forEveryone: forEveryone);
-    if (!mounted) return;
-    if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('The message could not be deleted — please try again.')));
-      return;
-    }
-    _load();
+  Future<void> _sendEmote(EmojiDef emote) async {
+    final notice = await _engine.sendEmote(emote.code, animated: emote.isAnimated);
+    if (!mounted || notice == null) return;
+    _notice(notice);
+  }
+
+  Future<void> _reactToMessage(String messageId, String code) =>
+      _engine.react(messageId, code);
+
+  Future<void> _deleteMessage(String messageId,
+      {required bool forEveryone}) async {
+    final notice = await _engine.delete(messageId, forEveryone: forEveryone);
+    if (!mounted || notice == null) return;
+    _notice(notice);
   }
 
   void _forwardMessage(Map<String, dynamic> message) {
@@ -545,94 +275,52 @@ class _DMChatScreenState extends State<DMChatScreen> {
     await showMessageTranslation(context, message, target: target);
   }
 
-  Future<void> _sendEmote(EmojiDef emote) async {
-    final res = await BackendApi.instance.sendMessage(
-      conversationId: _conversationId,
-      peerId: widget.peerId,
-      type: 'emoji',
-      text: emote.code,
-      animated: emote.isAnimated,
-    );
-    if (!mounted) return;
-    if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('The emote could not be sent — please try again.')));
-      return;
-    }
-    _conversationId ??= res['conversationId']?.toString() ?? widget.conversationId;
-    await _load();
-  }
-
-  Future<void> _sendVoiceNote(VoiceNoteResult voice) async {
-    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
-    setState(() => _messages.add({
-          'id': localId,
-          'senderId': _viewerId,
-          'type': 'voice',
-          'text': voice.durationLabel,
-          'mediaUrl': voice.url,
-          'createdAt': DateTime.now().toIso8601String(),
-          'pending': true,
-        }));
-    _jumpToBottom();
-    final res = await BackendApi.instance.sendMessage(
-      conversationId: _conversationId,
-      peerId: widget.peerId,
-      type: 'voice',
-      text: voice.durationLabel,
-      mediaUrl: voice.url,
-    );
-    if (!mounted) return;
-    if (res == null) {
-      _markLocal(localId, failed: true);
-      _notice('The voice message could not be delivered — please try again.');
-      return;
-    }
-    _conversationId ??= res['conversationId']?.toString() ?? widget.conversationId;
-    await _load();
-  }
-
-  String? _peerCountry;
-  String? _peerGender;
-
-  Future<void> _loadPeerBadges() async {
-    final peer = widget.peerId;
-    if (peer == null || peer.isEmpty) return;
-    final res = await BackendApi.instance.fetchUserProfile(userId: peer);
-    final profile = res?['profile'];
-    if (!mounted || profile is! Map) return;
-    setState(() {
-      _peerCountry = profile['countryCode']?.toString();
-      if ((_peerCountry ?? '').isEmpty) _peerCountry = null;
-      _peerGender = profile['gender']?.toString();
-      if ((_peerGender ?? '').isEmpty) _peerGender = null;
-    });
-  }
-
-  String _nameOfReader(String uid) =>
-      uid == widget.peerId ? _peerName : 'You';
-
-  void _markLocal(String localId, {required bool failed}) {
-    final index = _messages.indexWhere((m) => m['id'] == localId);
-    if (index == -1) return;
-    setState(() {
-      _messages[index]['pending'] = false;
-      _messages[index]['failed'] = failed;
-    });
-  }
-
   void _openBook(String? bookId) {
     if (bookId == null || bookId.isEmpty) return;
     context.push('/book/$bookId');
+  }
+
+  /// Every photo and video in this conversation, in order — the media
+  /// viewer's album.
+  List<MediaItem> _photoAlbum(List<Map<String, dynamic>> messages) {
+    final photos = <MediaItem>[];
+    for (final m in messages) {
+      final url = m['mediaUrl']?.toString() ?? '';
+      final type = m['type']?.toString() ?? '';
+      if ((type == 'image' || type == 'video') && url.startsWith('http')) {
+        photos.add(MediaItem(url: url,
+            name: m['fileName']?.toString() ??
+                (type == 'video' ? 'Video' : 'Photo'),
+            fileSize: (m['fileSize'] as num?)?.toInt()));
+      }
+    }
+    return photos;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
+    final chat = ref.watch(chatControllerProvider(_source));
+    final conversationId = chat.conversationId ?? _convMirror;
+    if ((chat.conversationId ?? '').isNotEmpty &&
+        chat.conversationId != _convMirror) {
+      _convMirror = chat.conversationId;
+    }
+    // New messages arrive → glide to the newest (the engine bumps the
+    // revision; the tree rebuilds only what watches it).
+    ref.listen(chatControllerProvider(_source)
+        .select((state) => state.revision), (previous, next) {
+      if (previous != next) _jumpToBottom();
+    });
+    ref.listen(chatControllerProvider(_source)
+        .select((state) => state.cloudOffline), (previous, next) {
+      if (next && !_cloudOfflineAnnounced) {
+        _cloudOfflineAnnounced = true;
+      }
+    });
     final query = _searching ? _searchController.text : '';
-    final visible =
-        filterChatMessages(_messages, query);
+    final visible = filterChatMessages(chat.messages, query);
     final rows = withDaySeparators(visible);
 
     return Scaffold(
@@ -644,10 +332,10 @@ class _DMChatScreenState extends State<DMChatScreen> {
           IconButton(
             tooltip: 'Shared media & files',
             icon: const Icon(Icons.folder_shared_outlined, size: 21),
-            onPressed: _conversationId == null
+            onPressed: conversationId == null || conversationId.isEmpty
                 ? null
                 : () => context.push(
-                      '/shared/$_conversationId'
+                      '/shared/$conversationId'
                       '?title=${Uri.encodeComponent(_peerName)}',
                     ),
           ),
@@ -759,11 +447,11 @@ class _DMChatScreenState extends State<DMChatScreen> {
                                 ?.copyWith(fontWeight: FontWeight.w700)),
                       ]),
                     )
-                  : _loading
+                  : chat.loading
                   ? const Center(
                       child: CircularProgressIndicator(
                           color: BookNestColors.cyan))
-                  : _messages.isEmpty
+                  : chat.messages.isEmpty
                       ? Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -810,7 +498,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
                                 onOpenBook: () =>
                                     _openBook(message['bookId']?.toString()),
                                 onOpenImage: () {
-                                  final album = _photoAlbum();
+                                  final album = _photoAlbum(chat.messages);
                                   final tapped = message['mediaUrl']?.toString() ?? '';
                                   var at = album.indexWhere((m) => m.url == tapped);
                                   if (at == -1) at = 0;
@@ -818,7 +506,7 @@ class _DMChatScreenState extends State<DMChatScreen> {
                                       album: album, initialIndex: at);
                                 },
                                 onOpenVideo: () {
-                                  final album = _photoAlbum();
+                                  final album = _photoAlbum(chat.messages);
                                   final tapped = message['mediaUrl']?.toString() ?? '';
                                   var at = album.indexWhere((m) => m.url == tapped);
                                   if (at == -1) at = 0;
@@ -878,5 +566,18 @@ class _DMChatScreenState extends State<DMChatScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _startCall({required bool video}) async {
+    if (widget.peerId == null || widget.peerId!.isEmpty) return;
+    final service = CallService.instance;
+    if (service.status != CallStatus.idle) {
+      _notice('Already in a call.');
+      return;
+    }
+    await service.startCall(
+        peerId: widget.peerId!, peerName: _peerName, video: video);
+    if (!mounted) return;
+    CallScreen.open(context);
   }
 }

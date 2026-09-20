@@ -1,7 +1,5 @@
-import 'dart:async';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
@@ -13,15 +11,19 @@ import '../../../services/chat_store.dart';
 import '../../components/booknest_ui.dart';
 import '../../components/report_sheet.dart';
 import '../../../services/reader_profile.dart';
-import '../../../services/backend_api.dart';
-import '../../../services/inbox_watcher.dart';
+import '../../../services/chat_repository.dart';
 import '../../../services/typing_broadcaster.dart';
 import '../../../services/supabase_service.dart';
+import '../../../state/chat_providers.dart';
 
 /// Club / community / organization / school group chat — membership-gated
 /// rooms on the BookNest watermark canvas. Everyone in the group sees the
 /// conversation; sender names and avatars come from Supabase profiles.
-class ChatScreen extends StatefulWidget {
+///
+/// The engine (room entry, messages, sends, reactions, pins, receipts,
+/// the live poll) lives in [chatControllerProvider] — this widget is
+/// only the face.
+class ChatScreen extends ConsumerStatefulWidget {
   final String clubId;
   final String kind;
   final String title;
@@ -45,29 +47,30 @@ class ChatScreen extends StatefulWidget {
   });
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _searching = false;
   final TextEditingController _searchController = TextEditingController();
   Map<String, dynamic>? _replyTo;
-  Map<String, dynamic>? _pinned;   // the room's pinned message, if any
-  bool _canPin = false;            // viewer is owner / deputy
   bool _pinBusy = false;
   String _themeId = 'classic';
   double _themeDim = 0;
 
   final ScrollController _scroll = ScrollController();
 
-  String? _conversationId;
-  List<Map<String, dynamic>> _messages = [];
-  Map<String, Map<String, dynamic>> _people = {};
-  Timer? _poll;
-  bool _loading = true;
-  bool _offline = false;
-  bool _notMember = false;
-  int _lastCount = -1;
+  ChatSource get _source => ChatSource.room(
+        roomId: widget.clubId,
+        roomKind: widget.kind,
+        unitId: widget.unitId,
+        channelName: widget.channelName,
+        isMember: widget.isMember,
+        title: widget.title,
+      );
+
+  ChatController get _engine =>
+      ref.read(chatControllerProvider(_source).notifier);
 
   String get _viewerId => SupabaseService().auth.currentUser?.id ?? '';
 
@@ -78,61 +81,15 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     ReaderProfile.ensureLoaded();
-    if (widget.isMember) {
     _loadTheme();
-      _openRoom();
-    } else {
-      setState(() {
-        _notMember = true;
-        _loading = false;
-      });
-    }
   }
 
   @override
-  @override
   void dispose() {
-    final openConv = _conversationId;
-    if (openConv != null) InboxWatcher.instance.leave(openConv);
-    TypingBroadcaster.instance.leave();
-    _poll?.cancel();
     _scroll.dispose();
     _searchController.dispose();
     ChatStore.instance.flush();
     super.dispose();
-  }
-
-  Future<void> _openRoom() async {
-    final res = await BackendApi.instance.ensureClubChat(
-        widget.kind, widget.clubId,
-        unitId: widget.unitId, name: widget.channelName);
-    if (!mounted) return;
-    if (res == null) {
-      setState(() {
-        _offline = true;
-        _loading = false;
-      });
-      return;
-    }
-    final conversation = res['conversation'];
-    if (conversation is! Map) {
-      setState(() {
-        _notMember = true;
-        _loading = false;
-      });
-      return;
-    }
-    _conversationId = conversation['id']?.toString();
-    final pinned = res['pinnedMessage'];
-    _pinned = pinned is Map ? Map<String, dynamic>.from(pinned) : null;
-    _canPin = res['canPin'] == true;
-    final openConv = _conversationId;
-    if (openConv != null) {
-      InboxWatcher.instance.enter(openConv);
-      TypingBroadcaster.instance.enter(openConv, myId: _viewerId ?? '');
-    }
-    await _load();
-    _poll = Timer.periodic(const Duration(seconds: 4), (_) => _load());
   }
 
   String get _conversationKey => 'club:${widget.clubId}:${widget.kind}';
@@ -156,338 +113,18 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _togglePin(Map<String, dynamic> message) async {
     if (_pinBusy) return;
     _pinBusy = true;
-    final id = message['id']?.toString() ?? '';
-    final wasPinned = _pinned?['id']?.toString() == id;
-    final res = await BackendApi.instance
-        .call('chat.pin', {'messageId': id, 'pinned': !wasPinned});
+    final notice = await _engine.togglePin(message);
     _pinBusy = false;
     if (!mounted) return;
-    if (res != null) {
-      setState(() =>
-          _pinned = !wasPinned ? Map<String, dynamic>.from(message) : null);
-    }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(res == null
-            ? 'Could not update the pin — try again.'
-            : (wasPinned ? 'Message unpinned.' : 'Message pinned 📌'))));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(notice)));
   }
 
-  /// The slim banner under the app bar: the room's pinned message.
-  Widget _pinnedBanner() {
-    final pinned = _pinned;
-    if (pinned == null) return const SizedBox.shrink();
-    final text = pinned['text']?.toString() ?? '';
-    final author = _senderName(pinned['senderId']?.toString() ?? '');
-    return Material(
-      color: BookNestColors.cyan.withOpacity(.10),
-      child: InkWell(
-        onTap: () => showModalBottomSheet<void>(
-          context: context,
-          showDragHandle: true,
-          shape: const RoundedRectangleBorder(
-              borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(24))),
-          builder: (sheetContext) => SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
-              child: Column(mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Row(children: [
-                  Icon(Icons.push_pin_rounded,
-                      size: 18, color: BookNestColors.cyan),
-                  SizedBox(width: 8),
-                  Text('Pinned message',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: BookNestColors.cyan)),
-                ]),
-                const SizedBox(height: 10),
-                if (author.isNotEmpty) ...[
-                  Text(author,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 14)),
-                  const SizedBox(height: 4),
-                ],
-                Text(text.isEmpty ? '（media message）' : text,
-                    style: const TextStyle(fontSize: 14.5, height: 1.4)),
-              ]),
-            ),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          child: Row(children: [
-            const Icon(Icons.push_pin_rounded,
-                size: 15, color: BookNestColors.cyan),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Text(
-                  '${author.isNotEmpty ? '$author: ' : ''}'
-                  '${text.isEmpty ? 'Pinned message' : text}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12.5)),
-            ),
-            if (_canPin)
-              GestureDetector(
-                onTap: () => _togglePin(pinned),
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(Icons.close_rounded,
-                      size: 15, color: BookNestColors.cyan),
-                ),
-              ),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _load() async {
-    final conversationId = _conversationId;
-    if (conversationId == null) return;
-    final res = await BackendApi.instance.listClubMessages(conversationId);
-    if (!mounted) return;
-    if (res == null) return;
-    var messages = (res['messages'] as List? ?? [])
-        .map((row) => Map<String, dynamic>.from(row as Map))
-        .toList();
-
-    // Merge restored/older history from the on-device vault.
-    final vaultKey = 'club:$conversationId';
-    try {
-      final stored = await ChatStore.instance.load(vaultKey);
-      final serverIds =
-          messages.map((m) => m['id']?.toString() ?? '').toSet();
-      final older = stored
-          .where((m) => !serverIds.contains(m['id']?.toString() ?? ''))
-          .toList();
-      if (older.isNotEmpty) {
-        messages = [...older, ...messages]..sort((a, b) {
-            final at = DateTime.tryParse(a['createdAt']?.toString() ?? '');
-            final bt = DateTime.tryParse(b['createdAt']?.toString() ?? '');
-            if (at == null || bt == null) return 0;
-            return at.compareTo(bt);
-          });
-      }
-    } catch (_) {}
-
-    // Resolve sender names/avatars (cosmetic — never blocks the chat).
-    final senderIds = messages
-        .map((m) => m['senderId']?.toString() ?? '')
-        .where((id) => id.isNotEmpty && !_people.containsKey(id))
-        .toSet()
-        .toList();
-    if (senderIds.isNotEmpty) {
-      try {
-        final rows = await SupabaseService()
-            .client
-            .from('profiles')
-            .select('id, username, display_name, avatar_url')
-            .inFilter('id', senderIds);
-        for (final row in rows as List) {
-          final person = Map<String, dynamic>.from(row as Map);
-          _people[person['id']?.toString() ?? ''] = person;
-        }
-      } catch (_) {}
-    }
-
-    final grew = messages.length > _lastCount && _lastCount >= 0;
-    _lastCount = messages.length;
-    setState(() {
-      _messages = messages;
-      _loading = false;
-    });
-
-    // Vault: keep the club's history encrypted on this device.
-    try {
-      await ChatStore.instance.setMeta(vaultKey, {
-        'type': 'club',
-        'title': widget.title,
-      });
-      await ChatStore.instance.replace(vaultKey, messages);
-    } catch (_) {}
-
-    // Real read receipts: everything from others is marked read while
-    // this chat is open.
-    BackendApi.instance.markClubRead(conversationId);
-    if (grew || _scroll.hasClients) _jumpToBottom();
-  }
-
-  void _jumpToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
-      _scroll.animateTo(
-        _scroll.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-      );
-    });
-  }
-
-  Future<void> _sendText(String text) async {
-    final conversationId = _conversationId;
-    if (conversationId == null) return;
-    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
-    setState(() => _messages.add({
-          'id': localId,
-          'senderId': _viewerId,
-          'type': 'text',
-          'text': text,
-          'createdAt': DateTime.now().toIso8601String(),
-          'pending': true,
-        }));
-    _jumpToBottom();
-    final replying = _replyTo;
-    if (mounted) setState(() => _replyTo = null);
-    final res = await BackendApi.instance.sendClubMessage(
-      conversationId: conversationId,
-      text: text,
-      replyToId:
-          replying != null && !replying['id'].toString().startsWith('local-')
-              ? replying['id'].toString()
-              : null,
-    );
-    if (!mounted) return;
-    if (res == null) {
-      final index = _messages.indexWhere((m) => m['id'] == localId);
-      if (index != -1) {
-        setState(() {
-          _messages[index]['pending'] = false;
-          _messages[index]['failed'] = true;
-        });
-      }
-      return;
-    }
-    await _load();
-  }
-
-  Future<void> _sendVoiceNote(VoiceNoteResult voice) async {
-    final conversationId = _conversationId;
-    if (conversationId == null) return;
-    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
-    setState(() => _messages.add({
-          'id': localId,
-          'senderId': _viewerId,
-          'type': 'voice',
-          'text': voice.durationLabel,
-          'mediaUrl': voice.url,
-          'createdAt': DateTime.now().toIso8601String(),
-          'pending': true,
-        }));
-    _jumpToBottom();
-    final res = await BackendApi.instance.sendClubMessage(
-      conversationId: conversationId,
-      type: 'voice',
-      text: voice.durationLabel,
-      mediaUrl: voice.url,
-    );
-    if (!mounted) return;
-    if (res == null) {
-      final index = _messages.indexWhere((m) => m['id'] == localId);
-      if (index != -1) {
-        setState(() {
-          _messages[index]['pending'] = false;
-          _messages[index]['failed'] = true;
-        });
-      }
-      return;
-    }
-    await _load();
-  }
-
-  Future<void> _sendImage(bytes, String extension) async {
-    final conversationId = _conversationId;
-    if (conversationId == null) return;
-    final url = await uploadChatImage(bytes, extension);
-    if (!mounted) return;
-    if (url == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('The photo could not be uploaded — please try again.'),
-      ));
-      return;
-    }
-    final res = await BackendApi.instance.sendClubMessage(
-      conversationId: conversationId,
-      type: 'image',
-      mediaUrl: url,
-    );
-    if (!mounted) return;
-    if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('The photo could not be delivered — please try again.'),
-      ));
-      return;
-    }
-    await _load();
-  }
-
-  Future<void> _sendFile(String filename, bytes) async {
-    final conversationId = _conversationId;
-    if (conversationId == null) return;
-    final url = await uploadChatFile(filename, bytes);
-    if (!mounted) return;
-    if (url == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('The file could not be uploaded — please try again.'),
-      ));
-      return;
-    }
-    final res = await BackendApi.instance.sendClubMessage(
-      conversationId: conversationId,
-      type: 'file',
-      text: filename,
-      mediaUrl: url,
-      fileName: filename,
-      fileSize: bytes.length,
-    );
-    if (!mounted) return;
-    if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('The file could not be delivered — please try again.'),
-      ));
-      return;
-    }
-    await _load();
-  }
-
-  Future<void> _sendVideo(String videoPath, int seconds) async {
-    final conversationId = _conversationId;
-    if (conversationId == null) return;
-    final file = File(videoPath);
-    final size = await file.length();
-    final url = await uploadChatFile(
-        'clip-${DateTime.now().millisecondsSinceEpoch}.mp4',
-        await file.readAsBytes());
-    if (!mounted) return;
-    if (url == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-              'The video could not be uploaded — please try again.')));
-      return;
-    }
-    final res = await BackendApi.instance.sendClubMessage(
-      conversationId: conversationId,
-      type: 'video',
-      mediaUrl: url,
-      fileName: 'clip.mp4',
-      fileSize: size,
-    );
-    if (!mounted) return;
-    if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-              'The video could not be delivered — please try again.')));
-      return;
-    }
-    await _load();
-  }
-
-  /// Every photo in this conversation, in order — the media viewer's
-  /// album so readers can swipe through the whole gallery in-app.
-  List<MediaItem> _photoAlbum() {
+  /// Every photo and video in this conversation, in order — the media
+  /// viewer's album.
+  List<MediaItem> _photoAlbum(List<Map<String, dynamic>> messages) {
     final photos = <MediaItem>[];
-    for (final m in _messages) {
+    for (final m in messages) {
       final url = m['mediaUrl']?.toString() ?? '';
       final type = m['type']?.toString() ?? '';
       if ((type == 'image' || type == 'video') && url.startsWith('http')) {
@@ -501,68 +138,25 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _reactToMessage(String messageId, String code) async {
-    if (messageId.isEmpty || messageId.startsWith('local-')) return;
-    // Optimistic: the reaction lands instantly, like every modern chat.
-    final idx = _messages.indexWhere((m) => m['id'] == messageId);
-    if (idx == -1) return;
-    final before = Map<String, dynamic>.from(_messages[idx]);
-    final reactions = Map<String, String>.from(
-        (_messages[idx]['reactions'] as Map? ?? {}).map(
-            (k, v) => MapEntry(k.toString(), v.toString())));
-    if (_viewerId.isEmpty) return;
-    setState(() {
-      if (reactions[_viewerId] == code) {
-        reactions.remove(_viewerId);
-      } else {
-        reactions[_viewerId] = code;
-      }
-      _messages[idx]['reactions'] = reactions;
-    });
-    final res = await BackendApi.instance.reactClubMessage(messageId, code);
-    if (!mounted) return;
-    if (res == null) {
-      // Roll back only on failure.
-      final at = _messages.indexWhere((m) => m['id'] == messageId);
-      if (at != -1) {
-        setState(() => _messages[at] = before);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('The reaction could not be saved — please try again.')));
-      }
-    } else {
-      // Reconcile with the server's truth.
-      final at = _messages.indexWhere((m) => m['id'] == messageId);
-      if (at != -1) {
-        final ok = res['reacted'];
-        final merged = Map<String, String>.from(
-            (_messages[at]['reactions'] as Map? ?? {}).map(
-                (k, v) => MapEntry(k.toString(), v.toString())));
-        if (ok == false) {
-          merged.remove(_viewerId);
-        } else if (ok == true) {
-          merged[_viewerId] = code;
-        }
-        setState(() => _messages[at]['reactions'] = merged);
-      }
-    }
+    final ok = await _engine.react(messageId, code);
+    if (!mounted || ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('The reaction could not be saved — please try again.')));
   }
 
-  Future<void> _deleteMessage(String messageId, {required bool forEveryone}) async {
-    if (messageId.isEmpty || messageId.startsWith('local-')) return;
-    final res = await BackendApi.instance
-        .deleteClubMessage(messageId, forEveryone: forEveryone);
-    if (!mounted) return;
-    if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('The message could not be deleted — please try again.')));
-      return;
-    }
-    _load();
+  Future<void> _deleteMessage(String messageId,
+      {required bool forEveryone}) async {
+    final notice = await _engine.delete(messageId, forEveryone: forEveryone);
+    if (!mounted || notice == null) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(notice)));
   }
 
   void _forwardMessage(Map<String, dynamic> message) {
     showForwardPicker(context, onDeliver: (target) async {
-      final res = await BackendApi.instance.sendClubMessage(
-        conversationId: target.conversationId,
+      final res = await ChatRepository.instance.send(
+        const ChatSource(flavor: ChatFlavor.room),
+        target.conversationId,
         type: message['type']?.toString() ?? 'text',
         text: message['text']?.toString() ?? '',
         mediaUrl: message['mediaUrl']?.toString(),
@@ -586,33 +180,10 @@ class _ChatScreenState extends State<ChatScreen> {
     await showMessageTranslation(context, message, target: target);
   }
 
-  Future<void> _sendEmote(EmojiDef emote) async {
-    final conversationId = _conversationId;
-    if (conversationId == null) return;
-    final res = await BackendApi.instance.sendClubMessage(
-      conversationId: conversationId,
-      type: 'emoji',
-      text: emote.code,
-      animated: emote.isAnimated,
-    );
-    if (!mounted) return;
-    if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('The emote could not be sent — please try again.')));
-      return;
-    }
-    await _load();
-  }
-
-  String _senderName(String senderId) {
-    final person = _people[senderId];
+  String _senderName(String senderId, Map<String, Map<String, dynamic>> people) {
+    final person = people[senderId];
     final name = (person?['display_name'] ?? person?['username'])?.toString();
     return (name == null || name.trim().isEmpty) ? 'Reader' : name.trim();
-  }
-
-  String? _senderAvatar(String senderId) {
-    final url = _people[senderId]?['avatar_url']?.toString();
-    return url != null && url.startsWith('http') ? url : null;
   }
 
   String _typingLabel(Map<String, String> typing) {
@@ -626,8 +197,14 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
+    final chat = ref.watch(chatControllerProvider(_source));
+    ref.listen(
+        chatControllerProvider(_source).select((state) => state.revision),
+        (previous, next) {
+      if (previous != next) _jumpToBottom();
+    });
     final query = _searching ? _searchController.text : '';
-    final visible = filterChatMessages(_messages, query);
+    final visible = filterChatMessages(chat.messages, query);
     final rows = withDaySeparators(visible);
 
     return Scaffold(
@@ -639,10 +216,10 @@ class _ChatScreenState extends State<ChatScreen> {
           IconButton(
             tooltip: 'Shared media & files',
             icon: const Icon(Icons.folder_shared_outlined, size: 21),
-            onPressed: _conversationId == null
+            onPressed: (chat.conversationId ?? '').isEmpty
                 ? null
                 : () => context.push(
-                      '/shared/$_conversationId'
+                      '/shared/${chat.conversationId}'
                       '?title=${Uri.encodeComponent(widget.title)}',
                     ),
           ),
@@ -707,17 +284,17 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
       body: ChatCanvas(
-        child: _loading
+        child: chat.loading
             ? const Center(
                 child: BookNestLoader(size: 44))
-            : _offline
+            : chat.cloudOffline
                 ? _buildNotice(
                     icon: Icons.cloud_off_rounded,
                     title: 'Chat is getting ready',
                     body: 'The BookNest cloud will host this group\'s chat. '
                         'Please try again in a moment.',
                   )
-                : _notMember
+                : chat.notMember
                     ? _buildNotice(
                         icon: Icons.lock_person_rounded,
                         title: 'Members only',
@@ -736,7 +313,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 _searchController.clear();
                               }),
                             ),
-                          _pinnedBanner(),
+                          _pinnedBanner(chat),
                           Expanded(
                             child: _searching &&
                                     _searchController.text.trim().isNotEmpty &&
@@ -758,7 +335,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                       ],
                                     ),
                                   )
-                                : _messages.isEmpty
+                                : chat.messages.isEmpty
                                 ? Center(
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
@@ -815,11 +392,13 @@ class _ChatScreenState extends State<ChatScreen> {
                                               ? null
                                               : _senderName(message['senderId']
                                                       ?.toString() ??
-                                                  ''),
+                                                  '',
+                                                  chat.people),
                                           senderId:
                                               message['senderId']?.toString(),
                                           onOpenImage: () {
-                                            final album = _photoAlbum();
+                                            final album =
+                                                _photoAlbum(chat.messages);
                                             final tapped = message['mediaUrl']
                                                     ?.toString() ??
                                                 '';
@@ -827,10 +406,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 m.url == tapped);
                                             if (at == -1) at = 0;
                                             openChatPhoto(context, tapped,
-                                                album: album, initialIndex: at);
+                                                album: album,
+                                                initialIndex: at);
                                           },
                                           onOpenVideo: () {
-                                            final album = _photoAlbum();
+                                            final album =
+                                                _photoAlbum(chat.messages);
                                             final tapped = message['mediaUrl']
                                                     ?.toString() ??
                                                 '';
@@ -838,7 +419,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 m.url == tapped);
                                             if (at == -1) at = 0;
                                             openChatPhoto(context, tapped,
-                                                album: album, initialIndex: at);
+                                                album: album,
+                                                initialIndex: at);
                                           },
                                           onOpenFile: () => openChatFile(
                                             context,
@@ -868,7 +450,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                           onInfo: () => showMessageInfo(
                                               context, message,
                                               viewerId: _viewerId,
-                                              nameOf: _senderName),
+                                              nameOf: (id) => _senderName(
+                                                  id, chat.people)),
                                           onDeleteForMe: () =>
                                               _deleteMessage(
                                                   message['id']?.toString() ?? '',
@@ -879,11 +462,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                                   forEveryone: true),
                                           onTranslate: () =>
                                               _translateMessage(message),
-                                          onPin: _canPin
+                                          onPin: chat.canPin
                                               ? () => _togglePin(message)
                                               : null,
                                           isPinned:
-                                              _pinned?['id']?.toString() ==
+                                              chat.pinned?['id']?.toString() ==
                                                   (message['id']?.toString() ??
                                                       ''),
                                         );
@@ -908,6 +491,145 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         ],
                       ),
+      ),
+    );
+  }
+
+  void _jumpToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  Future<void> _sendText(String text) async {
+    final replying = _replyTo;
+    if (mounted) setState(() => _replyTo = null);
+    await _engine.sendText(
+      text,
+      replyToId:
+          replying != null && !replying['id'].toString().startsWith('local-')
+              ? replying['id'].toString()
+              : null,
+    );
+  }
+
+  Future<void> _sendVoiceNote(VoiceNoteResult voice) async {
+    final notice = await _engine.sendVoice(voice);
+    if (!mounted || notice == null) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(notice)));
+  }
+
+  Future<void> _sendImage(bytes, String extension) async {
+    final notice = await _engine.sendImage(bytes, extension);
+    if (!mounted || notice == null) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(notice)));
+  }
+
+  Future<void> _sendFile(String filename, bytes) async {
+    final notice = await _engine.sendFile(filename, bytes);
+    if (!mounted || notice == null) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(notice)));
+  }
+
+  Future<void> _sendVideo(String videoPath, int seconds) async {
+    final replying = _replyTo;
+    if (mounted) setState(() => _replyTo = null);
+    final notice = await _engine.sendVideo(
+      videoPath,
+      replyToId:
+          replying != null && !replying['id'].toString().startsWith('local-')
+              ? replying['id'].toString()
+              : null,
+    );
+    if (!mounted || notice == null) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(notice)));
+  }
+
+  Future<void> _sendEmote(EmojiDef emote) async {
+    final notice =
+        await _engine.sendEmote(emote.code, animated: emote.isAnimated);
+    if (!mounted || notice == null) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(notice)));
+  }
+
+  /// The slim banner under the app bar: the room's pinned message.
+  Widget _pinnedBanner(ChatState chat) {
+    final pinned = chat.pinned;
+    if (pinned == null) return const SizedBox.shrink();
+    final text = pinned['text']?.toString() ?? '';
+    final author =
+        _senderName(pinned['senderId']?.toString() ?? '', chat.people);
+    return Material(
+      color: BookNestColors.cyan.withOpacity(.10),
+      child: InkWell(
+        onTap: () => showModalBottomSheet<void>(
+          context: context,
+          showDragHandle: true,
+          shape: const RoundedRectangleBorder(
+              borderRadius:
+                  BorderRadius.vertical(top: Radius.circular(24))),
+          builder: (sheetContext) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
+              child: Column(mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Row(children: [
+                  Icon(Icons.push_pin_rounded,
+                      size: 18, color: BookNestColors.cyan),
+                  SizedBox(width: 8),
+                  Text('Pinned message',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: BookNestColors.cyan)),
+                ]),
+                const SizedBox(height: 10),
+                if (author.isNotEmpty) ...[
+                  Text(author,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 14)),
+                  const SizedBox(height: 4),
+                ],
+                Text(text.isEmpty ? '（media message）' : text,
+                    style: const TextStyle(fontSize: 14.5, height: 1.4)),
+              ]),
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          child: Row(children: [
+            const Icon(Icons.push_pin_rounded,
+                size: 15, color: BookNestColors.cyan),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                  '${author.isNotEmpty ? '$author: ' : ''}'
+                  '${text.isEmpty ? 'Pinned message' : text}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12.5)),
+            ),
+            if (chat.canPin)
+              GestureDetector(
+                onTap: () => _togglePin(pinned),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.close_rounded,
+                      size: 15, color: BookNestColors.cyan),
+                ),
+              ),
+          ]),
+        ),
       ),
     );
   }

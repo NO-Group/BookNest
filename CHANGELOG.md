@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.26.1+49 — 2026-09-18 · The chat engine, rebuilt outside the UI (Riverpod)
+
+- Chat is no longer welded to its screens: the whole real-time engine —
+  message streams, optimistic sends, reactions with rollback, read
+  receipts, typing presence, pins and the 4-second live poll — now
+  lives in independent **Riverpod providers** outside any widget.
+- One repository speaks for BOTH surfaces: 1:1 DMs (sealed end-to-end,
+  on-device vault merge) and club rooms (entry, membership, pinned
+  messages) share the exact same engine. Any future surface — a mini
+  chat preview, a new screen — hooks it with one `watch`.
+- Screens are faces only now: new messages rebuild just what watches
+  them (the message list), never the composer or the whole tree —
+  scrolling and typing stay smooth while messages stream in.
+- Poll timers and receipt/typing watchers live in the provider and are
+  disposed automatically when the last watcher leaves — nothing leaks.
+- Behaviour parity kept everywhere: encrypted DMs, WhatsApp-style
+  vault history, forward/translate/report, pinned banners, membership
+  gates, media albums — all identical, just powered from outside.
+
 ## 2.26.0+48 — 2026-09-17 · The money engine: Paystack store, plans, honest reading time
 
 **The BookNest Store is live (Wallet → BookNest Store):**

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'config/app_state.dart';
 import 'config/router.dart';
@@ -56,7 +57,7 @@ Future<void> main() async {
     unawaited(LinkService.instance.ensureStartedIfPreferred());
   // Port for the background-link service isolate, before anything runs.
   LinkService.instance.initCommunication();
-  runApp(const BookNestApp());
+  runApp(const ProviderScope(child: BookNestApp()));
 }
 
 /// Non-blocking startup extras: reminder engine, home-screen widgets, and
