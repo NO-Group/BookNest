@@ -16,6 +16,7 @@ import '../calls/call_screen.dart';
 import '../../../services/typing_broadcaster.dart';
 import '../../../services/supabase_service.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/chat_repository.dart';
 import '../../../services/inbox_watcher.dart';
 import '../../../state/chat_providers.dart';
 
