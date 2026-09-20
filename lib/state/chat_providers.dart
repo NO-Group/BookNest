@@ -10,7 +10,8 @@ import '../services/inbox_watcher.dart';
 import '../services/typing_broadcaster.dart';
 import '../services/chat_store.dart';
 import '../services/supabase_service.dart';
-import '../screens/chat/voice_recorder_sheet.dart' show VoiceNoteResult;
+import '../presentation/screens/chat/voice_recorder_sheet.dart'
+    show VoiceNoteResult;
 
 /// ─────────────────────────────────────────────────────────────────────────────
 /// The real-time chat engine, packaged as independent Riverpod providers.
@@ -690,5 +691,6 @@ class ConversationsController extends AutoDisposeNotifier<ConversationsState> {
   }
 }
 
-final conversationsProvider = NotifierProvider.autoDispose
-    .<ConversationsController, ConversationsState>(ConversationsController.new);
+final conversationsProvider = NotifierProvider.autoDispose<
+        ConversationsController, ConversationsState>(
+    ConversationsController.new);
