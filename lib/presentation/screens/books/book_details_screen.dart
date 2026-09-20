@@ -394,10 +394,10 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
     if (newId.isNotEmpty && mounted) {
       final loaded = await BookRepository.instance.get(newId);
       final b = loaded?.book;
-      if (b is Map && mounted) {
+      if (b != null && mounted) {
+        final bMap = Map<String, dynamic>.from(b);
         await Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (routeContext) => BookEditorScreen.edit(
-              book: Map<String, dynamic>.from(b)),
+          builder: (routeContext) => BookEditorScreen.edit(book: bMap),
         ));
       }
     }

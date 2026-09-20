@@ -91,7 +91,7 @@ class _ChapterManagerScreenState extends ConsumerState<ChapterManagerScreen> {
         onPressed: () async {
           await context.push(
               '/write-chapter?bookId=${widget.bookId}&number=${_chapters.length + 1}');
-          if (mounted) _load();
+          if (mounted) ref.invalidate(manageBookProvider(widget.bookId));
         },
         icon: const Icon(Icons.add_rounded),
         label: const Text('Add chapter',
@@ -183,7 +183,10 @@ class _ChapterManagerScreenState extends ConsumerState<ChapterManagerScreen> {
                                 onPressed: () async {
                                   await context.push(
                                       '/write-chapter?bookId=${widget.bookId}&number=$number&title=${Uri.encodeComponent(chapter['title']?.toString() ?? '')}');
-                                  if (mounted) _load();
+                                  if (mounted) {
+                                    ref.invalidate(
+                                        manageBookProvider(widget.bookId));
+                                  }
                                 },
                               ),
                               IconButton(
