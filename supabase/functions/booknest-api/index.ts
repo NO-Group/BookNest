@@ -5980,12 +5980,16 @@ Deno.serve(async (req: Request) => {
             return null;
           };
           const titleTag = body.match(/<title[^>]*>([^<]*)<\/title>/i);
+          let imageUrl = meta('og:image') ?? meta('twitter:image');
+          if (imageUrl && imageUrl.startsWith('/')) {
+            imageUrl = `${target.protocol}//${target.host}${imageUrl}`;
+          }
           const preview = {
             url: res.url || target.toString(),
             title: meta('og:title') ?? meta('twitter:title') ??
               (titleTag ? decode(titleTag[1]).slice(0, 200) : null) ?? host,
             description: meta('og:description') ?? meta('description'),
-            imageUrl: meta('og:image') ?? meta('twitter:image'),
+            imageUrl,
             host,
           };
           return ok({ preview });
