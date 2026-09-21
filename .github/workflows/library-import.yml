@@ -244,25 +244,20 @@ jobs:
           rows = list(csv.DictReader(io.StringIO(raw.decode('utf-8', 'replace'))))
           # Sanity: a block page or a format change must be loud, not silent.
           head = raw[:400].decode('utf-8', 'replace')
-          if 'Text #' not in head:
+          if 'Text#' not in head and 'Text #' not in head:
               print('CATALOG UNRECOGNIZED — first 300 chars:')
               print(head[:300])
               sys.exit(1)
           pool = []
           for r in rows:
               try:
-                  copy_note = (r.get('Copyright') or '').strip()
-                  # Accept any public-domain phrasing, or a blank note.
-                  if copy_note and 'public domain' not in copy_note.lower():
-                      continue
-                  if (r.get('Language') or '').strip() != 'English':
+                  # The feed now uses ISO codes ("en"); accept both spellings.
+                  lang = (r.get('Language') or '').strip().lower()
+                  if lang not in ('en', 'english'):
                       continue
                   if not (r.get('Authors') or '').strip() or not (r.get('Title') or '').strip():
                       continue
                   if r.get('Type') and r['Type'] != 'Text':
-                      continue
-                  downloads = int(r.get('Download count') or 0)
-                  if downloads < 20:
                       continue
                   subjects = [s for s in (r.get('Subjects') or '').split(';') if s.strip()]
                   author = re.sub(r'\s+', ' ', r['Authors']).split(' and ')[0].strip()
@@ -273,7 +268,7 @@ jobs:
                   title = re.sub(r'\s+', ' ', r['Title']).strip()
                   # Drop catalog extras: "(illustrated)", "(with audio)", trailing bits.
                   title = re.sub(r'\s*\([^)]{0,60}\)', '', title).strip(' ;:,')
-                  gid = r['Text #'].strip()
+                  gid = (r.get('Text#') or r.get('Text #') or '').strip()
                   curated = CURATED.get(gid)
                   if curated:
                       description = curated
@@ -286,13 +281,30 @@ jobs:
                       'id': gid,
                       'title': title,
                       'author': author,
-                      'downloads': downloads,
+                      'downloads': 0,
                       'genre': genre_of(subjects),
                       'description': description[:400],
                   })
               except Exception:
                   continue
-          pool.sort(key=lambda b: -b['downloads'])
+          # The catalog no longer carries download counts — rank by
+          # Gutendex (the Project Gutenberg popularity API) when it is up.
+          try:
+              order = []
+              url = 'https://gutendex.com/books/?copyright=false&languages=en&sort=popular&page=1'
+              while url and len(order) < TARGET + 400:
+                  payload = http_get(url, timeout=30, tries=2)
+                  if payload is None:
+                      break
+                  data = json.loads(payload.decode('utf-8', 'replace'))
+                  for b in data.get('results', []):
+                      order.append(str(b.get('id')))
+                  url = data.get('next')
+              rank = {gid: i for i, gid in enumerate(order)}
+              pool.sort(key=lambda b: rank.get(b['id'], 10 ** 9))
+              print(f'Gutendex popularity overlay: {len(rank)} books ranked')
+          except Exception as e:
+              print(f'Gutendex unavailable ({repr(e)}); using catalog order')
           picks = pool[:TARGET + 400]
           print(f'Catalog: {len(rows)} rows, eligible {len(pool)}, attempting {len(picks)}')
           if len(pool) == 0:
