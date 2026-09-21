@@ -24,7 +24,7 @@
 ///  With no --dart-define flags, the defaults below are used.
 class AppConfig {
   /// Display version — keep in sync with pubspec.yaml on every release.
-  static const String appVersion = '2.27.0+52';
+  static const String appVersion = '2.28.0+53';
 
   /// Jenny is PARKED: the feature stays built, but every entrance is
   /// hidden. Flip to true to bring her back everywhere at once.

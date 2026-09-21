@@ -7,20 +7,14 @@ you know it worked.
 
 ---
 
-## 0 · What just shipped (v2.27.0+52)
+## 0 · What just shipped (v2.28.0+53)
 
-Jenny is parked (hidden everywhere, one flag to bring back). The
-chapter editor is now a **writing IDE**: real math formulas, split
-preview, word counts, and drafts that survive a dropped connection.
-The dictionary became **full** (~97,000 words from WordNet 3.1 — the
-Library Import fills it automatically alongside the books). New
-home-screen widget: **Currently Reading**. Chat press-and-hold gained
-**Copy text** and a quoted preview.
-
-Your actions stay the same two:
-1. Install the new APK (step 1 below).
-2. Run **Library Import** once (step 3B) — it now fills BOTH the
-   1,500+ books AND the full dictionary.
+**Anime is live.** Profile → **Anime** opens the comic shelf; the cyan
+**Studio** button creates comics — panel grids, your own art, speech
+bubbles with draggable tails — published as tiny JSON documents that
+cost nothing to store. No action needed from you beyond installing the
+new APK; the server updates through your usual step-2 paste (the Anime
+actions ride the same file).
 
 ---
 

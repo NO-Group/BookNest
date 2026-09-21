@@ -62,6 +62,7 @@ export const DB_NAMES = {
   groups: 'booknest_groups', // clubs, communities, organizations, schools
   genres: 'booknest_genres', // moderator-curated book + club genre shelves
   payments: 'booknest_payments', // orders + paystack references (money ledger)
+  comics: 'booknest_comics', // anime studio: comic JSON documents
 } as const;
 
 type Domain = keyof typeof DB_NAMES;
@@ -1571,6 +1572,97 @@ Deno.serve(async (req: Request) => {
         if (ops.length === 0) return ok({ imported: 0, skipped: rows.length });
         const res = await col.bulkWrite(ops as never, { ordered: false });
         return ok({ imported: res.upsertedCount + res.modifiedCount, skipped: rows.length - ops.length });
+      }
+
+      // ── anime studio: comics as live JSON documents ───────────────────
+      // A comic is a tiny normalized-coordinate document (< 10 KB/page),
+      // rendered by the app — never a flattened image. Art itself rides
+      // Cloudinary; the document stores URLs only.
+      case 'comics.save': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const title = String(p.title ?? '').trim().slice(0, 120);
+        if (!title) return fail('Give your comic a title');
+        const pages = Array.isArray(p.pages) ? p.pages : [];
+        if (pages.length === 0) return fail('A comic needs at least one page');
+        if (pages.length > 40) return fail('40 pages is the studio maximum');
+        const coverUrl = typeof p.coverUrl === 'string' &&
+                p.coverUrl.startsWith('http')
+            ? p.coverUrl.slice(0, 500)
+            : null;
+        const d = await dbFor('comics');
+        const col = d.collection('comics');
+        let comicId = String(p.comicId ?? '').trim();
+        const now = new Date();
+        if (comicId) {
+          const existing = await col.findOne({ _id: comicId });
+          if (!existing) return fail('That comic no longer exists', 404);
+          if (String(existing.ownerId) !== uid) {
+            const mod = await adminUserId(req);
+            if (!mod) return fail('Only the author can edit this comic', 403);
+          }
+        } else {
+          comicId = 'comic-' + crypto.randomUUID().slice(0, 12);
+        }
+        // By-line from the reader's Supabase profile (profiles are SQL).
+        let ownerName = 'Anonymous';
+        try {
+          const prof = await serviceClient().from('profiles')
+            .select('display_name,username').eq('id', uid).maybeSingle();
+          ownerName = String(prof.data?.display_name ||
+              prof.data?.username || 'Anonymous').slice(0, 60);
+        } catch (_) {}
+        await col.updateOne(
+          { _id: comicId },
+          { $set: {
+              title,
+              pages,
+              coverUrl,
+              ownerId: uid,
+              ownerName,
+              updatedAt: now,
+            },
+            $setOnInsert: {
+              moderationStatus: 'approved',
+              likeCount: 0, viewCount: 0,
+              createdAt: now,
+            } } as never,
+          { upsert: true });
+        return ok({ comicId, pages: pages.length });
+      }
+
+      case 'comics.list': {
+        const d = await dbFor('comics');
+        const rows = await d.collection('comics')
+          .find({ moderationStatus: 'approved' })
+          .sort({ updatedAt: -1 }).limit(60).toArray();
+        return ok({ comics: rows.map((c) => ({
+          id: String(c._id),
+          title: c.title,
+          coverUrl: c.coverUrl ?? null,
+          ownerName: c.ownerName ?? 'Anonymous',
+          ownerId: c.ownerId,
+          pagesCount: Array.isArray(c.pages) ? c.pages.length : 1,
+          updatedAt: c.updatedAt,
+        })) });
+      }
+
+      case 'comics.get': {
+        const comicId = String(p.comicId ?? '').trim();
+        if (!comicId) return fail('Which comic?');
+        const d = await dbFor('comics');
+        const c = await d.collection('comics').findOne({ _id: comicId });
+        if (!c) return fail('That comic does not exist', 404);
+        await d.collection('comics').updateOne(
+          { _id: comicId }, { $inc: { viewCount: 1 } });
+        return ok({ comic: {
+          id: String(c._id),
+          title: c.title,
+          pages: c.pages ?? [],
+          coverUrl: c.coverUrl ?? null,
+          ownerName: c.ownerName ?? 'Anonymous',
+          ownerId: c.ownerId,
+        } });
       }
 
       // ── calls: STUN + (when configured) TURN with ephemeral credentials ──

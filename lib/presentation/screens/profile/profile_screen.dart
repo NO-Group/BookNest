@@ -715,6 +715,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: () => context.push('/jenny'),
               ),
             _ProfileAction(
+              icon: Icons.brush_rounded,
+              label: 'Anime',
+              subtitle: 'Read comics, or draw your own in the Studio',
+              onTap: () => context.push('/anime'),
+            ),
+            _ProfileAction(
               icon: Icons.event_note_rounded,
               label: 'Events agenda',
               subtitle: 'Every event, RSVPs and reminders',

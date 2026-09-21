@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.28.0+53 — 2026-09-21 · Anime: the comic engine lands
+
+- **Anime is here.** A full comic creation suite — the **Studio** —
+  built the way BookNest builds everything: a comic page is a tiny
+  JSON document (under 10 KB) rendered live, so storage costs nothing
+  and pages stay razor-sharp on any screen.
+- **Tier 1, no drawing needed:** tap-to-add panel grids (full scene,
+  2×2, manga rows and more), art from your gallery (hosted on
+  Cloudinary automatically), and vector speech bubbles — speech,
+  scream burst and thought cloud — with **draggable tails**, wrapped
+  lettering and captions.
+- **Full touch physics:** single-finger drag, two-finger pinch-scale,
+  rotation handles, 44dp touch targets, and hard panel gutters —
+  nothing ever leaks outside a panel. Dragging never stutters the
+  canvas: only the element you touch re-renders.
+- **Publishing** puts the JSON on the cloud database and the art on
+  the media library; the **Anime shelf** lists community comics and
+  the reader flips pages live. Drafts survive offline, like chapters.
+- Built from Gemini's dual-tier spec, triaged: the JSON-document
+  architecture and normalized coordinates were adopted as-is; drafts
+  ride BookNest's existing local store (not Hive/Isar); published
+  comics stay live-rendered (no raster flattening); the Tier-2 ink
+  engine is a deliberate later phase.
+
 ## 2.27.0+52 — 2026-09-21 · The big upgrade drop
 
 - **Jenny is parked.** The feature stays built but hidden from every
