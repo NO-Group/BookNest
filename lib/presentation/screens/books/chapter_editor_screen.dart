@@ -50,6 +50,18 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
   String get _draftKey =>
       'draft_chapter_${widget.bookId}_${widget.chapterNumber}';
 
+  /// Read-only mirror for the preview pane — same live document, so the
+  /// preview always shows exactly what is being typed.
+  quill.QuillController? _previewController;
+  quill.QuillController get _previewCtrl {
+    _previewController ??= quill.QuillController(
+      document: _body.document,
+      selection: const TextSelection.collapsed(offset: 0),
+      readOnly: true,
+    );
+    return _previewController!;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -218,9 +230,8 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
     if (tex == null || mounted == false) return;
     if (tex.isEmpty) return;
     final index = _body.selection.extentOffset;
-    _body.document.insert(index, MathBlockEmbed(tex));
-    _body.updateSelection(
-        TextSelection.collapsed(offset: index + 1), ChangeSource.local);
+    _body.replaceText(
+        index, 0, MathBlockEmbed(tex), TextSelection.collapsed(offset: index + 1));
   }
 
   String get _readingTime {
@@ -399,9 +410,8 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
                     ),
                     Expanded(
                       child: quill.QuillEditor.basic(
-                        controller: _body,
+                        controller: _previewController,
                         config: quill.QuillEditorConfig(
-                          readOnly: true,
                           padding:
                               const EdgeInsets.fromLTRB(20, 8, 20, 24),
                           embedBuilders: manuscriptEmbedBuilders,

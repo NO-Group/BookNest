@@ -124,13 +124,23 @@ class DividerEmbedBuilder extends EmbedBuilder {
 /// `{"insert": {"math": {"tex": "x^2 + y^2 = z^2"}}}` — real TeX, so it
 /// renders beautifully in the reader and stays editable forever.
 class MathBlockEmbed extends CustomBlockEmbed {
-  const MathBlockEmbed(String tex) : super(mathType, <String, dynamic>{'tex': tex});
+  /// Quill embeds carry a string payload — the TeX rides as JSON.
+  MathBlockEmbed(String tex)
+      : super(mathType, convert.jsonEncode(<String, dynamic>{'tex': tex}));
 
   static const String mathType = 'math';
 
   String get tex {
     final d = data;
-    if (d is Map && d['tex'] != null) return d['tex'].toString();
+    if (d is String) {
+      try {
+        final decoded = convert.jsonDecode(d);
+        if (decoded is Map && decoded['tex'] != null) {
+          return decoded['tex'].toString();
+        }
+      } catch (_) {}
+      return d; // raw TeX written directly into the payload
+    }
     return '';
   }
 }
@@ -145,7 +155,16 @@ class MathEmbedBuilder extends EmbedBuilder {
   Widget build(BuildContext context, EmbedContext embedContext) {
     String tex = '';
     final d = embedContext.node.value.data;
-    if (d is Map && d['tex'] != null) tex = d['tex'].toString();
+    if (d is String) {
+      try {
+        final decoded = convert.jsonDecode(d);
+        if (decoded is Map && decoded['tex'] != null) {
+          tex = decoded['tex'].toString();
+        }
+      } catch (_) {
+        tex = d; // raw TeX payload
+      }
+    }
     return MathFormulaView(
       tex: tex,
       editable: !embedContext.readOnly,
