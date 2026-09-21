@@ -50,30 +50,28 @@ jobs:
             echo "## Library Import readiness"
             echo ""
             echo "- SUPABASE_ACCESS_TOKEN set: **$HAS_TOKEN**"
-            echo "- SUPABASE_PROJECT_REF set: **$HAS_REF**"
-            if [ "$HAS_TOKEN" = "true" ] && [ "$HAS_REF" = "true" ]; then
+            if [ "$HAS_TOKEN" = "true" ]; then
               echo ""
               echo "✅ Ready — run this workflow normally (Readiness check = false)."
               echo "It will deploy the server, mint the import key, and fill the shelf."
             else
               echo ""
-              echo "❌ Not ready — add the two secrets above (CHECKLIST step 3), then re-run."
+              echo "❌ Not ready — add SUPABASE_ACCESS_TOKEN (CHECKLIST step 3), then re-run."
             fi
           } >> $GITHUB_STEP_SUMMARY
 
-      - name: Guard — the owner's two secrets must exist
+      - name: Guard — the owner's access token must exist
         if: ${{ github.event.inputs.probe != 'true' }}
         env:
           HAS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
-          HAS_REF: ${{ secrets.SUPABASE_PROJECT_REF != '' }}
         run: |
-          if [ "$HAS_TOKEN" != "true" ] || [ "$HAS_REF" != "true" ]; then
+          if [ "$HAS_TOKEN" != "true" ]; then
             {
-              echo "## Library Import needs the owner's two secrets"
+              echo "## Library Import needs SUPABASE_ACCESS_TOKEN"
               echo ""
-              echo "Add **SUPABASE_ACCESS_TOKEN** and **SUPABASE_PROJECT_REF** under"
-              echo "Settings → Secrets and variables → Actions (CHECKLIST step 3),"
-              echo "then run this workflow again."
+              echo "Add it under Settings → Secrets and variables → Actions"
+              echo "(CHECKLIST step 3), then run this workflow again. The"
+              echo "project reference is built into the workflow."
             } >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
@@ -88,7 +86,9 @@ jobs:
         if: ${{ github.event.inputs.probe != 'true' }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          # The project reference is public (it lives in the function URL);
+          # only the access token is a real secret.
+          SUPABASE_PROJECT_REF: ekgbbbbjwgfixqarlnil
         run: |
           set -o pipefail
           DEPLOY() {
@@ -116,7 +116,7 @@ jobs:
         if: ${{ github.event.inputs.probe != 'true' }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_PROJECT_REF: ekgbbbbjwgfixqarlnil
         run: |
           TOKEN=$(openssl rand -hex 24)
           echo "::add-mask::$TOKEN"
