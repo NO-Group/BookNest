@@ -150,7 +150,8 @@ jobs:
           TARGET: ${{ github.event.inputs.target }}
         timeout-minutes: 280
         run: |
-          python3 - << 'PYEOF'
+          set -o pipefail
+          python3 - << 'PYEOF' 2>&1 | tee books-seed.log
           import csv, hashlib, io, json, os, re, sys, time, urllib.request
 
           FN_URL = os.environ['FN_URL'].rstrip('/')
@@ -354,13 +355,27 @@ jobs:
           def post_batch(books):
               body = json.dumps({'action': 'admin.importBooks',
                                  'importToken': TOKEN, 'books': books}).encode()
-              req = urllib.request.Request(
-                  FN_URL, data=body, method='POST',
-                  headers={'Content-Type': 'application/json',
-                         'Authorization': 'Bearer ' + os.environ['ANON']})
-              with urllib.request.urlopen(req, timeout=180) as r:
-                  out = json.loads(r.read().decode())
-              return out.get('data', out)
+              last = None
+              for attempt in range(5):
+                  req = urllib.request.Request(
+                      FN_URL, data=body, method='POST',
+                      headers={'Content-Type': 'application/json',
+                               'Authorization': 'Bearer ' + os.environ['ANON']})
+                  try:
+                      with urllib.request.urlopen(req, timeout=180) as r:
+                          out = json.loads(r.read().decode())
+                      return out.get('data', out)
+                  except urllib.error.HTTPError as e:
+                      detail = e.read().decode('utf-8', 'replace')[:200]
+                      last = f'HTTP {e.code}: {detail}'
+                      print(f'  batch attempt {attempt + 1}: {last}', flush=True)
+                      if e.code in (401, 403):
+                          raise RuntimeError(last)
+                  except Exception as e:
+                      last = repr(e)
+                      print(f'  batch attempt {attempt + 1}: {last}', flush=True)
+                  time.sleep(2 * (attempt + 1))
+              raise RuntimeError(f'batch failed after 5 tries — {last}')
 
           batch, total_imported, total_skipped, fails = [], 0, 0, 0
           for b in picks:
@@ -397,31 +412,22 @@ jobs:
               })
               size = sum(len(c['content']) for c in chapters)
               if len(batch) >= 10 or size > 2_500_000:
-                  try:
-                      res = post_batch(batch)
-                      total_imported += int(res.get('imported') or 0)
-                      total_skipped += int(res.get('skipped') or 0)
-                      print(f'batch: +{res.get("imported")} (total {total_imported}, skipped {total_skipped})')
-                  except Exception as e:
-                      print(f'batch failed ({e}); retrying once…')
-                      time.sleep(4)
-                      try:
-                          res = post_batch(batch)
-                          total_imported += int(res.get('imported') or 0)
-                          total_skipped += int(res.get('skipped') or 0)
-                      except Exception as e2:
-                          print(f'batch failed again ({e2}); continuing.')
-                  batch = []
-                  time.sleep(0.4)
-          if batch:
-              try:
                   res = post_batch(batch)
                   total_imported += int(res.get('imported') or 0)
                   total_skipped += int(res.get('skipped') or 0)
-              except Exception:
-                  pass
+                  print(f'batch: +{res.get("imported")} (total {total_imported}, skipped {total_skipped})', flush=True)
+                  batch = []
+                  time.sleep(0.4)
+          if batch:
+              res = post_batch(batch)
+              total_imported += int(res.get('imported') or 0)
+              total_skipped += int(res.get('skipped') or 0)
           line = f'DONE: imported {total_imported}, unchanged/skipped {total_skipped}, unfetchable {fails}'
           print(line)
+          if total_imported == 0:
+              with open('import-error.txt', 'w') as f:
+                  f.write(line + '\nnothing was imported — see the batch errors above\n')
+              sys.exit(1)
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
               f.write(f'### Library Import\n{line}\n')
           PYEOF
@@ -433,6 +439,7 @@ jobs:
         timeout-minutes: 90
         run: |
           set -e
+          set -o pipefail
           mkdir -p /tmp/wn && cd /tmp/wn
           npm i --silent wordnet-db >/dev/null 2>&1
           cat > parse.py << 'PARSEEOF'
@@ -557,8 +564,8 @@ jobs:
 
           PARSEEOF
           python3 parse.py "$PWD/node_modules/wordnet-db/dict" entries.jsonl
-          python3 - << 'POSEOF'
-          import json, os, time, urllib.request
+          python3 - << 'POSEOF' 2>&1 | tee dictionary-seed.log
+          import json, os, sys, time, urllib.request
 
           FN_URL = os.environ['FN_URL'].rstrip('/')
           ANON = os.environ['ANON']
@@ -570,27 +577,32 @@ jobs:
           def post(words):
               body = json.dumps({{'action': 'dictionary.import',
                                   'importToken': TOKEN, 'words': words}}).encode()
-              req = urllib.request.Request(
-                  FN_URL, data=body, method='POST',
-                  headers={{'Content-Type': 'application/json',
-                            'Authorization': 'Bearer ' + ANON}})
-              with urllib.request.urlopen(req, timeout=180) as r:
-                  return json.loads(r.read().decode()).get('data', {{}})
+              last = None
+              for attempt in range(5):
+                  req = urllib.request.Request(
+                      FN_URL, data=body, method='POST',
+                      headers={{'Content-Type': 'application/json',
+                                'Authorization': 'Bearer ' + ANON}})
+                  try:
+                      with urllib.request.urlopen(req, timeout=180) as r:
+                          return json.loads(r.read().decode()).get('data', {{}})
+                  except urllib.error.HTTPError as e:
+                      detail = e.read().decode('utf-8', 'replace')[:200]
+                      last = f'HTTP {{e.code}}: {{detail}}'
+                      print(f'  batch attempt {{attempt + 1}}: {{last}}', flush=True)
+                      if e.code in (401, 403):
+                          raise RuntimeError(last)
+                  except Exception as e:
+                      last = repr(e)
+                      print(f'  batch attempt {{attempt + 1}}: {{last}}', flush=True)
+                  time.sleep(2 * (attempt + 1))
+              raise RuntimeError(f'batch failed after 5 tries — {{last}}')
 
           total, done = 0, 0
           for i in range(0, len(entries), 200):
               chunk = entries[i:i + 200]
-              try:
-                  res = post(chunk)
-                  total += int(res.get('imported') or 0)
-              except Exception as e:
-                  print(f'batch failed ({{e}}); retrying once…')
-                  time.sleep(4)
-                  try:
-                      res = post(chunk)
-                      total += int(res.get('imported') or 0)
-                  except Exception as e2:
-                      print(f'batch failed again ({{e2}}); continuing.')
+              res = post(chunk)
+              total += int(res.get('imported') or 0)
               done += len(chunk)
               if done % 5000 < 200:
                   print(f'  {{done}}/{{len(entries)}} words…', flush=True)
@@ -608,6 +620,24 @@ jobs:
               print(f'lookup check skipped ({{e}})')
           line = f'DONE: dictionary entries stored {{total}} of {{len(entries)}}'
           print(line)
+          if total == 0:
+              with open('import-error.txt', 'w') as f:
+                  f.write(line + '\nnothing was stored — see the batch errors above\n')
+              sys.exit(1)
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
               f.write(f'### Word Nest\n{{line}}\n')
           POSEOF
+
+      - name: Commit seed diagnostics on failure
+        if: failure()
+        run: |
+          F=""
+          [ -f /tmp/wn/dictionary-seed.log ] && F=$(tail -c 2500 /tmp/wn/dictionary-seed.log || true)
+          [ -f books-seed.log ] && F2=$(tail -c 2500 books-seed.log || true)
+          { [ -n "$F" ] && echo "$F"; [ -n "${F2:-}" ] && echo "$F2"; } > import-error.txt 2>/dev/null || true
+          [ -s import-error.txt ] || echo "seed failed — no captured log" > import-error.txt
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git add import-error.txt
+          git commit -q -m "Library Import: seed diagnostics [skip ci]" || true
+          git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
