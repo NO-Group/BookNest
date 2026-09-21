@@ -1,1 +1,14 @@
-(no matched errors — file list follows)
+collector debug: 2026-09-21T13:32:53Z
+gh: Not Found (HTTP 404)
+logs download FAILED
+[logs.zip]
+  End-of-central-directory signature not found.  Either this file is not
+  a zipfile, or it constitutes one disk of a multi-part archive.  In the
+  latter case the central directory and zipfile comment will be found on
+  the last disk(s) of this archive.
+unzip:  cannot find zipfile directory in one of logs.zip or
+        logs.zip.zip, and cannot find logs.zip.ZIP, period.
+unzip FAILED
+total 8
+drwxr-xr-x  2 runner runner 4096 Sep 21 13:32 .
+drwxr-xr-x 25 runner runner 4096 Sep 21 13:32 ..
