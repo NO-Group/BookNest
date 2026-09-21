@@ -104,8 +104,12 @@ re-runs skip what's already in.
       `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF`). That handover
       is the only part only you can do — GitHub and Supabase only let
       the account owner create those keys.
-- [ ] GitHub → **Actions → Library Import → Run workflow** → leave
-      everything as it is ("Readiness check only" = false) → **Run**.
+- [ ] GitHub → **Actions** tab → the branch dropdown at the top-left
+      says **main** — switch it to **arena/01a03a7f-booknest** (this is
+      the step everyone misses; on `main` the button is invisible!).
+- [ ] Now **Library Import** appears in the workflow list → click it →
+      **Run workflow** → leave everything as it is ("Readiness check
+      only" = false) → **Run**.
 - [ ] Wait for the green run (~10–40 min — watch the counter climb in
       the log). Re-running anytime is safe; finished books skip.
 

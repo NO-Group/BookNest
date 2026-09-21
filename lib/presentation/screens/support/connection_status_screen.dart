@@ -14,7 +14,7 @@ class _LayerResult {
 
 /// Connection status — live check of the three layers every feature sits
 /// on: account sign-in, feed & library storage, and the smart services
-/// (wallet, Jenny, likes, trending). Helps pinpoint exactly what is and
+/// (wallet, likes, trending). Helps pinpoint exactly what is and
 /// isn't reachable without any guesswork.
 class ConnectionStatusScreen extends StatefulWidget {
   const ConnectionStatusScreen({super.key});
@@ -70,7 +70,7 @@ class _ConnectionStatusScreenState extends State<ConnectionStatusScreen> {
           'Can’t be reached right now. Check your connection, then recheck.'));
     }
 
-    // 3 · Smart services (wallet, Jenny, likes, trending)
+    // 3 · Smart services (wallet, likes, trending)
     try {
       final res = await SupabaseService()
           .client
@@ -80,7 +80,7 @@ class _ConnectionStatusScreenState extends State<ConnectionStatusScreen> {
       final mongo = data is Map ? data['mongo']?.toString() : null;
       if (data is Map && data['ok'] == true && mongo == 'ready') {
         setState(() => _services = const _LayerResult(_Health.ok,
-            'Fully working — wallet, Jenny, likes and trends are live.'));
+            'Fully working — wallet, likes and trends are live.'));
       } else if (mongo == 'not_configured' || mongo == 'unreachable') {
         setState(() => _services = const _LayerResult(_Health.down,
             'Services are warming up right now — check back shortly.'));
@@ -155,7 +155,7 @@ class _ConnectionStatusScreenState extends State<ConnectionStatusScreen> {
               theme,
               icon: Icons.auto_awesome_rounded,
               title: 'Smart services',
-              subtitle: 'Wallet · Jenny · likes · trending words',
+              subtitle: 'Wallet · likes · trending words',
               result: _services,
             ),
             const SizedBox(height: 8),

@@ -707,12 +707,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               subtitle: 'Balance, daily bonus and activity',
               onTap: () => context.push('/wallet'),
             ),
-            _ProfileAction(
-              icon: Icons.auto_awesome_rounded,
-              label: 'Ask Jenny',
-              subtitle: 'Your AI reading companion',
-              onTap: () => context.push('/jenny'),
-            ),
+            if (AppConfig.jennyEnabled)
+              _ProfileAction(
+                icon: Icons.auto_awesome_rounded,
+                label: 'Ask Jenny',
+                subtitle: 'Your AI reading companion',
+                onTap: () => context.push('/jenny'),
+              ),
             _ProfileAction(
               icon: Icons.event_note_rounded,
               label: 'Events agenda',

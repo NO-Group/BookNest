@@ -26,6 +26,10 @@ class AppConfig {
   /// Display version — keep in sync with pubspec.yaml on every release.
   static const String appVersion = '2.26.3+51';
 
+  /// Jenny is PARKED: the feature stays built, but every entrance is
+  /// hidden. Flip to true to bring her back everywhere at once.
+  static const bool jennyEnabled = false;
+
   AppConfig._();
 
   // ── Supabase · authentication + edge-function gateway ────────────────────
