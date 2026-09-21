@@ -1,4 +1,68 @@
-Fetching the Project Gutenberg catalog…
-CATALOG UNRECOGNIZED — first 300 chars:
-Text#,Type,Issued,Title,Language,Authors,Subjects,LoCC,Bookshelves
-1,Text,1971-12-01,The Declaration of Independence of the United States of America,en,"Jefferson, Thomas, 1743-1826","United States -- History -- Revolution, 1775-1783 -- Sources; United States. Declaration of Independence",E201; JK,
+cover ok: Going into Society
+cover ok: No Thoroughfare
+cover ok: Castle Rackrent
+cover ok: El Verdugo
+cover ok: The Recruit
+cover ok: A Drama on the Seashore
+cover ok: La Grenadiere
+batch: +10 (total 893, skipped 462)
+cover ok: The Garden Party, and Other Stories
+cover ok: Beautiful Stories from Shakespeare
+cover ok: Trooper Peter Halket of Mashonaland
+cover ok: Seraphita
+cover ok: The Red Inn
+cover ok: Essays
+cover ok: Miscellaneous Papers
+cover ok: A Voyage to Abyssinia
+cover ok: Juana
+cover ok: No Name
+batch: +10 (total 903, skipped 462)
+cover ok: Dreams
+cover ok: Woman and Labour
+cover ok: The Story of an African Farm
+cover ok: The Kingdom of the Blind
+cover ok: Two Poets
+cover ok: The Voice of the City: Further Stories o
+cover ok: Aeroplanes
+cover ok: Perfect Behavior: A Guide for Ladies and
+cover ok: The Illustrious Prince
+cover ok: Heidi
+batch: +10 (total 913, skipped 462)
+cover ok: The Valley of the Moon
+cover ok: Pollyanna
+cover ok: The Art of Lawn Tennis
+cover ok: Native Life in South Africa Before and S
+cover ok: The Alkahest
+cover ok: Maitre Cornelius
+cover ok: The Hated Son
+cover ok: An Episode under the Terror
+cover ok: Mistress Wilding
+cover ok: Dream Life and Real Life: A Little Afric
+  batch attempt 1: HTTP 403: {"ok":false,"error":"Import unavailable"}
+Traceback (most recent call last):
+  File "<stdin>", line 239, in post_batch
+  File "/usr/lib/python3.12/urllib/request.py", line 215, in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 521, in open
+    response = meth(req, response)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 630, in http_response
+    response = self.parent.error(
+               ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 559, in error
+    return self._call_chain(*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 639, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 403: Forbidden
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<stdin>", line 293, in <module>
+  File "<stdin>", line 247, in post_batch
+RuntimeError: HTTP 403: {"ok":false,"error":"Import unavailable"}
