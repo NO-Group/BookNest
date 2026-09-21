@@ -10,6 +10,13 @@ name: Desktop Release
 
 on:
   workflow_dispatch:
+  # Self-starting: the first push that touches this file builds all
+  # three PC versions and registers the workflow in the sidebar.
+  push:
+    branches:
+      - arena/01a03a7f-booknest
+    paths:
+      - '.github/workflows/desktop-release.yml'
 
 permissions:
   contents: read

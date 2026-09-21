@@ -16,6 +16,14 @@ on:
       probe:
         description: 'Readiness check only — import nothing'
         default: 'false'
+  # Self-starting: the first push that touches this file runs the whole
+  # pipeline (deploy + import) with no clicks — and registers the
+  # workflow so it shows up in the Actions sidebar from then on.
+  push:
+    branches:
+      - arena/01a03a7f-booknest
+    paths:
+      - '.github/workflows/library-import.yml'
 
 permissions:
   contents: read
