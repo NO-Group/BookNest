@@ -34,6 +34,11 @@ jobs:
       - run: flutter pub get
       - name: Build Windows
         shell: bash
+        env:
+          # The Firebase C++ SDK's bundled CMake files pre-date CMake 4's
+          # compatibility cutoff — this restores it (recommended by the
+          # error itself).
+          CMAKE_POLICY_VERSION_MINIMUM: '3.5'
         run: |
           set -o pipefail
           flutter build windows --release 2>&1 | tee build.log
@@ -45,10 +50,10 @@ jobs:
           cp build.log windows-full.log 2>/dev/null || true
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
-          git checkout -q -B desktop-diag
+          git checkout -q -B desktop-diag-windows
           git add desktop-error-windows.txt windows-full.log 2>/dev/null || git add desktop-error-windows.txt
           git commit -q -m "windows build diag $(date -u +%FT%TZ)" || true
-          git push -q -f origin desktop-diag || git push -f origin desktop-diag || true
+          git push -q -f origin desktop-diag-windows || git push -f origin desktop-diag-windows || true
       - name: Package
         if: success()
         shell: pwsh
@@ -82,10 +87,10 @@ jobs:
           [ -f release-error.txt ] && cat release-error.txt >> desktop-error-macos.txt || true
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
-          git checkout -q -B desktop-diag
+          git checkout -q -B desktop-diag-macos
           git add desktop-error-macos.txt
           git commit -q -m "macos build diag $(date -u +%FT%TZ)" || true
-          git push -q -f origin desktop-diag || git push -f origin desktop-diag || true
+          git push -q -f origin desktop-diag-macos || git push -f origin desktop-diag-macos || true
       - name: Package
         if: success()
         run: |
@@ -142,10 +147,10 @@ jobs:
           tail -c 3000 build.log > desktop-error-linux.txt 2>/dev/null || echo "build.log missing" > desktop-error-linux.txt
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
-          git checkout -q -B desktop-diag
+          git checkout -q -B desktop-diag-linux
           git add desktop-error-linux.txt
           git commit -q -m "linux build diag $(date -u +%FT%TZ)" || true
-          git push -q -f origin desktop-diag || git push -f origin desktop-diag || true
+          git push -q -f origin desktop-diag-linux || git push -f origin desktop-diag-linux || true
       - name: Package
         if: success()
         run: |
