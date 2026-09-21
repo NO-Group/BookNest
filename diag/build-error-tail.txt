@@ -11,10 +11,34 @@ If no such version exists, report the issue to the plugin. If necessary, here is
 an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
 
 If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
-lib/presentation/screens/books/chapter_editor_screen.dart:413:37: Error: The argument type 'QuillController?' can't be assigned to the parameter type 'QuillController'.
- - 'QuillController' is from 'package:flutter_quill/src/controller/quill_controller.dart' ('../../../.pub-cache/hosted/pub.dev/flutter_quill-11.6.0/lib/src/controller/quill_controller.dart').
-                        controller: _previewController,
-                                    ^
+lib/presentation/components/comic_canvas.dart:636:7: Error: No named parameter with the name 'fill'.
+      fill: isCaption ? const Color(0xE60B1531) : null,
+      ^^^^
+lib/presentation/components/comic_canvas.dart:425:9: Context: Found this candidate, but the arguments don't match.
+  const SpeechBubbleView({
+        ^^^^^^^^^^^^^^^^
+lib/presentation/components/comic_canvas.dart:667:40: Error: The getter 'dx' isn't defined for the type 'DragUpdateDetails'.
+ - 'DragUpdateDetails' is from 'package:flutter/src/gestures/drag_details.dart' ('/opt/hostedtoolcache/flutter/stable-3.47.5-x64/flutter/packages/flutter/lib/src/gestures/drag_details.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'dx'.
+              _anchorX = (_anchorX + d.dx / _panel.width).clamp(0.0, 1.0);
+                                       ^^
+lib/presentation/components/comic_canvas.dart:668:40: Error: The getter 'dy' isn't defined for the type 'DragUpdateDetails'.
+ - 'DragUpdateDetails' is from 'package:flutter/src/gestures/drag_details.dart' ('/opt/hostedtoolcache/flutter/stable-3.47.5-x64/flutter/packages/flutter/lib/src/gestures/drag_details.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'dy'.
+              _anchorY = (_anchorY + d.dy / _panel.height).clamp(0.0, 1.0);
+                                       ^^
+lib/presentation/components/comic_canvas.dart:415:16: Error: Final field 'fill' is not initialized.
+Try to initialize the field in the declaration or in every constructor.
+  final Color? fill;
+               ^^^^
+lib/presentation/components/comic_canvas.dart:416:16: Error: Final field 'outline' is not initialized.
+Try to initialize the field in the declaration or in every constructor.
+  final Color? outline;
+               ^^^^^^^
+lib/presentation/components/comic_canvas.dart:417:16: Error: Final field 'textColor' is not initialized.
+Try to initialize the field in the declaration or in every constructor.
+  final Color? textColor;
+               ^^^^^^^^^
 Target kernel_snapshot_program failed: Exception
 
 
@@ -30,6 +54,6 @@ Execution failed for task ':app:compileFlutterBuildRelease'.
 > Run with --scan to generate a Build Scan (Powered by Develocity).
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 1m 18s
-Running Gradle task 'assembleRelease'...                           78.9s
+BUILD FAILED in 1m 21s
+Running Gradle task 'assembleRelease'...                           82.4s
 Gradle task assembleRelease failed with exit code 1
