@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  issues: write # failed builds open a dated issue with the real error
 
 jobs:
   windows:
@@ -43,6 +44,9 @@ jobs:
           # <experimental/coroutine> header; MSVC 18 hard-errors on it
           # unless silenced (CMake seeds CXX flags from this env var).
           CXXFLAGS: '/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS'
+          # …and git-bash must NOT rewrite that /D flag into a file path.
+          MSYS_NO_PATHCONV: '1'
+          MSYS2_ARG_CONV_EXCL: '*'
         run: |
           set -o pipefail
           flutter build windows --release 2>&1 | tee build.log
@@ -58,6 +62,16 @@ jobs:
           git add desktop-error-windows.txt windows-full.log 2>/dev/null || git add desktop-error-windows.txt
           git commit -q -m "windows build diag $(date -u +%FT%TZ)" || true
           git push -q -f origin desktop-diag-windows || git push -f origin desktop-diag-windows || true
+          {
+            echo "OS: $RUNNER_OS — [run log](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+            echo ''
+            echo '```'
+            cat desktop-error-windows.txt
+            echo '```'
+          } > issue-body.md
+          gh issue create \
+            --title "Desktop build failed: windows ($(date -u +%H:%M))" \
+            --body-file issue-body.md || true
       - name: Package
         if: success()
         shell: pwsh
@@ -95,6 +109,16 @@ jobs:
           git add desktop-error-macos.txt
           git commit -q -m "macos build diag $(date -u +%FT%TZ)" || true
           git push -q -f origin desktop-diag-macos || git push -f origin desktop-diag-macos || true
+          {
+            echo "OS: $RUNNER_OS — [run log](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+            echo ''
+            echo '```'
+            cat desktop-error-macos.txt
+            echo '```'
+          } > issue-body.md
+          gh issue create \
+            --title "Desktop build failed: macos ($(date -u +%H:%M))" \
+            --body-file issue-body.md || true
       - name: Package
         if: success()
         run: |
@@ -163,6 +187,16 @@ jobs:
           git add desktop-error-linux.txt
           git commit -q -m "linux build diag $(date -u +%FT%TZ)" || true
           git push -q -f origin desktop-diag-linux || git push -f origin desktop-diag-linux || true
+          {
+            echo "OS: $RUNNER_OS — [run log](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+            echo ''
+            echo '```'
+            cat desktop-error-linux.txt
+            echo '```'
+          } > issue-body.md
+          gh issue create \
+            --title "Desktop build failed: linux ($(date -u +%H:%M))" \
+            --body-file issue-body.md || true
       - name: Package
         if: success()
         run: |
