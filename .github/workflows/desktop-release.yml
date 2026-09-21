@@ -41,14 +41,14 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          tail -c 2500 build.log > desktop-error-windows.txt 2>/dev/null || echo "build.log missing" > desktop-error-windows.txt
+          tail -c 3000 build.log > desktop-error-windows.txt 2>/dev/null || echo "build.log missing" > desktop-error-windows.txt
+          cp build.log windows-full.log 2>/dev/null || true
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
-          git add desktop-error-windows.txt
-          git commit -q -m "Desktop build diagnostics: windows [skip ci]" || true
-          git fetch origin "${GITHUB_REF_NAME}" || true
-          git rebase FETCH_HEAD || { git rebase --abort 2>/dev/null || true; }
-          git push -q origin "HEAD:${GITHUB_REF_NAME}" || git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
+          git checkout -q -B desktop-diag
+          git add desktop-error-windows.txt windows-full.log 2>/dev/null || git add desktop-error-windows.txt
+          git commit -q -m "windows build diag $(date -u +%FT%TZ)" || true
+          git push -q -f origin desktop-diag || git push -f origin desktop-diag || true
       - name: Package
         if: success()
         shell: pwsh
@@ -58,50 +58,6 @@ jobs:
         with:
           name: BookNest-windows
           path: BookNest-windows.zip
-
-  collect-diagnostics:
-    # Runs whenever any build fails: pulls the run's own logs from the
-    # API (this works from GitHub's network even when nothing else can
-    # read them) and commits the exact compiler errors into the repo.
-    needs: [windows, macos, linux]
-    if: failure()
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Gather the failed builds' logs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          {
-            echo "collector debug: $(date -u +%FT%TZ)"
-            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/logs" > logs.zip \
-              && echo "logs.zip: $(wc -c < logs.zip) bytes" \
-              || echo "logs download FAILED"
-            mkdir -p extracted
-            unzip -o -q logs.zip -d extracted && echo "unzipped: $(ls extracted | wc -l) files" \
-              || echo "unzip FAILED"
-            ls -la extracted | head -30
-            for f in extracted/*.txt; do
-              [ -e "$f" ] || continue
-              case "$f" in
-                *uild*) echo "=== $f ===";;
-                *) continue;;
-              esac
-              tail -c 3000 "$f"
-              echo
-            done
-          } > desktop-error.txt 2>&1
-          [ -s desktop-error.txt ] || echo "collector produced nothing" > desktop-error.txt
-      - name: Commit the diagnostics
-        run: |
-          git config user.email "booknest-ci@users.noreply.github.com"
-          git config user.name "booknest-ci"
-          git add desktop-error.txt
-          git commit -q -m "Desktop build diagnostics [skip ci]" || true
-          git fetch origin "${GITHUB_REF_NAME}" || true
-          git rebase FETCH_HEAD || { git rebase --abort 2>/dev/null || true; }
-          git push origin "HEAD:${GITHUB_REF_NAME}" || true
 
   macos:
     runs-on: macos-latest
@@ -122,14 +78,14 @@ jobs:
       - name: Commit build diagnostics
         if: failure()
         run: |
-          tail -c 2500 build.log > desktop-error-macos.txt 2>/dev/null || echo "build.log missing" > desktop-error-macos.txt
+          tail -c 3000 build.log > desktop-error-macos.txt 2>/dev/null || echo "build.log missing" > desktop-error-macos.txt
+          [ -f release-error.txt ] && cat release-error.txt >> desktop-error-macos.txt || true
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
+          git checkout -q -B desktop-diag
           git add desktop-error-macos.txt
-          git commit -q -m "Desktop build diagnostics: macos [skip ci]" || true
-          git fetch origin "${GITHUB_REF_NAME}" || true
-          git rebase FETCH_HEAD || { git rebase --abort 2>/dev/null || true; }
-          git push -q origin "HEAD:${GITHUB_REF_NAME}" || git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
+          git commit -q -m "macos build diag $(date -u +%FT%TZ)" || true
+          git push -q -f origin desktop-diag || git push -f origin desktop-diag || true
       - name: Package
         if: success()
         run: |
@@ -148,11 +104,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -o pipefail
           TAG="pc-$(date -u +%Y%m%d)"
           gh release create "$TAG" BookNest-macos.zip \
+            --target "$GITHUB_SHA" \
             --title "BookNest for PC — $TAG" \
             --notes "macOS build. Unzip, drag to Applications. Unsigned: right-click → Open the first time." \
-            --clobber || gh release upload "$TAG" BookNest-macos.zip --clobber
+            2>&1 | tee release.log
+          STATUS=${PIPESTATUS[0]}
+          if [ "$STATUS" != "0" ]; then
+            tail -c 1200 release.log > release-error.txt || true
+            exit 1
+          fi
 
   linux:
     runs-on: ubuntu-latest
@@ -176,14 +139,13 @@ jobs:
       - name: Commit build diagnostics
         if: failure()
         run: |
-          tail -c 2500 build.log > desktop-error-linux.txt 2>/dev/null || echo "build.log missing" > desktop-error-linux.txt
+          tail -c 3000 build.log > desktop-error-linux.txt 2>/dev/null || echo "build.log missing" > desktop-error-linux.txt
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
+          git checkout -q -B desktop-diag
           git add desktop-error-linux.txt
-          git commit -q -m "Desktop build diagnostics: linux [skip ci]" || true
-          git fetch origin "${GITHUB_REF_NAME}" || true
-          git rebase FETCH_HEAD || { git rebase --abort 2>/dev/null || true; }
-          git push -q origin "HEAD:${GITHUB_REF_NAME}" || git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
+          git commit -q -m "linux build diag $(date -u +%FT%TZ)" || true
+          git push -q -f origin desktop-diag || git push -f origin desktop-diag || true
       - name: Package
         if: success()
         run: |

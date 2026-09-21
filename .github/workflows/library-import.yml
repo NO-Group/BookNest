@@ -671,7 +671,7 @@ jobs:
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
           git add import-error.txt
-          git commit -q -m "Library Import: seed diagnostics [skip ci]" || true
-          git fetch origin "${GITHUB_REF_NAME}" || true
-          git rebase FETCH_HEAD || { git rebase --abort 2>/dev/null || true; }
-          git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
+          git checkout -q -B import-diag
+          git add import-error.txt books-seed.log dictionary-seed.log 2>/dev/null || git add import-error.txt
+          git commit -q -m "import diag $(date -u +%FT%TZ)" || true
+          git push -q -f origin import-diag || git push -f origin import-diag || true
