@@ -1,3 +1,4 @@
 Fetching the Project Gutenberg catalog…
-Catalog: 79433 rows, eligible 0, attempting 0
-DONE: imported 0, unchanged/skipped 0, unfetchable 0
+CATALOG UNRECOGNIZED — first 300 chars:
+Text#,Type,Issued,Title,Language,Authors,Subjects,LoCC,Bookshelves
+1,Text,1971-12-01,The Declaration of Independence of the United States of America,en,"Jefferson, Thomas, 1743-1826","United States -- History -- Revolution, 1775-1783 -- Sources; United States. Declaration of Independence",E201; JK,
