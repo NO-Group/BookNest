@@ -429,6 +429,9 @@ class SpeechBubbleView extends StatelessWidget {
     required this.maxWidth,
     this.tailFromCenter = Offset.zero,
     this.hasTail = false,
+    this.fill,
+    this.outline,
+    this.textColor,
     this.editMode = false,
     this.onTapEdit,
     this.onGestureStart,
@@ -664,8 +667,10 @@ class _TransformableElementWidgetState
             onPanUpdate: (d) => setState(() {
               _anchorX = (_anchorX < 0 ? _x : _anchorX);
               _anchorY = (_anchorY < 0 ? _y + 0.14 : _anchorY);
-              _anchorX = (_anchorX + d.dx / _panel.width).clamp(0.0, 1.0);
-              _anchorY = (_anchorY + d.dy / _panel.height).clamp(0.0, 1.0);
+              _anchorX =
+                  (_anchorX + d.delta.dx / _panel.width).clamp(0.0, 1.0);
+              _anchorY =
+                  (_anchorY + d.delta.dy / _panel.height).clamp(0.0, 1.0);
             }),
             onPanEnd: (_) => _commit(),
             child: const SizedBox(
