@@ -26,7 +26,7 @@ on:
       - '.github/workflows/library-import.yml'
 
 permissions:
-  contents: read
+  contents: write # pushes its own diagnostics when a step fails
 
 env:
   FN_URL: https://ekgbbbbjwgfixqarlnil.supabase.co/functions/v1/booknest-api
