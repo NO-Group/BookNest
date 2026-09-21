@@ -25,8 +25,10 @@ new clicks for these** — they came alive with this release:
   follow opens the person, a chat opens the conversation, and tapping
   marks it read.
 
-Your standing list (below) is unchanged: install the new APK, then the
-3B → 3C money-and-library steps when ready.
+Next on your list: **install the new APK** (step 1), then the 4-minute
+key handover in **step 3** — after which the agent fills the library
+with 1,500+ classics for you (step 3B). Monetization is **parked** at
+the bottom until you say go.
 
 ---
 
@@ -88,24 +90,24 @@ are that one click.
 
 ---
 
-## 3B · Seed the library instantly — 1,500+ real classics (one click)
+## 3B · Fill the library — 1,500+ real classics (the agent runs this)
 
-The shelf auto-seeds 6 classics; this fills it to a full library with
-the most-read public-domain books on Earth (Sherlock Holmes, Pride and
-Prejudice, The Art of War, Dracula, …), fetched and imported by GitHub
-— nothing hand-copied, fully legal (Public Domain in the USA).
+The import is **not your job anymore**. One workflow now does the whole
+thing by itself: it updates the server, creates its own secure import
+key (never shown to anyone), then streams in the most-read
+public-domain books on Earth — Sherlock Holmes, Pride and Prejudice,
+The Art of War, Dracula and 1,500+ more — each with its real cover.
+Fully legal (Public Domain in the USA), nothing hand-copied, and
+re-runs skip what's already in.
 
-- [ ] First do steps 2–3 (the import rides the updated server).
-- [ ] Invent a long random password (from a password manager) — that's
-      your `IMPORT_TOKEN`.
-- [ ] Add it in **two places** with the same value:
-      - GitHub → Settings → Secrets → Actions → New secret:
-        `IMPORT_TOKEN`
-      - Supabase → Project Settings → Edge Functions → Secrets:
-        `IMPORT_TOKEN`
-- [ ] GitHub → **Actions → Library Import → Run workflow** → Run.
-- [ ] Wait for the green run (~10–40 min; it streams 1,500+ books in
-      batches and can be re-run anytime — unchanged books skip).
+- [ ] First make sure **step 3 above is done** (the two secrets:
+      `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF`). That handover
+      is the only part only you can do — GitHub and Supabase only let
+      the account owner create those keys.
+- [ ] Then just tell the agent **"run the library import"** in chat.
+      That's the whole step. (Prefer clicking yourself?
+      **Actions → Library Import → Run workflow → Run** does the same
+      thing. Leave "Readiness check only" on **false**.)
 
 **Proof:** the run summary says "imported 1500+"; the Books screen now
 needs scrolling. Moderators can delete any imported book like any other
@@ -114,35 +116,6 @@ needs scrolling. Moderators can delete any imported book like any other
 ---
 
 ---
-
-## 3C · Switch on money: Paystack + the price catalog (10 min)
-
-- [ ] **Fill the shelves FIRST** — if you have not done step 3B yet
-      (Library Import), do it now. An empty library is the one thing
-      that drives readers away, and 3B fixes it with one click.
-- [ ] **supabase.com** dashboard → **SQL Editor** → **New query**.
-- [ ] On GitHub (branch `arena/01a03a7f-booknest`) open
-      **`supabase/migrations/20260806000005_monetization_catalog.sql`**
-      → **Raw** → select all → copy → paste into the SQL Editor →
-      **Run**. You should see "Success. No rows returned".
-      This creates the fixed ₦/$ price catalog (11 products × 2
-      currencies). Prices are edited HERE from now on — never in the app.
-- [ ] **Paystack**: sign up / sign in at **paystack.com** →
-      **Settings → API Keys & Webhooks** → copy your **Secret Key**
-      (starts `sk_test_` while testing, `sk_live_` when you go live).
-- [ ] Back in Supabase: **Edge Functions → booknest-api → Secrets** →
-      add a secret: name **`PAYSTACK_SECRET_KEY`**, value = the key you
-      copied.
-- [ ] Still in Paystack → **Webhooks** → **Add webhook URL** → paste:
-      `https://ekgbbbbjwgfixqarlnil.supabase.co/functions/v1/booknest-api`
-      and tick **Charge success**. This is how payments confirm even if
-      a reader closes the app mid-checkout.
-- [ ] Open the app → **Wallet → BookNest Store** → buy the **100 Gems**
-      pack with the TEST key → pay with Paystack's test card → the gems
-      should land in your wallet within a minute.
-
-**Proof:** gems land in the wallet after a test payment; the webhook
-URL shows as active in Paystack.
 
 ## 4 · Calls that connect everywhere — TURN (4 min, one-time, optional but recommended)
 
@@ -208,3 +181,40 @@ identity."
       release, no secrets in the app.
 
 **You're publish-ready when steps 1–2 are ticked.**
+
+---
+
+# PARKED · Money — only when YOU say go
+
+You chose to leave monetization out for now. Nothing below is needed
+until you say so — the app works fully without it (readers just read
+for free). When that day comes, do these in order:
+
+## 3C · Switch on money: Paystack + the price catalog (10 min)
+
+- [ ] **Fill the shelves FIRST** — if you have not done step 3B yet
+      (Library Import), do it now. An empty library is the one thing
+      that drives readers away, and 3B fixes it with one click.
+- [ ] **supabase.com** dashboard → **SQL Editor** → **New query**.
+- [ ] On GitHub (branch `arena/01a03a7f-booknest`) open
+      **`supabase/migrations/20260806000005_monetization_catalog.sql`**
+      → **Raw** → select all → copy → paste into the SQL Editor →
+      **Run**. You should see "Success. No rows returned".
+      This creates the fixed ₦/$ price catalog (11 products × 2
+      currencies). Prices are edited HERE from now on — never in the app.
+- [ ] **Paystack**: sign up / sign in at **paystack.com** →
+      **Settings → API Keys & Webhooks** → copy your **Secret Key**
+      (starts `sk_test_` while testing, `sk_live_` when you go live).
+- [ ] Back in Supabase: **Edge Functions → booknest-api → Secrets** →
+      add a secret: name **`PAYSTACK_SECRET_KEY`**, value = the key you
+      copied.
+- [ ] Still in Paystack → **Webhooks** → **Add webhook URL** → paste:
+      `https://ekgbbbbjwgfixqarlnil.supabase.co/functions/v1/booknest-api`
+      and tick **Charge success**. This is how payments confirm even if
+      a reader closes the app mid-checkout.
+- [ ] Open the app → **Wallet → BookNest Store** → buy the **100 Gems**
+      pack with the TEST key → pay with Paystack's test card → the gems
+      should land in your wallet within a minute.
+
+**Proof:** gems land in the wallet after a test payment; the webhook
+URL shows as active in Paystack.

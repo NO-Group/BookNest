@@ -1,51 +1,129 @@
 name: Library Import
 
-# Seeds the shelf with 1,500+ real public-domain classics: pulls Project
-# Gutenberg's full catalog, keeps the most-read Public-Domain-in-USA
-# English titles, fetches each full text, strips the Project Gutenberg
-# wrapper, splits chapters, and streams batches into the shelf through
-# the edge's admin.importBooks (guarded by the IMPORT_TOKEN secret).
-# Idempotent: unchanged books are skipped, so reruns are cheap.
-#
-# One-time setup: add IMPORT_TOKEN (any long random string) as BOTH
-#   - a GitHub secret (Settings → Secrets and variables → Actions)
-#   - a Supabase Edge Function secret (Project Settings → Edge Functions)
-# after the current edge is deployed. Then: Actions → Library Import → Run.
+# Fills the shelf with 1,500+ real public-domain classics — and runs
+# itself end to end once the owner's two secrets exist (CHECKLIST
+# steps 3): deploys the current server, mints a fresh IMPORT_TOKEN on
+# the server (never printed, never stored), then streams Project
+# Gutenberg's most-read English classics in batches with covers.
+# Idempotent: unchanged books skip, so reruns are cheap and safe.
 
 on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'How many books to import (max 2500)'
+        description: 'How many books to import (1500–2500)'
         default: '1600'
+      probe:
+        description: 'Readiness check only — import nothing'
+        default: 'false'
 
 permissions:
   contents: read
+
+env:
+  FN_URL: https://ekgbbbbjwgfixqarlnil.supabase.co/functions/v1/booknest-api
+  ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrZ2JiYmJqd2dmaXhxYXJsbmlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3MDAzODEsImV4cCI6MjEwMzI3NjM4MX0.DTTcX2DOxME72qF0fJzcAPJAWPd64LmhYKtT2SOlRy0
 
 jobs:
   import:
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
-      - name: Guard — secrets present?
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Readiness check (probe mode)
+        if: ${{ github.event.inputs.probe == 'true' }}
         env:
-          HAS_TOKEN: ${{ secrets.IMPORT_TOKEN != '' }}
+          HAS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+          HAS_REF: ${{ secrets.SUPABASE_PROJECT_REF != '' }}
         run: |
-          if [ "$HAS_TOKEN" != "true" ]; then
-            echo "### Library Import needs the IMPORT_TOKEN secret" >> $GITHUB_STEP_SUMMARY
-            echo "Add it as a GitHub secret AND a Supabase Edge Function secret" >> $GITHUB_STEP_SUMMARY
-            echo "(same value — see CHECKLIST.md step 3B)." >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Library Import readiness"
+            echo ""
+            echo "- SUPABASE_ACCESS_TOKEN set: **$HAS_TOKEN**"
+            echo "- SUPABASE_PROJECT_REF set: **$HAS_REF**"
+            if [ "$HAS_TOKEN" = "true" ] && [ "$HAS_REF" = "true" ]; then
+              echo ""
+              echo "✅ Ready — run this workflow normally (Readiness check = false)."
+              echo "It will deploy the server, mint the import key, and fill the shelf."
+            else
+              echo ""
+              echo "❌ Not ready — add the two secrets above (CHECKLIST step 3), then re-run."
+            fi
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Guard — the owner's two secrets must exist
+        if: ${{ github.event.inputs.probe != 'true' }}
+        env:
+          HAS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+          HAS_REF: ${{ secrets.SUPABASE_PROJECT_REF != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ] || [ "$HAS_REF" != "true" ]; then
+            {
+              echo "## Library Import needs the owner's two secrets"
+              echo ""
+              echo "Add **SUPABASE_ACCESS_TOKEN** and **SUPABASE_PROJECT_REF** under"
+              echo "Settings → Secrets and variables → Actions (CHECKLIST step 3),"
+              echo "then run this workflow again."
+            } >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
-      - name: Seed the library
+      - name: Deploy the current server first
+        if: ${{ github.event.inputs.probe != 'true' }}
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy booknest-api
+        if: ${{ github.event.inputs.probe != 'true' }}
         env:
-          FN_URL: https://ekgbbbbjwgfixqarlnil.supabase.co/functions/v1/booknest-api
-          IMPORT_TOKEN: ${{ secrets.IMPORT_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          supabase functions deploy booknest-api \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --use-api
+
+      - name: Mint the import key on the server (never shown, never stored)
+        if: ${{ github.event.inputs.probe != 'true' }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          TOKEN=$(openssl rand -hex 24)
+          echo "::add-mask::$TOKEN"
+          echo "IMPORT_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          supabase secrets set IMPORT_TOKEN="$TOKEN" \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Preflight — the server must accept the fresh key
+        if: ${{ github.event.inputs.probe != 'true' }}
+        run: |
+          for i in $(seq 1 12); do
+            CODE=$(curl -s -o /tmp/pf.json -w '%{http_code}' --max-time 30 \
+              -X POST "$FN_URL" \
+              -H "Authorization: Bearer $ANON" \
+              -H 'Content-Type: application/json' \
+              -d "{\"action\":\"admin.importBooks\",\"importToken\":\"$IMPORT_TOKEN\",\"books\":[]}")
+            if [ "$CODE" != "403" ] && [ "$CODE" != "401" ]; then
+              echo "Import key accepted (HTTP $CODE)."
+              exit 0
+            fi
+            echo "attempt $i: HTTP $CODE — waiting for the key to go live…"
+            sleep 10
+          done
+          echo "The server never accepted the import key" >&2
+          exit 1
+
+      - name: Seed the library
+        if: ${{ github.event.inputs.probe != 'true' }}
+        env:
+          IMPORT_TOKEN: ${{ env.IMPORT_TOKEN }}
           TARGET: ${{ github.event.inputs.target }}
         timeout-minutes: 280
         run: |
-          python3 - << 'PYEOF'
           import csv, hashlib, io, json, os, re, sys, time, urllib.request
 
           FN_URL = os.environ['FN_URL'].rstrip('/')
@@ -251,7 +329,8 @@ jobs:
                                  'importToken': TOKEN, 'books': books}).encode()
               req = urllib.request.Request(
                   FN_URL, data=body, method='POST',
-                  headers={'Content-Type': 'application/json'})
+                  headers={'Content-Type': 'application/json',
+                         'Authorization': 'Bearer ' + os.environ['ANON']})
               with urllib.request.urlopen(req, timeout=180) as r:
                   out = json.loads(r.read().decode())
               return out.get('data', out)
