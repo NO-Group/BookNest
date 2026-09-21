@@ -90,9 +90,27 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
-          supabase functions deploy booknest-api \
-            --project-ref "$SUPABASE_PROJECT_REF" \
-            --use-api
+          set -o pipefail
+          DEPLOY() {
+            supabase functions deploy booknest-api \
+              --project-ref "$SUPABASE_PROJECT_REF" "$@" 2>&1 | tee /tmp/deploy.log
+          }
+          # API bundling first; Docker bundling as fallback.
+          if DEPLOY --use-api; then
+            echo "Deployed (api bundling)."
+          elif DEPLOY; then
+            echo "Deployed (docker bundling)."
+          else
+            # Make the real error readable from outside CI.
+            tail -c 2500 /tmp/deploy.log > deploy-error.txt || true
+            git config user.email "booknest-ci@users.noreply.github.com"
+            git config user.name "booknest-ci"
+            git add deploy-error.txt
+            git commit -q -m "Library Import: deploy diagnostics [skip ci]" || true
+            git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
+            echo "Deploy failed — see deploy-error.txt in the repo." >&2
+            exit 1
+          fi
 
       - name: Mint the import key on the server (never shown, never stored)
         if: ${{ github.event.inputs.probe != 'true' }}
