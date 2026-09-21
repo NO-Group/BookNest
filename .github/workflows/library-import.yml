@@ -672,4 +672,6 @@ jobs:
           git config user.name "booknest-ci"
           git add import-error.txt
           git commit -q -m "Library Import: seed diagnostics [skip ci]" || true
+          git fetch origin "${GITHUB_REF_NAME}" || true
+          git rebase FETCH_HEAD || { git rebase --abort 2>/dev/null || true; }
           git push -q origin "HEAD:${GITHUB_REF_NAME}" || true

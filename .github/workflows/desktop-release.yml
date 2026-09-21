@@ -46,7 +46,8 @@ jobs:
           git config user.name "booknest-ci"
           git add desktop-error-windows.txt
           git commit -q -m "Desktop build diagnostics: windows [skip ci]" || true
-          git pull --rebase -q origin "${GITHUB_REF_NAME}" || true
+          git fetch origin "${GITHUB_REF_NAME}" || true
+          git rebase FETCH_HEAD || { git rebase --abort 2>/dev/null || true; }
           git push -q origin "HEAD:${GITHUB_REF_NAME}" || git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
       - name: Package
         if: success()
@@ -82,13 +83,16 @@ jobs:
           git config user.name "booknest-ci"
           git add desktop-error-macos.txt
           git commit -q -m "Desktop build diagnostics: macos [skip ci]" || true
-          git pull --rebase -q origin "${GITHUB_REF_NAME}" || true
+          git fetch origin "${GITHUB_REF_NAME}" || true
+          git rebase FETCH_HEAD || { git rebase --abort 2>/dev/null || true; }
           git push -q origin "HEAD:${GITHUB_REF_NAME}" || git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
       - name: Package
         if: success()
         run: |
           cd build/macos/Build/Products/Release
-          ditto -c -k --sequesterRsrc --keepParent booknest.app ../../../../BookNest-macos.zip
+          APP=$(ls -d *.app | head -1)
+          echo "Packaging $APP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" ../../../../BookNest-macos.zip
       - uses: actions/upload-artifact@v4
         if: success()
         with:
@@ -104,7 +108,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config \
-            libgtk-3-dev liblzma-dev libsecret-1-dev
+            libgtk-3-dev liblzma-dev libsecret-1-dev libpulse-dev
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -122,7 +126,8 @@ jobs:
           git config user.name "booknest-ci"
           git add desktop-error-linux.txt
           git commit -q -m "Desktop build diagnostics: linux [skip ci]" || true
-          git pull --rebase -q origin "${GITHUB_REF_NAME}" || true
+          git fetch origin "${GITHUB_REF_NAME}" || true
+          git rebase FETCH_HEAD || { git rebase --abort 2>/dev/null || true; }
           git push -q origin "HEAD:${GITHUB_REF_NAME}" || git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
       - name: Package
         if: success()
