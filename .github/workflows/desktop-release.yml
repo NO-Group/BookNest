@@ -7,12 +7,11 @@ name: Desktop Release
 #                so right-click → Open the first time)
 #   • Linux   → BookNest-linux (untar, run ./booknest)
 # When a build fails, the exact compiler error is committed into the
-# repo (desktop-error-<os>.txt) so it can be read from anywhere.
+# repo (desktop-error-<os>.txt) so it can be read from anywhere — the
+# commit rebases over anything that landed while the build ran.
 
 on:
   workflow_dispatch:
-  # Self-starting: the first push that touches this file builds all
-  # three PC versions and registers the workflow in the sidebar.
   push:
     branches:
       - arena/01a03a7f-booknest
@@ -20,7 +19,7 @@ on:
       - '.github/workflows/desktop-release.yml'
 
 permissions:
-  contents: write # pushes its own diagnostics when a build fails
+  contents: write
 
 jobs:
   windows:
@@ -34,26 +33,25 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Build Windows
-        shell: pwsh
+        shell: bash
         run: |
-          flutter build windows --release 2>&1 | Tee-Object -FilePath build.log
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-      - name: Commit build diagnostics on failure
+          set -o pipefail
+          flutter build windows --release 2>&1 | tee build.log
+      - name: Commit build diagnostics
         if: failure()
         shell: bash
         run: |
-          tail -c 2500 build.log > desktop-error-windows.txt 2>/dev/null || true
+          tail -c 2500 build.log > desktop-error-windows.txt 2>/dev/null || echo "build.log missing" > desktop-error-windows.txt
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
-          git add desktop-error-windows.txt || true
+          git add desktop-error-windows.txt
           git commit -q -m "Desktop build diagnostics: windows [skip ci]" || true
-          git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
+          git pull --rebase -q origin "${GITHUB_REF_NAME}" || true
+          git push -q origin "HEAD:${GITHUB_REF_NAME}" || git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
       - name: Package
         if: success()
         shell: pwsh
-        run: |
-          Compress-Archive -Path build/windows/x64/runner/Release/* `
-            -DestinationPath BookNest-windows.zip
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath BookNest-windows.zip
       - uses: actions/upload-artifact@v4
         if: success()
         with:
@@ -70,19 +68,22 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Build macOS
+      - name: Build macOS (unsigned for CI)
+        env:
+          CODE_SIGNING_ALLOWED: 'NO'
         run: |
           set -o pipefail
           flutter build macos --release 2>&1 | tee build.log
-      - name: Commit build diagnostics on failure
+      - name: Commit build diagnostics
         if: failure()
         run: |
-          tail -c 2500 build.log > desktop-error-macos.txt 2>/dev/null || true
+          tail -c 2500 build.log > desktop-error-macos.txt 2>/dev/null || echo "build.log missing" > desktop-error-macos.txt
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
-          git add desktop-error-macos.txt || true
+          git add desktop-error-macos.txt
           git commit -q -m "Desktop build diagnostics: macos [skip ci]" || true
-          git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
+          git pull --rebase -q origin "${GITHUB_REF_NAME}" || true
+          git push -q origin "HEAD:${GITHUB_REF_NAME}" || git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
       - name: Package
         if: success()
         run: |
@@ -103,7 +104,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config \
-            libgtk-3-dev liblzma-dev
+            libgtk-3-dev liblzma-dev libsecret-1-dev
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -113,15 +114,16 @@ jobs:
         run: |
           set -o pipefail
           flutter build linux --release 2>&1 | tee build.log
-      - name: Commit build diagnostics on failure
+      - name: Commit build diagnostics
         if: failure()
         run: |
-          tail -c 2500 build.log > desktop-error-linux.txt 2>/dev/null || true
+          tail -c 2500 build.log > desktop-error-linux.txt 2>/dev/null || echo "build.log missing" > desktop-error-linux.txt
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
-          git add desktop-error-linux.txt || true
+          git add desktop-error-linux.txt
           git commit -q -m "Desktop build diagnostics: linux [skip ci]" || true
-          git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
+          git pull --rebase -q origin "${GITHUB_REF_NAME}" || true
+          git push -q origin "HEAD:${GITHUB_REF_NAME}" || git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
       - name: Package
         if: success()
         run: |
