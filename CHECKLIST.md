@@ -104,10 +104,13 @@ re-runs skip what's already in.
       `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF`). That handover
       is the only part only you can do — GitHub and Supabase only let
       the account owner create those keys.
-- [ ] Then just tell the agent **"run the library import"** in chat.
-      That's the whole step. (Prefer clicking yourself?
-      **Actions → Library Import → Run workflow → Run** does the same
-      thing. Leave "Readiness check only" on **false**.)
+- [ ] GitHub → **Actions → Library Import → Run workflow** → leave
+      everything as it is ("Readiness check only" = false) → **Run**.
+- [ ] Wait for the green run (~10–40 min — watch the counter climb in
+      the log). Re-running anytime is safe; finished books skip.
+
+After the FIRST run you can also just tell the agent
+**"run the library import"** in chat — it presses the button for you.
 
 **Proof:** the run summary says "imported 1500+"; the Books screen now
 needs scrolling. Moderators can delete any imported book like any other
