@@ -150,6 +150,7 @@ jobs:
           TARGET: ${{ github.event.inputs.target }}
         timeout-minutes: 280
         run: |
+          python3 - << 'PYEOF'
           import csv, hashlib, io, json, os, re, sys, time, urllib.request
 
           FN_URL = os.environ['FN_URL'].rstrip('/')
