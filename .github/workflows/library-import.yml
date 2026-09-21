@@ -242,10 +242,18 @@ jobs:
           except Exception:
               pass
           rows = list(csv.DictReader(io.StringIO(raw.decode('utf-8', 'replace'))))
+          # Sanity: a block page or a format change must be loud, not silent.
+          head = raw[:400].decode('utf-8', 'replace')
+          if 'Text #' not in head:
+              print('CATALOG UNRECOGNIZED — first 300 chars:')
+              print(head[:300])
+              sys.exit(1)
           pool = []
           for r in rows:
               try:
-                  if (r.get('Copyright') or '').strip() not in ('Public domain in the USA.', ''):
+                  copy_note = (r.get('Copyright') or '').strip()
+                  # Accept any public-domain phrasing, or a blank note.
+                  if copy_note and 'public domain' not in copy_note.lower():
                       continue
                   if (r.get('Language') or '').strip() != 'English':
                       continue
@@ -287,6 +295,14 @@ jobs:
           pool.sort(key=lambda b: -b['downloads'])
           picks = pool[:TARGET + 400]
           print(f'Catalog: {len(rows)} rows, eligible {len(pool)}, attempting {len(picks)}')
+          if len(pool) == 0:
+              from collections import Counter
+              print('ZERO eligible — field diagnostics:')
+              print('Copyright:', Counter((r.get('Copyright') or 'NONE')[:40] for r in rows).most_common(4))
+              print('Language :', Counter((r.get('Language') or 'NONE')[:20] for r in rows).most_common(4))
+              print('Type     :', Counter((r.get('Type') or 'NONE')[:20] for r in rows).most_common(4))
+              print('Downloads:', Counter((r.get('Download count') or 'NONE')[:8] for r in rows).most_common(4))
+              sys.exit(1)
 
           HEAD = re.compile(r'\*\*\*\s*START OF (?:THE|THIS) PROJECT GUTENBERG[^\n]*\n', re.I)
           FOOT = re.compile(r'\*\*\*\s*END OF (?:THE|THIS) PROJECT GUTENBERG.*', re.I | re.S)
@@ -394,6 +410,10 @@ jobs:
                   text = text[m.end():]
               text = FOOT.sub('', text).strip()
               if len(text) < 8000:
+                  fails += 1
+                  continue
+              if 'project gutenberg' not in text[:3000].lower() and m is None:
+                  # An error page, not a book — skip it.
                   fails += 1
                   continue
               chapters = split_chapters(text)
