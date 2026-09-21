@@ -73,25 +73,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
         run: |
-          curl -sL --max-time 120 \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/logs" \
-            -o logs.zip || true
-          ls -la logs.zip || true
-          mkdir -p extracted
-          unzip -o -q logs.zip -d extracted || true
-          ls extracted | head -40 || true
           {
+            echo "collector debug: $(date -u +%FT%TZ)"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/logs" > logs.zip \
+              && echo "logs.zip: $(wc -c < logs.zip) bytes" \
+              || echo "logs download FAILED"
+            mkdir -p extracted
+            unzip -o -q logs.zip -d extracted && echo "unzipped: $(ls extracted | wc -l) files" \
+              || echo "unzip FAILED"
+            ls -la extracted | head -30
             for f in extracted/*.txt; do
               [ -e "$f" ] || continue
               case "$f" in
                 *uild*) echo "=== $f ===";;
                 *) continue;;
               esac
-              grep -aiE "error:|FAILURE:|Exception|CMake Error|fatal error|Unable to|feature not available|\.dart:" "$f" | tail -25 || true
+              tail -c 3000 "$f"
+              echo
             done
-          } > desktop-error.txt
-          [ -s desktop-error.txt ] || { echo "(no matched errors — file list follows)"; ls extracted; } > desktop-error.txt
+          } > desktop-error.txt 2>&1
+          [ -s desktop-error.txt ] || echo "collector produced nothing" > desktop-error.txt
       - name: Commit the diagnostics
         run: |
           git config user.email "booknest-ci@users.noreply.github.com"
@@ -136,11 +137,22 @@ jobs:
           APP=$(ls -d *.app | head -1)
           echo "Packaging $APP"
           ditto -c -k --sequesterRsrc --keepParent "$APP" ../../../../BookNest-macos.zip
+          ls -la ../../../../BookNest-macos.zip
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: BookNest-macos
           path: BookNest-macos.zip
+      - name: Publish to GitHub Releases
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="pc-$(date -u +%Y%m%d)"
+          gh release create "$TAG" BookNest-macos.zip \
+            --title "BookNest for PC — $TAG" \
+            --notes "macOS build. Unzip, drag to Applications. Unsigned: right-click → Open the first time." \
+            --clobber || gh release upload "$TAG" BookNest-macos.zip --clobber
 
   linux:
     runs-on: ubuntu-latest
