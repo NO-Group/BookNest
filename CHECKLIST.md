@@ -7,28 +7,20 @@ you know it worked.
 
 ---
 
-## 0 · What just shipped (v2.26.3+51) — nothing new for you
+## 0 · What just shipped (v2.27.0+52)
 
-Three features that were half-finished are now finished. **You have no
-new clicks for these** — they came alive with this release:
+Jenny is parked (hidden everywhere, one flag to bring back). The
+chapter editor is now a **writing IDE**: real math formulas, split
+preview, word counts, and drafts that survive a dropped connection.
+The dictionary became **full** (~97,000 words from WordNet 3.1 — the
+Library Import fills it automatically alongside the books). New
+home-screen widget: **Currently Reading**. Chat press-and-hold gained
+**Copy text** and a quoted preview.
 
-- **Link previews in chats** — send a link in any conversation: it
-  turns tappable and shows a small card (site, title, picture) under
-  the message. One thing to know: this needs the server code updated
-  on Supabase. If you already run the guided kit's **Update server**
-  step after this release, it is live. (If a preview doesn't appear,
-  the card simply stays hidden — nothing breaks.)
-- **Search now finds everything** — books, readers, **group spaces**
-  (clubs, communities, organizations, schools) and **dictionary
-  words**, each in its own section.
-- **Notifications are all tappable** — a review opens the book, a
-  follow opens the person, a chat opens the conversation, and tapping
-  marks it read.
-
-Next on your list: **install the new APK** (step 1), then the 4-minute
-key handover in **step 3** — after which the agent fills the library
-with 1,500+ classics for you (step 3B). Monetization is **parked** at
-the bottom until you say go.
+Your actions stay the same two:
+1. Install the new APK (step 1 below).
+2. Run **Library Import** once (step 3B) — it now fills BOTH the
+   1,500+ books AND the full dictionary.
 
 ---
 

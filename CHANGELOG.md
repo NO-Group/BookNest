@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.27.0+52 — 2026-09-21 · The big upgrade drop
+
+- **Jenny is parked.** The feature stays built but hidden from every
+  entrance; one flag brings her back.
+- **The chapter editor is a pocket IDE.** Real typeset **math formulas**
+  (tap ƒx — write TeX with a live preview; invalid TeX never crashes),
+  a **split-screen preview** showing exactly how readers will see the
+  page, live **word count and reading time**, find & replace, and
+  **local drafts**: if the cloud drops mid-writing, your words keep
+  saving on the device and restore automatically.
+- **The reader renders math too** — both new formula embeds and math
+  written into plain/markdown text (`$$…$$` blocks, `$…$` inline).
+- **Word Nest is now a FULL dictionary** — ~97,000 English entries
+  from WordNet 3.1 served from the cloud (imported automatically by
+  the Library Import workflow), with the hand-written offline edition
+  folded into every search. Attribution shown at the foot of results.
+- **New home-screen widget: Currently Reading** — your book, chapter
+  and live progress percentage, tap to resume reading. Word-of-the-Day
+  widget polished.
+- **Press-and-hold on a chat message** now shows the message quoted,
+  adds **Copy text**, and answers with haptics.
+
 ## 2.26.3+51 — 2026-09-20 · The half-baked sweep: links, search, notifications
 
 - **Links in chat are alive.** Every URL in a message is tappable, and
