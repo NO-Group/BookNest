@@ -98,6 +98,19 @@ jobs:
         run: |
           set -o pipefail
           flutter build macos --release 2>&1 | tee build.log
+      - name: Package
+        if: success()
+        run: |
+          cd build/macos/Build/Products/Release
+          APP=$(ls -d *.app | head -1)
+          echo "Packaging $APP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" ../../../../BookNest-macos.zip
+          ls -la ../../../../BookNest-macos.zip
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: BookNest-macos
+          path: BookNest-macos.zip
       - name: Commit build diagnostics
         if: failure()
         run: |
@@ -119,26 +132,14 @@ jobs:
           gh issue create \
             --title "Desktop build failed: macos ($(date -u +%H:%M))" \
             --body-file issue-body.md || true
-      - name: Package
-        if: success()
-        run: |
-          cd build/macos/Build/Products/Release
-          APP=$(ls -d *.app | head -1)
-          echo "Packaging $APP"
-          ditto -c -k --sequesterRsrc --keepParent "$APP" ../../../../BookNest-macos.zip
-          ls -la ../../../../BookNest-macos.zip
-      - uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: BookNest-macos
-          path: BookNest-macos.zip
+
       - name: Publish to GitHub Releases
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
-          TAG="pc-$(date -u +%Y%m%d)"
+          TAG="pc-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
           gh release create "$TAG" BookNest-macos.zip \
             --target "$GITHUB_SHA" \
             --title "BookNest for PC — $TAG" \
