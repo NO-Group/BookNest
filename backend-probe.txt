@@ -1,9 +1,9 @@
-Live probe of the deployed booknest-api — 2026-09-21T11:28:49Z
+Live probe of the deployed booknest-api — 2026-09-21T12:02:16Z
 ("Sign in required" = the action EXISTS on the server;
  "Unknown action" = the deployed file predates it;
  ping's  field shows the deployed file's version)
 
-ping               → {"ok":true,"data":{"databases":{"books":"booknest_books","social":"booknest_social","reviews":"booknest_reviews","chats":"booknest_chats","notifications":"booknest_notifications","users":"booknest_users","dictionary":"booknest_dictionary","feed":"booknest_feed","moderation":"booknest_moderation","groups":"booknest_groups","genres":"booknest_genres","payments":"booknest_payments","comics":"booknest_comics"},"time":"2026-09-21T11:28:49.986Z","server":"2.24","db":"booknest_books","mongo":"ready"}}
+ping               → {"ok":true,"data":{"databases":{"books":"booknest_books","social":"booknest_social","reviews":"booknest_reviews","chats":"booknest_chats","notifications":"booknest_notifications","users":"booknest_users","dictionary":"booknest_dictionary","feed":"booknest_feed","moderation":"booknest_moderation","groups":"booknest_groups","genres":"booknest_genres","payments":"booknest_payments","comics":"booknest_comics"},"time":"2026-09-21T12:02:16.759Z","server":"2.24","db":"booknest_books","mongo":"ready"}}
 admin.users.list   → {"ok":false,"error":"Only the overall moderator can list readers"}
 moderation.list    → {"ok":false,"error":"Only the overall moderator can view reports"}
 moderation.report  → {"ok":false,"error":"Sign in required"}
@@ -13,3 +13,5 @@ dm.deleteMessage   → {"ok":false,"error":"Sign in required"}
 chat.deleteMessage → {"ok":false,"error":"Sign in required"}
 feed.like          → {"ok":false,"error":"Sign in required"}
 books.list         → {"ok":true,"data":{"books":[],"nextCursor":null}}
+dictionary.search  → {"ok":true,"data":{"entries":[]}}
+comics.list        → {"ok":true,"data":{"comics":[]}}
