@@ -11,20 +11,25 @@ If no such version exists, report the issue to the plugin. If necessary, here is
 an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
 
 If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
-lib/presentation/screens/books/book_details_screen.dart:400:47: Error: The argument type 'Map<String, dynamic>?' can't be assigned to the parameter type 'Map<dynamic, dynamic>'.
+lib/presentation/components/manuscript_embeds.dart:127:71: Error: Constant expression expected.
+Try inserting 'const'.
+  const MathBlockEmbed(String tex) : super(mathType, <String, dynamic>{'tex': tex});
+                                                                      ^
+lib/presentation/components/manuscript_embeds.dart:127:71: Error: The argument type 'Map<String, dynamic>' can't be assigned to the parameter type 'String'.
  - 'Map' is from 'dart:core'.
-              book: Map<String, dynamic>.from(b)),
-                                              ^
-lib/presentation/screens/books/chapter_manager_screen.dart:94:24: Error: The method '_load' isn't defined for the type '_ChapterManagerScreenState'.
- - '_ChapterManagerScreenState' is from 'package:booknest/presentation/screens/books/chapter_manager_screen.dart' ('lib/presentation/screens/books/chapter_manager_screen.dart').
-Try correcting the name to the name of an existing method, or defining a method named '_load'.
-          if (mounted) _load();
-                       ^^^^^
-lib/presentation/screens/books/chapter_manager_screen.dart:186:48: Error: The method '_load' isn't defined for the type '_ChapterManagerScreenState'.
- - '_ChapterManagerScreenState' is from 'package:booknest/presentation/screens/books/chapter_manager_screen.dart' ('lib/presentation/screens/books/chapter_manager_screen.dart').
-Try correcting the name to the name of an existing method, or defining a method named '_load'.
-                                  if (mounted) _load();
-                                               ^^^^^
+  const MathBlockEmbed(String tex) : super(mathType, <String, dynamic>{'tex': tex});
+                                                                      ^
+lib/presentation/screens/books/chapter_editor_screen.dart:223:53: Error: The getter 'ChangeSource' isn't defined for the type '_ChapterEditorScreenState'.
+ - '_ChapterEditorScreenState' is from 'package:booknest/presentation/screens/books/chapter_editor_screen.dart' ('lib/presentation/screens/books/chapter_editor_screen.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'ChangeSource'.
+        TextSelection.collapsed(offset: index + 1), ChangeSource.local);
+                                                    ^^^^^^^^^^^^
+lib/presentation/screens/books/chapter_editor_screen.dart:404:27: Error: No named parameter with the name 'readOnly'.
+                          readOnly: true,
+                          ^^^^^^^^
+../../../.pub-cache/hosted/pub.dev/flutter_quill-11.6.0/lib/src/editor/config/editor_config.dart:30:9: Context: Found this candidate, but the arguments don't match.
+  const QuillEditorConfig({
+        ^^^^^^^^^^^^^^^^^
 Target kernel_snapshot_program failed: Exception
 
 
@@ -40,6 +45,6 @@ Execution failed for task ':app:compileFlutterBuildRelease'.
 > Run with --scan to generate a Build Scan (Powered by Develocity).
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 1m 16s
-Running Gradle task 'assembleRelease'...                           76.7s
+BUILD FAILED in 1m 24s
+Running Gradle task 'assembleRelease'...                           84.9s
 Gradle task assembleRelease failed with exit code 1
