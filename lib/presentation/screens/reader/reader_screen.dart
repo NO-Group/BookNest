@@ -1219,9 +1219,8 @@ class _ReaderScreenState extends State<ReaderScreen>
                                                     Theme.of(context).hintColor),
                                           )
                                         else
-                                          MarkdownBody(
+                                          MathAwareMarkdown(
                                             data: _content,
-                                            selectable: true,
                                             styleSheet: markdownSheet,
                                           ),
                                       ],
