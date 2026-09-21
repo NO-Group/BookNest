@@ -1,9 +1,9 @@
-Live probe of the deployed booknest-api — 2026-09-21T12:51:43Z
+Live probe of the deployed booknest-api — 2026-09-21T13:08:08Z
 ("Sign in required" = the action EXISTS on the server;
  "Unknown action" = the deployed file predates it;
  ping's  field shows the deployed file's version)
 
-ping               → {"ok":true,"data":{"databases":{"books":"booknest_books","social":"booknest_social","reviews":"booknest_reviews","chats":"booknest_chats","notifications":"booknest_notifications","users":"booknest_users","dictionary":"booknest_dictionary","feed":"booknest_feed","moderation":"booknest_moderation","groups":"booknest_groups","genres":"booknest_genres","payments":"booknest_payments","comics":"booknest_comics"},"time":"2026-09-21T12:51:43.685Z","server":"2.24","db":"booknest_books","mongo":"ready"}}
+ping               → {"ok":true,"data":{"databases":{"books":"booknest_books","social":"booknest_social","reviews":"booknest_reviews","chats":"booknest_chats","notifications":"booknest_notifications","users":"booknest_users","dictionary":"booknest_dictionary","feed":"booknest_feed","moderation":"booknest_moderation","groups":"booknest_groups","genres":"booknest_genres","payments":"booknest_payments","comics":"booknest_comics"},"time":"2026-09-21T13:08:09.365Z","server":"2.24","db":"booknest_books","mongo":"ready"}}
 admin.users.list   → {"ok":false,"error":"Only the overall moderator can list readers"}
 moderation.list    → {"ok":false,"error":"Only the overall moderator can view reports"}
 moderation.report  → {"ok":false,"error":"Sign in required"}
@@ -12,6 +12,6 @@ chat.react         → {"ok":false,"error":"Sign in required"}
 dm.deleteMessage   → {"ok":false,"error":"Sign in required"}
 chat.deleteMessage → {"ok":false,"error":"Sign in required"}
 feed.like          → {"ok":false,"error":"Sign in required"}
-books.list         → {"ok":true,"data":{"books":[{"id":"bulk-the-chinese-boy-and-girl|isaac-taylor-1859-1942-headland","title":"The Chinese Boy and Girl","author":"Isaac Taylor, 1859-1942 Headland","description":"A beloved children's classic by Isaac Taylor, 1859-1942 Headland, among the most-read public-domain books in the world — presented here in full.","genre":"Children's","cover_url":"https://res.cloudinary.com/deqdmwlt7/image/upload/v1789995097/booknest/covers/bulk-the-chinese-boy-and-girl%7Cisaac-taylor-1859-1942-headland.jpg","banner_url":null,"content_format":"markdown","moderation_status":"approved","l
+books.list         → {"ok":true,"data":{"books":[{"id":"bulk-the-autobiography-of-a-quack-and-the-case-of-george-dedlow|s-weir-silas-weir-1829-1914-mit","title":"The Autobiography of a Quack, and The Case of George Dedlow","author":"S. Weir (Silas Weir), 1829-1914 Mitchell","description":"A beloved classics classic by S. Weir (Silas Weir), 1829-1914 Mitchell, among the most-read public-domain books in the world — presented here in full.","genre":"Classics","cover_url":"https://res.cloudinary.com/deqdmwlt7/image/upload/v1789996083/booknest/covers/bulk-the-autobiography-of-a-quack-and-the-case-of-george-dedlow%7Cs
 dictionary.search  → {"ok":true,"data":{"entries":[]}}
 comics.list        → {"ok":true,"data":{"comics":[]}}
