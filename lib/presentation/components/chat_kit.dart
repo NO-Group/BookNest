@@ -359,6 +359,7 @@ class _ChatBubbleState extends State<ChatBubble>
 
   void _showToolkit() {
     final canAct = !_pending && !_failed && !_deletedForEveryone;
+    HapticFeedback.mediumImpact();
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -366,6 +367,38 @@ class _ChatBubbleState extends State<ChatBubble>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // The message itself, quoted — you always know what you're
+            // acting on, even after the sheet covers the chat.
+            Builder(builder: (sheetContext) {
+              final preview = _text.trim();
+              final shade =
+                  Theme.of(context).colorScheme.surface.withOpacity(.9);
+              if (preview.isEmpty) return const SizedBox.shrink();
+              return Container(
+                width: double.infinity,
+                margin: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: shade,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  preview,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.color
+                        ?.withOpacity(.85),
+                  ),
+                ),
+              );
+            }),
             if (widget.onReact != null && canAct) ...[
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -389,6 +422,20 @@ class _ChatBubbleState extends State<ChatBubble>
               ),
               const Divider(height: 1),
             ],
+            if (_text.trim().isNotEmpty && canAct)
+              ListTile(
+                leading: const Icon(Icons.copy_rounded,
+                    color: BookNestColors.cyan),
+                title: const Text('Copy text',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  Clipboard.setData(ClipboardData(text: _text));
+                  HapticFeedback.selectionClick();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Copied ✓')));
+                },
+              ),
             if (widget.onForward != null && canAct)
               ListTile(
                 leading: const Icon(Icons.shortcut_rounded,

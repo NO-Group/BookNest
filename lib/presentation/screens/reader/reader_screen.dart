@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../services/backend_api.dart';
+import '../../../services/home_widgets_service.dart';
 import '../../../services/supabase_service.dart';
 
 /// The BookNest Reader — a distraction-free, full-screen reading room for
@@ -359,6 +360,15 @@ class _ReaderScreenState extends State<ReaderScreen>
       'chapterNumber': _chapterNumber,
       'scroll': _scrollFraction,
     });
+    // Feed the home-screen "Currently reading" widget.
+    final chapters = _chapters.isEmpty ? 1 : _chapters.length;
+    final through = ((_chapterNumber - 1) + _scrollFraction) / chapters;
+    HomeWidgetsService.pushReading(
+      bookId: widget.bookId,
+      title: _bookTitle,
+      subtitle: 'Chapter $_chapterNumber of $chapters',
+      percent: (through * 100).round(),
+    );
   }
 
   /// Feeds the daily reading streak (+2 gems on the first read of the day).

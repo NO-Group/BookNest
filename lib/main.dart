@@ -85,6 +85,16 @@ Future<void> _startupAftercare() async {
         case 'streaks':
           appRouter.go('/streaks');
           break;
+        case 'resume':
+          SharedPreferences.getInstance().then((prefs) {
+            final bookId = prefs.getString('widget_reading_bookid') ?? '';
+            if (bookId.isNotEmpty) {
+              appRouter.push('/book/$bookId');
+            } else {
+              appRouter.go('/library');
+            }
+          });
+          break;
         case 'feed':
           appRouter.go('/feed');
           break;

@@ -82,6 +82,16 @@
                 android:resource="@xml/streak_widget_info"/>
         </receiver>
         <receiver
+            android:name=".ReadingWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/reading_widget_info" />
+        </receiver>
+        <receiver
             android:name=".GemsWidgetProvider"
             android:exported="false">
             <intent-filter>

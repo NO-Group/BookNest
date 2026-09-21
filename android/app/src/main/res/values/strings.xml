@@ -13,4 +13,5 @@
     <string name="desc_gems">Your gems balance</string>
     <string name="desc_quick">Jump straight into BookNest</string>
     <string name="desc_search">Look up any word instantly</string>
+    <string name="desc_reading">The book you are reading, with live progress</string>
 </resources>

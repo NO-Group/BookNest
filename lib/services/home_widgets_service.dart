@@ -16,6 +16,7 @@ class HomeWidgetsService {
     'GemsWidgetProvider',
     'QuickActionsWidgetProvider',
     'SearchWidgetProvider',
+    'ReadingWidgetProvider',
   ];
 
   static Future<void> pushAll() async {
@@ -57,6 +58,26 @@ class HomeWidgetsService {
     try {
       await HomeWidget.saveWidgetData<String>('widget_streak', '$days');
       await HomeWidget.updateWidget(name: 'StreakWidgetProvider');
+    } catch (_) {}
+  }
+
+  /// The reader calls this whenever progress is saved, so the home-screen
+  /// "Currently reading" widget always shows the true book and percent.
+  /// Remembers the book id so the widget's tap can resume it.
+  static Future<void> pushReading({
+    required String bookId,
+    required String title,
+    required String subtitle,
+    required int percent,
+  }) async {
+    try {
+      await HomeWidget.saveWidgetData<String>('widget_reading_title',
+          title.isEmpty ? 'Pick a book' : title);
+      await HomeWidget.saveWidgetData<String>('widget_reading_sub', subtitle);
+      await HomeWidget.saveWidgetData<int>(
+          'widget_reading_percent', percent.clamp(0, 100));
+      await HomeWidget.saveWidgetData<String>('widget_reading_bookid', bookId);
+      await HomeWidget.updateWidget(name: 'ReadingWidgetProvider');
     } catch (_) {}
   }
 }
