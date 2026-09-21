@@ -1,0 +1,3 @@
+Fetching the Project Gutenberg catalog…
+Catalog: 79433 rows, eligible 0, attempting 0
+DONE: imported 0, unchanged/skipped 0, unfetchable 0
