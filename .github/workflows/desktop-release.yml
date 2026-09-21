@@ -111,6 +111,33 @@ jobs:
         with:
           name: BookNest-macos
           path: BookNest-macos.zip
+      - name: Publish to GitHub Releases
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          TAG="pc-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
+          NOTES="BookNest for PC — macOS build. Unzip, drag to Applications. Unsigned: right-click → Open the first time."
+          gh release create "$TAG" BookNest-macos.zip \
+            --target "$GITHUB_SHA" --title "BookNest for PC — $TAG" --notes "$NOTES" \
+            2>&1 | tee release.log
+          STATUS=${PIPESTATUS[0]}
+          if [ "$STATUS" != "0" ]; then
+            gh release create "$TAG" BookNest-macos.zip \
+              --title "BookNest for PC — $TAG" --notes "$NOTES" \
+              2>&1 | tee -a release.log
+            STATUS=${PIPESTATUS[0]}
+          fi
+          if [ "$STATUS" != "0" ]; then
+            gh release upload "$TAG" BookNest-macos.zip --clobber 2>&1 | tee -a release.log
+            STATUS=${PIPESTATUS[0]}
+          fi
+          if [ "$STATUS" != "0" ]; then
+            tail -c 1500 release.log > release-error.txt || echo "release failed" > release-error.txt
+            exit 1
+          fi
+
       - name: Commit build diagnostics
         if: failure()
         run: |
@@ -132,29 +159,6 @@ jobs:
           gh issue create \
             --title "Desktop build failed: macos ($(date -u +%H:%M))" \
             --body-file issue-body.md || true
-
-      - name: Publish to GitHub Releases
-        if: success()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -o pipefail
-          TAG="pc-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
-          gh release create "$TAG" BookNest-macos.zip \
-            --target "$GITHUB_SHA" \
-            --title "BookNest for PC — $TAG" \
-            --notes "BookNest for PC — macOS build. Unzip, drag to Applications. Unsigned: right-click → Open the first time." \
-            2>&1 | tee release.log
-          STATUS=${PIPESTATUS[0]}
-          if [ "$STATUS" != "0" ]; then
-            # The tag may already exist from an earlier run today — upload instead.
-            gh release upload "$TAG" BookNest-macos.zip --clobber 2>&1 | tee -a release.log
-            STATUS=${PIPESTATUS[0]}
-          fi
-          if [ "$STATUS" != "0" ]; then
-            tail -c 1500 release.log > release-error.txt || echo "release failed" > release-error.txt
-            exit 1
-          fi
 
   linux:
     runs-on: ubuntu-latest

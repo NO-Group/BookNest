@@ -607,28 +607,28 @@ jobs:
           print(f'Dictionary entries parsed: {len(entries)}')
 
           def post(words):
-              body = json.dumps({{'action': 'dictionary.import',
-                                  'importToken': TOKEN, 'words': words}}).encode()
+              body = json.dumps({'action': 'dictionary.import',
+                                  'importToken': TOKEN, 'words': words}).encode()
               last = None
               for attempt in range(5):
                   req = urllib.request.Request(
                       FN_URL, data=body, method='POST',
-                      headers={{'Content-Type': 'application/json',
-                                'Authorization': 'Bearer ' + ANON}})
+                      headers={'Content-Type': 'application/json',
+                                'Authorization': 'Bearer ' + ANON})
                   try:
                       with urllib.request.urlopen(req, timeout=180) as r:
-                          return json.loads(r.read().decode()).get('data', {{}})
+                          return json.loads(r.read().decode()).get('data', {})
                   except urllib.error.HTTPError as e:
                       detail = e.read().decode('utf-8', 'replace')[:200]
-                      last = f'HTTP {{e.code}}: {{detail}}'
-                      print(f'  batch attempt {{attempt + 1}}: {{last}}', flush=True)
+                      last = f'HTTP {e.code}: {detail}'
+                      print(f'  batch attempt {attempt + 1}: {last}', flush=True)
                       if e.code in (401, 403):
                           raise RuntimeError(last)
                   except Exception as e:
                       last = repr(e)
-                      print(f'  batch attempt {{attempt + 1}}: {{last}}', flush=True)
+                      print(f'  batch attempt {attempt + 1}: {last}', flush=True)
                   time.sleep(2 * (attempt + 1))
-              raise RuntimeError(f'batch failed after 5 tries — {{last}}')
+              raise RuntimeError(f'batch failed after 5 tries — {last}')
 
           total, done = 0, 0
           for i in range(0, len(entries), 200):
@@ -637,27 +637,27 @@ jobs:
               total += int(res.get('imported') or 0)
               done += len(chunk)
               if done % 5000 < 200:
-                  print(f'  {{done}}/{{len(entries)}} words…', flush=True)
+                  print(f'  {done}/{len(entries)} words…', flush=True)
           time.sleep(1)
           try:
-              body = json.dumps({{'action': 'dictionary.search', 'q': 'serendipity'}}).encode()
+              body = json.dumps({'action': 'dictionary.search', 'q': 'serendipity'}).encode()
               req = urllib.request.Request(
                   FN_URL, data=body, method='POST',
-                  headers={{'Content-Type': 'application/json',
-                            'Authorization': 'Bearer ' + ANON}})
+                  headers={'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + ANON})
               with urllib.request.urlopen(req, timeout=30) as r:
-                  found = len(json.loads(r.read().decode()).get('data', {{}}).get('entries') or [])
-              print(f'server lookup check: {{found}} result(s) for "serendipity"')
+                  found = len(json.loads(r.read().decode()).get('data', {}).get('entries') or [])
+              print(f'server lookup check: {found} result(s) for "serendipity"')
           except Exception as e:
-              print(f'lookup check skipped ({{e}})')
-          line = f'DONE: dictionary entries stored {{total}} of {{len(entries)}}'
+              print(f'lookup check skipped ({e})')
+          line = f'DONE: dictionary entries stored {total} of {len(entries)}'
           print(line)
           if total == 0:
               with open('import-error.txt', 'w') as f:
                   f.write(line + '\nnothing was stored — see the batch errors above\n')
               sys.exit(1)
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
-              f.write(f'### Word Nest\n{{line}}\n')
+              f.write(f'### Word Nest\n{line}\n')
           POSEOF
 
       - name: Commit seed diagnostics on failure
