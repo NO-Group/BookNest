@@ -29,7 +29,7 @@ import '../../config/theme.dart';
 /// One element inside a panel: a picture, a speech bubble or a caption.
 class ComicElementData {
   final String id;
-  final String type; // 'image' | 'speech_bubble' | 'caption'
+  final String type; // 'image' | 'speech_bubble' | 'caption' | 'sketch'
   final String src; // image only — a remote URL, never embedded bytes
   final String text; // bubble/caption lettering
   final String style; // roundedBox | screamBurst | thoughtCloud
@@ -40,6 +40,10 @@ class ComicElementData {
   final double rotation; // radians
   final double anchorX; // bubble tail tip, normalized to the panel
   final double anchorY; // (-1,-1) = no tail placed yet
+  // sketch only: flattened normalized points [x0,y0,x1,y1,…] in panel space
+  final List<double> points;
+  final int colorValue; // ink color as Color.value
+  final double strokeWidth; // pen width in logical pixels
 
   const ComicElementData({
     required this.id,
@@ -54,6 +58,9 @@ class ComicElementData {
     this.rotation = 0,
     this.anchorX = -1,
     this.anchorY = -1,
+    this.points = const [],
+    this.colorValue = 0xFF0B1531,
+    this.strokeWidth = 3,
   });
 
   ComicElementData copyWith({
@@ -67,6 +74,9 @@ class ComicElementData {
     String? text,
     String? style,
     String? src,
+    List<double>? points,
+    int? colorValue,
+    double? strokeWidth,
   }) =>
       ComicElementData(
         id: id,
@@ -81,6 +91,9 @@ class ComicElementData {
         rotation: rotation ?? this.rotation,
         anchorX: anchorX ?? this.anchorX,
         anchorY: anchorY ?? this.anchorY,
+        points: points ?? this.points,
+        colorValue: colorValue ?? this.colorValue,
+        strokeWidth: strokeWidth ?? this.strokeWidth,
       );
 
   Map<String, dynamic> toJson() => {
@@ -100,6 +113,11 @@ class ComicElementData {
           'anchorX': _num(anchorX),
           'anchorY': _num(anchorY),
         },
+        if (type == 'sketch') ...{
+          'points': points.map(_num).toList(),
+          'color': colorValue,
+          'sw': _num(strokeWidth),
+        },
       };
 
   factory ComicElementData.fromJson(Map<String, dynamic> j) =>
@@ -116,6 +134,12 @@ class ComicElementData {
         rotation: _asDouble(j['rotation'], 0),
         anchorX: _asDouble(j['anchorX'], -1),
         anchorY: _asDouble(j['anchorY'], -1),
+        points: ((j['points'] as List?) ?? const [])
+            .whereType<num>()
+            .map((v) => v.toDouble())
+            .toList(),
+        colorValue: (j['color'] as num?)?.toInt() ?? 0xFF0B1531,
+        strokeWidth: _asDouble(j['sw'], 3),
       );
 }
 
@@ -491,6 +515,92 @@ class SpeechBubbleView extends StatelessWidget {
   }
 }
 
+// ── The ink layer ──────────────────────────────────────────────────────────
+
+/// Paints one freehand stroke. Points are normalized panel coordinates —
+/// the stroke looks identical at every panel size.
+class SketchPainter extends CustomPainter {
+  final List<double> points; // flattened x,y in 0..1
+  final Color color;
+  final double strokeWidth;
+
+  SketchPainter({
+    required this.points,
+    required this.color,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 4) return;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final path = Path()
+      ..moveTo(points[0] * size.width, points[1] * size.height);
+    for (var i = 2; i + 1 < points.length; i += 2) {
+      path.lineTo(points[i] * size.width, points[i + 1] * size.height);
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant SketchPainter old) =>
+      old.points.length != points.length ||
+      old.color != color ||
+      old.strokeWidth != strokeWidth;
+}
+
+/// A finished stroke, laid over the whole panel.
+class SketchView extends StatelessWidget {
+  final ComicElementData data;
+  final Size panelSize;
+  final bool editMode;
+  final VoidCallback? onDelete;
+
+  const SketchView({
+    super.key,
+    required this.data,
+    required this.panelSize,
+    required this.editMode,
+    this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Stack(children: [
+        CustomPaint(
+          size: panelSize,
+          painter: SketchPainter(
+            points: data.points,
+            color: Color(data.colorValue),
+            strokeWidth: data.strokeWidth,
+          ),
+        ),
+        if (editMode)
+          Positioned(
+            right: 0,
+            top: 0,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onDelete,
+              child: const SizedBox(
+                width: 40,
+                height: 40,
+                child: Icon(Icons.cancel_rounded,
+                    size: 20, color: Colors.redAccent),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+}
+
 // ── Transformable element (images + bubbles + captions) ───────────────────
 
 /// Wraps one element with its own gesture life: single-finger pan,
@@ -578,6 +688,14 @@ class _TransformableElementWidgetState
 
   @override
   Widget build(BuildContext context) {
+    if (data.type == 'sketch') {
+      return SketchView(
+        data: data,
+        panelSize: _panel,
+        editMode: widget.editMode,
+        onDelete: widget.onDelete,
+      );
+    }
     if (data.type == 'image') return _buildImage(context);
     return _buildTextElement(context);
   }
@@ -758,6 +876,14 @@ class ComicCanvasWidget extends StatelessWidget {
   final Future<ComicElementData?> Function(ComicElementData current)?
       editLettering;
 
+  /// Ink mode: touches on a panel draw strokes instead of moving things.
+  final bool drawMode;
+  final Color sketchColor;
+  final double sketchWidth;
+
+  /// Long-press on a panel's empty space — the editor opens its menu.
+  final void Function(ComicPanelData panel, Offset position)? onPanelMenu;
+
   const ComicCanvasWidget({
     super.key,
     required this.page,
@@ -767,6 +893,10 @@ class ComicCanvasWidget extends StatelessWidget {
     this.onElementGestureEnd,
     this.addArt,
     this.editLettering,
+    this.drawMode = false,
+    this.sketchColor = const Color(0xFF0B1531),
+    this.sketchWidth = 3,
+    this.onPanelMenu,
   });
 
   double _ratio(String tag, {required double fallback}) {
@@ -813,59 +943,96 @@ class ComicCanvasWidget extends StatelessWidget {
       panel.height * pageSize.height,
     );
     final inner = Size(rect.width, rect.height);
+    final panelWidget = Container(
+      width: rect.width,
+      height: rect.height,
+      decoration: BoxDecoration(
+        color: dark ? const Color(0xFF0D1729) : Colors.white,
+        border: Border.all(
+            color: dark ? Colors.white : const Color(0xFF0B1531),
+            width: 2.5),
+      ),
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          for (final element in panel.elements)
+            TransformableElementWidget(
+              key: ValueKey(element.id),
+              data: element,
+              panelSize: inner,
+              editMode: editMode && !drawMode,
+              onGestureStart: onElementGestureStart,
+              onGestureEnd: (next) => _elementChanged(panel, next),
+              onDelete: () => _elementRemoved(panel, element),
+              onEdit: () => _elementEdited(panel, element),
+            ),
+          if (editMode && !drawMode && panel.elements.isEmpty)
+            Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    onPressed: () => addArt?.call(panel),
+                    icon: const Icon(Icons.add_photo_alternate_outlined,
+                        color: BookNestColors.cyan),
+                    tooltip: 'Add art',
+                  ),
+                  IconButton(
+                    onPressed: () => _addBubble(panel),
+                    icon: const Icon(Icons.chat_bubble_outline_rounded,
+                        color: BookNestColors.cyan),
+                    tooltip: 'Add lettering',
+                  ),
+                ],
+              ),
+            ),
+          if (editMode && drawMode)
+            _PanelInkSurface(
+              key: ValueKey('ink-${panel.id}'),
+              panel: panel,
+              color: sketchColor,
+              strokeWidth: sketchWidth,
+              onStrokeComplete: _strokeCompleted,
+            ),
+        ],
+      ),
+    );
     return Positioned(
       left: rect.left,
       top: rect.top,
       child: ClipRect(
         // Hard gutters: nothing leaks out of a panel, per spec.
-        child: Container(
-          width: rect.width,
-          height: rect.height,
-          decoration: BoxDecoration(
-            color: dark ? const Color(0xFF0D1729) : Colors.white,
-            border: Border.all(
-                color: dark ? Colors.white : const Color(0xFF0B1531),
-                width: 2.5),
-          ),
-          child: Stack(
-            clipBehavior: Clip.hardEdge,
-            children: [
-              for (final element in panel.elements)
-                TransformableElementWidget(
-                  key: ValueKey(element.id),
-                  data: element,
-                  panelSize: inner,
-                  editMode: editMode,
-                  onGestureStart: onElementGestureStart,
-                  onGestureEnd: (next) => _elementChanged(panel, next),
-                  onDelete: () => _elementRemoved(panel, element),
-                  onEdit: () => _elementEdited(panel, element),
-                ),
-              if (editMode && panel.elements.isEmpty)
-                Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: () => addArt?.call(panel),
-                        icon: const Icon(Icons.add_photo_alternate_outlined,
-                            color: BookNestColors.cyan),
-                        tooltip: 'Add art',
-                      ),
-                      IconButton(
-                        onPressed: () => _addBubble(panel),
-                        icon: const Icon(Icons.chat_bubble_outline_rounded,
-                            color: BookNestColors.cyan),
-                        tooltip: 'Add lettering',
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
+        child: editMode && !drawMode
+            ? GestureDetector(
+                behavior: HitTestBehavior.deferToChild,
+                onLongPressStart: (d) =>
+                    onPanelMenu?.call(panel, d.globalPosition),
+                child: panelWidget,
+              )
+            : panelWidget,
       ),
     );
+  }
+
+  void _strokeCompleted(ComicPanelData panel, List<double> points) {
+    _emit([
+      for (final p in page.panels)
+        if (p.id == panel.id)
+          p.withElements([
+            ...p.elements,
+            ComicElementData(
+              id: 'e${DateTime.now().microsecondsSinceEpoch % 100000000}',
+              type: 'sketch',
+              x: 0.5,
+              y: 0.5,
+              points: points,
+              colorValue: sketchColor.value,
+              strokeWidth: sketchWidth,
+            ),
+          ])
+        else
+          p,
+    ]);
   }
 
   void _emit(List<ComicPanelData> panels) => onPanelsChanged?.call(panels);
@@ -925,6 +1092,111 @@ class ComicCanvasWidget extends StatelessWidget {
         if (p.id == panel.id) p.withElements([...p.elements, edited]) else p,
     ]);
   }
+}
+
+/// The live drawing surface for one panel: collects a stroke while the
+/// finger moves, drops micro-jitter, and hands the finished stroke up.
+class _PanelInkSurface extends StatefulWidget {
+  final ComicPanelData panel;
+  final Color color;
+  final double strokeWidth;
+  final void Function(ComicPanelData panel, List<double> points)
+      onStrokeComplete;
+
+  const _PanelInkSurface({
+    super.key,
+    required this.panel,
+    required this.color,
+    required this.strokeWidth,
+    required this.onStrokeComplete,
+  });
+
+  @override
+  State<_PanelInkSurface> createState() => _PanelInkSurfaceState();
+}
+
+class _PanelInkSurfaceState extends State<_PanelInkSurface> {
+  List<double> _current = [];
+  List<List<double>> _wet = [];
+
+  void _addPoint(Offset local, Size size) {
+    final x = (local.dx / size.width).clamp(0.0, 1.0);
+    final y = (local.dy / size.height).clamp(0.0, 1.0);
+    if (_current.length >= 2) {
+      final dx = x - _current[_current.length - 2];
+      final dy = y - _current[_current.length - 1];
+      // micro-jitter filter: skip points closer than ~0.4% of the panel
+      if (dx * dx + dy * dy < 0.000016) return;
+    }
+    setState(() {
+      _current..add(x)..add(y);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final size = Size(constraints.maxWidth, constraints.maxHeight);
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanStart: (d) => _addPoint(d.localPosition, size),
+        onPanUpdate: (d) => _addPoint(d.localPosition, size),
+        onPanEnd: (_) {
+          if (_current.length >= 4) {
+            widget.onStrokeComplete(widget.panel, _current);
+          }
+          setState(() {
+            _current = [];
+          });
+        },
+        child: CustomPaint(
+          size: size,
+          painter: _WetInkPainter(
+            committed: _wet,
+            current: _current,
+            color: widget.color,
+            strokeWidth: widget.strokeWidth,
+          ),
+        ),
+      );
+    });
+  }
+}
+
+class _WetInkPainter extends CustomPainter {
+  final List<List<double>> committed;
+  final List<double> current;
+  final Color color;
+  final double strokeWidth;
+
+  _WetInkPainter({
+    required this.committed,
+    required this.current,
+    required this.color,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    if (current.length >= 4) {
+      final path = Path()
+        ..moveTo(current[0] * size.width, current[1] * size.height);
+      for (var i = 2; i + 1 < current.length; i += 2) {
+        path.lineTo(current[i] * size.width, current[i + 1] * size.height);
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WetInkPainter old) =>
+      old.current.length != current.length || old.color != color;
 }
 
 // Serialization helper for whole canvases kept outside this file:

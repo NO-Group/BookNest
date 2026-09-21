@@ -235,6 +235,57 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
                 const SizedBox(height: 8),
 
+                // Anime — the comic studio and shelf
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
+                  child: GlassPanel(
+                    radius: 18,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(18),
+                      onTap: () => context.push('/anime'),
+                      child: Padding(
+                        padding: const EdgeInsets.all(13),
+                        child: Row(children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(colors: [
+                                BookNestColors.navy,
+                                BookNestColors.navyDeep
+                              ]),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.brush_rounded,
+                                color: BookNestColors.cyan, size: 21),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Anime',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 15)),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Read community comics — or draw your own '
+                                  'in the Studio.',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right_rounded),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
                 // Brainstorm — the idea board
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),

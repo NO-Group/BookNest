@@ -7,14 +7,23 @@ you know it worked.
 
 ---
 
-## 0 · What just shipped (v2.28.0+53)
+## 0 · What just shipped (v2.29.0+54)
 
-**Anime is live.** Profile → **Anime** opens the comic shelf; the cyan
-**Studio** button creates comics — panel grids, your own art, speech
-bubbles with draggable tails — published as tiny JSON documents that
-cost nothing to store. No action needed from you beyond installing the
-new APK; the server updates through your usual step-2 paste (the Anime
-actions ride the same file).
+Anime grew an **ink engine** (draw freehand on panels, six colors,
+pen widths) plus long-press panel menus and a Discover entry. Chats
+now show a **mic button instead of send** while the text box is empty
+— voice notes are one tap, WhatsApp-style. And a **Desktop Release**
+workflow now builds BookNest for Windows, macOS and Linux.
+
+Your actions:
+1. Install the new APK (step 1 below) — or grab the PC builds from
+   **Actions → Desktop Release → Run workflow** (each OS uploads its
+   own artifact; macOS builds are unsigned: right-click → Open).
+2. **Library Import — one click, still pending.** Actions tab → branch
+   dropdown to `arena/01a03a7f-booknest` → Library Import → Run
+   workflow → Run. Your secrets are already in place; this single run
+   updates the server AND fills 1,500+ books + the full dictionary.
+   (After this first run, just ask me — I can run it for you.)
 
 ---
 

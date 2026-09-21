@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.29.0+54 — 2026-09-21 · Anime upgraded + voice-first chats + PCs
+
+- **Anime upgraded — the ink engine begins.** A real freehand **sketch
+  layer**: toggle the pen, pick a color and width, and draw directly on
+  any panel (strokes stay vector JSON, a few KB). Long-press any panel
+  for its menu — art, speech bubble, caption, or draw. Pages can now be
+  deleted, and Anime has a spot on **Discover**, with like counts on
+  the shelf.
+- **Voice notes are front and centre.** The chat composer now shows a
+  big **mic button whenever the text box is empty** — exactly like
+  WhatsApp. Start typing and it becomes the send arrow. No more
+  digging through the attachment sheet.
+- **BookNest for every PC.** A new **Desktop Release** workflow builds
+  **Windows**, **macOS** and **Linux** versions of the same app and
+  uploads installers as artifacts.
+
 ## 2.28.0+53 — 2026-09-21 · Anime: the comic engine lands
 
 - **Anime is here.** A full comic creation suite — the **Studio** —

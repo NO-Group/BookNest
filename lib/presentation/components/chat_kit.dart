@@ -2556,7 +2556,16 @@ class _ChatComposerState extends State<ChatComposer> {
   final ImagePicker _picker = ImagePicker();
   bool _uploading = false;
   bool _emotesOpen = false;
+  bool _inputEmpty = true;
   String? _photoName;
+
+  /// WhatsApp-style composer: the mic IS the send button while the field
+  /// is empty, so voice notes are a first-class citizen — never tucked
+  /// inside the attachment sheet.
+  void _onInputChanged() {
+    final empty = _input.text.trim().isEmpty;
+    if (empty != _inputEmpty) setState(() => _inputEmpty = empty);
+  }
 
   Future<void> _sendEmote(EmojiDef emote) async {
     if (_uploading || widget.onSendEmote == null) return;
@@ -2569,7 +2578,14 @@ class _ChatComposerState extends State<ChatComposer> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _input.addListener(_onInputChanged);
+  }
+
+  @override
   void dispose() {
+    _input.removeListener(_onInputChanged);
     _input.dispose();
     super.dispose();
   }
@@ -2980,15 +2996,27 @@ class _ChatComposerState extends State<ChatComposer> {
               ),
             ),
                 const SizedBox(width: 6),
-                IconButton.filled(
-                  onPressed: widget.enabled ? _send : null,
-                  icon: const Icon(Icons.send_rounded, size: 20),
-                  style: IconButton.styleFrom(
-                    backgroundColor: BookNestColors.cyan,
-                    foregroundColor: Colors.black,
+                if (_inputEmpty && widget.onSendVoice != null)
+                  IconButton.filled(
+                    onPressed:
+                        widget.enabled && !_uploading ? _recordVoice : null,
+                    icon: const Icon(Icons.mic_rounded, size: 20),
+                    style: IconButton.styleFrom(
+                      backgroundColor: BookNestColors.cyan,
+                      foregroundColor: Colors.black,
+                    ),
+                    tooltip: 'Hold a thought? Record a voice note',
+                  )
+                else
+                  IconButton.filled(
+                    onPressed: widget.enabled ? _send : null,
+                    icon: const Icon(Icons.send_rounded, size: 20),
+                    style: IconButton.styleFrom(
+                      backgroundColor: BookNestColors.cyan,
+                      foregroundColor: Colors.black,
+                    ),
+                    tooltip: 'Send',
                   ),
-                  tooltip: 'Send',
-                ),
               ],
             ),
           ],

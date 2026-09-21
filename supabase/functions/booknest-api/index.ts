@@ -1643,6 +1643,7 @@ Deno.serve(async (req: Request) => {
           ownerName: c.ownerName ?? 'Anonymous',
           ownerId: c.ownerId,
           pagesCount: Array.isArray(c.pages) ? c.pages.length : 1,
+          likeCount: c.likeCount ?? 0,
           updatedAt: c.updatedAt,
         })) });
       }

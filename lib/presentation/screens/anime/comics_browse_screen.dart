@@ -158,8 +158,30 @@ class _ComicsBrowseScreenState extends State<ComicsBrowseScreen> {
                                 style: TextStyle(
                                     color: theme.hintColor, fontSize: 12),
                               ),
-                              trailing:
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (((comic['likeCount'] as num?) ?? 0) > 0)
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.only(right: 8),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.favorite_rounded,
+                                              size: 14, color: Colors.redAccent),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            '${(comic['likeCount'] as num).toInt()}',
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   const Icon(Icons.chevron_right_rounded),
+                                ],
+                              ),
                               onTap: () => context
                                   .push('/anime/${comic['id']}'),
                             ),

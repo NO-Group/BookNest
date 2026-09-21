@@ -45,7 +45,19 @@ class _ComicEditorScreenState extends State<ComicEditorScreen> {
   int _page = 0;
   bool _saving = false;
   bool _uploading = false;
+  bool _drawMode = false;
+  Color _ink = const Color(0xFF0B1531);
+  double _penWidth = 3;
   String _grid = 'Classic 2×2';
+
+  static const List<Color> _inkPalette = [
+    Color(0xFF0B1531), // ink navy
+    Colors.white,
+    BookNestColors.cyan,
+    Color(0xFFE53935), // marker red
+    Color(0xFFFDD835), // marker yellow
+    Color(0xFF43A047), // marker green
+  ];
 
   @override
   void initState() {
@@ -337,6 +349,32 @@ class _ComicEditorScreenState extends State<ComicEditorScreen> {
                         icon: const Icon(Icons.chevron_right_rounded),
                       ),
                       const Spacer(),
+                      // Ink mode: draw straight on the panels.
+                      IconButton(
+                        tooltip: _drawMode
+                            ? 'Stop drawing'
+                            : 'Draw on the panels',
+                        onPressed: () =>
+                            setState(() => _drawMode = !_drawMode),
+                        icon: Icon(
+                          Icons.draw_rounded,
+                          size: 20,
+                          color: _drawMode
+                              ? BookNestColors.cyan
+                              : theme.hintColor,
+                        ),
+                      ),
+                      if (_pages.length > 1)
+                        IconButton(
+                          tooltip: 'Delete this page',
+                          onPressed: () => setState(() {
+                            _pages.removeAt(_page);
+                            _page = _page.clamp(0, _pages.length - 1);
+                            _saveDraft();
+                          }),
+                          icon: const Icon(Icons.delete_outline_rounded,
+                              size: 20, color: Colors.redAccent),
+                        ),
                       PopupMenuButton<String>(
                         tooltip: 'Panel grid',
                         onSelected: (g) => setState(() {
@@ -372,17 +410,66 @@ class _ComicEditorScreenState extends State<ComicEditorScreen> {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(14),
-                    child: ComicCanvasWidget(
-                      key: ValueKey(
-                          'canvas-$_page-${_pages[_page].panels.length}-$_grid'),
-                      page: _pages[_page],
-                      editMode: true,
-                      onPanelsChanged: (panels) {
-                        _pages[_page] = _pages[_page].withPanels(panels);
-                        _saveDraft();
-                      },
-                      addArt: _pickAndUpload,
-                      editLettering: _editLettering,
+                    child: Column(
+                      children: [
+                        if (_drawMode)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                for (final color in _inkPalette)
+                                  GestureDetector(
+                                    onTap: () => setState(() => _ink = color),
+                                    child: Container(
+                                      width: _ink == color ? 30 : 24,
+                                      height: _ink == color ? 30 : 24,
+                                      margin:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 4),
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: _ink == color
+                                              ? BookNestColors.cyan
+                                              : Colors.transparent,
+                                          width: 2.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                const SizedBox(width: 10),
+                                Slider(
+                                  value: _penWidth,
+                                  min: 1.5,
+                                  max: 10,
+                                  onChanged: (v) =>
+                                      setState(() => _penWidth = v),
+                                ),
+                              ],
+                            ),
+                          ),
+                        Expanded(
+                          child: ComicCanvasWidget(
+                            key: ValueKey(
+                                'canvas-$_page-${_pages[_page].panels.length}-$_grid-$_drawMode'),
+                            page: _pages[_page],
+                            editMode: true,
+                            drawMode: _drawMode,
+                            sketchColor: _ink,
+                            sketchWidth: _penWidth,
+                            onPanelsChanged: (panels) {
+                              _pages[_page] =
+                                  _pages[_page].withPanels(panels);
+                              _saveDraft();
+                            },
+                            addArt: _pickAndUpload,
+                            editLettering: _editLettering,
+                            onPanelMenu: _openPanelMenu,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -421,6 +508,97 @@ class _ComicEditorScreenState extends State<ComicEditorScreen> {
               ],
             ),
     );
+  }
+
+  /// Long-press any panel for its menu — add anything, anywhere.
+  Future<void> _openPanelMenu(
+      ComicPanelData panel, Offset position) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.add_photo_alternate_outlined,
+                  color: BookNestColors.cyan),
+              title: const Text('Add art',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              onTap: () => Navigator.pop(sheetContext, 'art'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.chat_bubble_outline_rounded,
+                  color: BookNestColors.cyan),
+              title: const Text('Add speech bubble',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              onTap: () => Navigator.pop(sheetContext, 'bubble'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.subtitles_outlined,
+                  color: BookNestColors.cyan),
+              title: const Text('Add caption',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              onTap: () => Navigator.pop(sheetContext, 'caption'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.draw_rounded,
+                  color: BookNestColors.cyan),
+              title: const Text('Draw here (ink mode)',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              onTap: () => Navigator.pop(sheetContext, 'ink'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    switch (choice) {
+      case 'art':
+        final url = await _pickAndUpload(panel);
+        if (url == null || url.isEmpty || !mounted) return;
+        _insertIntoPanel(
+            panel.id,
+            ComicElementData(
+              id: 'e${DateTime.now().microsecondsSinceEpoch % 100000000}',
+              type: 'image',
+              src: url,
+              x: 0.5,
+              y: 0.55,
+              width: 0.72,
+            ));
+        return;
+      case 'bubble':
+        final el = await _editLettering(ComicElementData(
+          id: 'e${DateTime.now().microsecondsSinceEpoch % 100000000}',
+          type: 'speech_bubble',
+          style: 'roundedBox',
+          text: 'Say something…',
+          x: 0.5,
+          y: 0.3,
+          width: 0.5,
+          anchorX: 0.5,
+          anchorY: 0.58,
+        ));
+        if (el == null || el.text.trim().isEmpty || !mounted) return;
+        _insertIntoPanel(panel.id, el);
+        return;
+      case 'caption':
+        final el = await _editLettering(ComicElementData(
+          id: 'e${DateTime.now().microsecondsSinceEpoch % 100000000}',
+          type: 'caption',
+          text: 'Meanwhile…',
+          x: 0.5,
+          y: 0.08,
+          width: 0.6,
+        ));
+        if (el == null || el.text.trim().isEmpty || !mounted) return;
+        _insertIntoPanel(panel.id, el);
+        return;
+      case 'ink':
+        setState(() => _drawMode = true);
+        return;
+    }
   }
 
   Future<void> _addArtToFirstFilled() async {
