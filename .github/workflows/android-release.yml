@@ -57,6 +57,8 @@ jobs:
             probe "chat.deleteMessage" '{"action":"chat.deleteMessage"}'
             probe "feed.like         " '{"action":"feed.like"}'
             probe "books.list        " '{"action":"books.list","payload":{"limit":3}}'
+            probe "dictionary.search " '{"action":"dictionary.search","payload":{"q":"serendipity","limit":2}}'
+            probe "comics.list       " '{"action":"comics.list"}'
           } > backend-probe.txt
           cat backend-probe.txt
 

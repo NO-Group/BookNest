@@ -1,12 +1,13 @@
 name: Desktop Release
 
-# BookNest for every PC: Windows, macOS and Linux installers, built from
-# the same code as the phone app. Run it from the Actions tab ("Run
-# workflow") — each OS uploads its own artifact:
+# BookNest for every PC: Windows, macOS and Linux, built from the same
+# code as the phone app. Each OS uploads its own artifact:
 #   • Windows → BookNest-windows (unzip, run booknest.exe)
 #   • macOS   → BookNest-macos (unzip, drag to Applications; unsigned,
 #                so right-click → Open the first time)
 #   • Linux   → BookNest-linux (untar, run ./booknest)
+# When a build fails, the exact compiler error is committed into the
+# repo (desktop-error-<os>.txt) so it can be read from anywhere.
 
 on:
   workflow_dispatch:
@@ -19,7 +20,7 @@ on:
       - '.github/workflows/desktop-release.yml'
 
 permissions:
-  contents: read
+  contents: write # pushes its own diagnostics when a build fails
 
 jobs:
   windows:
@@ -31,17 +32,30 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Ensure desktop targets
-        run: flutter create --platforms=windows --project-name booknest .
       - run: flutter pub get
       - name: Build Windows
-        run: flutter build windows --release
+        shell: pwsh
+        run: |
+          flutter build windows --release 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Commit build diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          tail -c 2500 build.log > desktop-error-windows.txt 2>/dev/null || true
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git add desktop-error-windows.txt || true
+          git commit -q -m "Desktop build diagnostics: windows [skip ci]" || true
+          git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
       - name: Package
+        if: success()
         shell: pwsh
         run: |
           Compress-Archive -Path build/windows/x64/runner/Release/* `
             -DestinationPath BookNest-windows.zip
       - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: BookNest-windows
           path: BookNest-windows.zip
@@ -55,16 +69,27 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Ensure desktop targets
-        run: flutter create --platforms=macos --project-name booknest .
       - run: flutter pub get
       - name: Build macOS
-        run: flutter build macos --release
+        run: |
+          set -o pipefail
+          flutter build macos --release 2>&1 | tee build.log
+      - name: Commit build diagnostics on failure
+        if: failure()
+        run: |
+          tail -c 2500 build.log > desktop-error-macos.txt 2>/dev/null || true
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git add desktop-error-macos.txt || true
+          git commit -q -m "Desktop build diagnostics: macos [skip ci]" || true
+          git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
       - name: Package
+        if: success()
         run: |
           cd build/macos/Build/Products/Release
           ditto -c -k --sequesterRsrc --keepParent booknest.app ../../../../BookNest-macos.zip
       - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: BookNest-macos
           path: BookNest-macos.zip
@@ -83,16 +108,27 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Ensure desktop targets
-        run: flutter create --platforms=linux --project-name booknest .
       - run: flutter pub get
       - name: Build Linux
-        run: flutter build linux --release
+        run: |
+          set -o pipefail
+          flutter build linux --release 2>&1 | tee build.log
+      - name: Commit build diagnostics on failure
+        if: failure()
+        run: |
+          tail -c 2500 build.log > desktop-error-linux.txt 2>/dev/null || true
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git add desktop-error-linux.txt || true
+          git commit -q -m "Desktop build diagnostics: linux [skip ci]" || true
+          git push -q origin "HEAD:${GITHUB_REF_NAME}" || true
       - name: Package
+        if: success()
         run: |
           tar -czf BookNest-linux.tar.gz -C build/linux/x64/release/bundle .
           mv BookNest-linux.tar.gz ~/BookNest-linux.tar.gz
       - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: BookNest-linux
           path: ~/BookNest-linux.tar.gz
