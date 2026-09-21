@@ -410,7 +410,7 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
                     ),
                     Expanded(
                       child: quill.QuillEditor.basic(
-                        controller: _previewController,
+                        controller: _previewCtrl,
                         config: quill.QuillEditorConfig(
                           padding:
                               const EdgeInsets.fromLTRB(20, 8, 20, 24),
