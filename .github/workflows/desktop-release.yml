@@ -59,6 +59,49 @@ jobs:
           name: BookNest-windows
           path: BookNest-windows.zip
 
+  collect-diagnostics:
+    # Runs whenever any build fails: pulls the run's own logs from the
+    # API (this works from GitHub's network even when nothing else can
+    # read them) and commits the exact compiler errors into the repo.
+    needs: [windows, macos, linux]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gather the failed builds' logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          curl -sL --max-time 120 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/logs" \
+            -o logs.zip || true
+          ls -la logs.zip || true
+          mkdir -p extracted
+          unzip -o -q logs.zip -d extracted || true
+          ls extracted | head -40 || true
+          {
+            for f in extracted/*.txt; do
+              [ -e "$f" ] || continue
+              case "$f" in
+                *uild*) echo "=== $f ===";;
+                *) continue;;
+              esac
+              grep -aiE "error:|FAILURE:|Exception|CMake Error|fatal error|Unable to|feature not available|\.dart:" "$f" | tail -25 || true
+            done
+          } > desktop-error.txt
+          [ -s desktop-error.txt ] || { echo "(no matched errors — file list follows)"; ls extracted; } > desktop-error.txt
+      - name: Commit the diagnostics
+        run: |
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git add desktop-error.txt
+          git commit -q -m "Desktop build diagnostics [skip ci]" || true
+          git fetch origin "${GITHUB_REF_NAME}" || true
+          git rebase FETCH_HEAD || { git rebase --abort 2>/dev/null || true; }
+          git push origin "HEAD:${GITHUB_REF_NAME}" || true
+
   macos:
     runs-on: macos-latest
     timeout-minutes: 60
