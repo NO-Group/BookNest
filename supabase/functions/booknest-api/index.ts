@@ -1494,6 +1494,85 @@ Deno.serve(async (req: Request) => {
         return ok({ imported, skipped });
       }
 
+      // ── dictionary: Word Nest server edition (WordNet 3.1) ─────────────
+      // The bundled edition (94 curated words) works offline; this is the
+      // full library — ~97,000 entries imported into the dictionary DB.
+      case 'dictionary.search': {
+        const q = String(p.q ?? '').trim().slice(0, 60);
+        if (!q) return ok({ entries: [] });
+        const limit = Math.min(Math.max(Number(p.limit ?? 24) || 24, 1), 40);
+        const d = await dbFor('dictionary');
+        const col = d.collection('words');
+        const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const proj = { projection: { _id: 0 } };
+        const from = (rows: Record<string, unknown>[]) =>
+          rows.map((r) => ({ w: r.w, p: r.p, d: r.d, e: r.e, s: r.s ?? [] }));
+        const prefix = from(await col.find(
+          { w: { $regex: '^' + esc, $options: 'i' } }, proj).limit(limit).toArray());
+        const seen = new Set(prefix.map((r) => `${r.w}|${r.p}`));
+        if (prefix.length < limit) {
+          const infix = from(await col.find(
+            { w: { $regex: esc, $options: 'i' } }, proj).limit(limit * 2).toArray());
+          for (const row of infix) {
+            const key = `${row.w}|${row.p}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              prefix.push(row);
+              if (prefix.length >= limit) break;
+            }
+          }
+        }
+        return ok({ entries: prefix.slice(0, limit) });
+      }
+
+      case 'dictionary.entry': {
+        const word = String(p.word ?? '').trim().toLowerCase().slice(0, 60);
+        if (!word) return fail('Which word?');
+        const d = await dbFor('dictionary');
+        const rows = await d.collection('words').find(
+          { w: word }, { projection: { _id: 0 } }).toArray();
+        return ok({ entries: rows.map((r) => ({ w: r.w, p: r.p, d: r.d, e: r.e, s: r.s ?? [] })) });
+      }
+
+      case 'dictionary.import': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const rows = Array.isArray(p.words) ? p.words : [];
+        if (rows.length === 0) return fail('No words in the batch');
+        if (rows.length > 300) return fail('Batch too large — send 300 or fewer');
+        const d = await dbFor('dictionary');
+        const col = d.collection('words');
+        await col.createIndex({ w: 1 });
+        const ops = [];
+        for (const row of rows) {
+          const w = String(row.w ?? '').trim().toLowerCase().slice(0, 60);
+          const def = String(row.d ?? '').trim().slice(0, 1600);
+          if (!w || !def) continue;
+          const pos = String(row.p ?? '').trim().slice(0, 12) || 'word';
+          ops.push({
+            replaceOne: {
+              filter: { _id: w + '|' + pos },
+              replacement: {
+                w, p: pos, d: def,
+                e: String(row.e ?? '').trim().slice(0, 300),
+                s: Array.isArray(row.s)
+                  ? row.s.map((x) => String(x).slice(0, 40)).slice(0, 10)
+                  : [],
+              },
+              upsert: true,
+            },
+          });
+        }
+        if (ops.length === 0) return ok({ imported: 0, skipped: rows.length });
+        const res = await col.bulkWrite(ops as never, { ordered: false });
+        return ok({ imported: res.upsertedCount + res.modifiedCount, skipped: rows.length - ops.length });
+      }
+
       // ── calls: STUN + (when configured) TURN with ephemeral credentials ──
       // The TURN secret never leaves the server; readers get a short-lived
       // HMAC credential that expires on its own (Cloudflare-TURN/coTURN

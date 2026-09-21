@@ -78,11 +78,11 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
       });
       return;
     }
-    final found = await DictionaryService.instance.search(q);
+    final found = await DictionaryService.instance.searchEverywhere(q);
     if (!mounted) return;
     setState(() {
       _results = found;
-      _searching = true;
+      _searching = false;
     });
 
     await _rememberRecent(q);
@@ -273,6 +273,16 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
       ),
     ));
     children.addAll(_results.map(_entryTile));
+    if (_results.isNotEmpty) {
+      children.add(const SizedBox(height: 18));
+      children.add(Center(
+        child: Text(
+          'English definitions · WordNet 3.1, Princeton University',
+          style: TextStyle(
+              fontSize: 10.5, color: theme.hintColor.withOpacity(.8)),
+        ),
+      ));
+    }
 
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
@@ -346,7 +356,19 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     }
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      children: _results.map(_entryTile).toList(),
+      children: [
+        ..._results.map(_entryTile),
+        if (_results.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Center(
+            child: Text(
+              'English definitions · WordNet 3.1, Princeton University',
+              style: TextStyle(
+                  fontSize: 10.5, color: theme.hintColor.withOpacity(.8)),
+            ),
+          ),
+        ],
+      ],
     );
   }
 

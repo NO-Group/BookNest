@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
+import 'backend_api.dart';
+
 /// One dictionary entry from the bundled Word Nest edition.
 class WordEntry {
   final String word;
@@ -80,6 +82,39 @@ class DictionaryService {
 
   /// Ranked search: exact prefix matches first, then substring matches,
   /// then matches inside definitions or synonyms.
+  /// Server-backed search — the full Word Nest edition (~97,000 entries
+  /// from WordNet 3.1, served from the dictionary cloud). Returns null
+  /// when offline or unreachable, so callers can fall back to bundled.
+  Future<List<WordEntry>?> searchServer(String query) async {
+    try {
+      final res = await BackendApi.instance
+          .call('dictionary.search', {'q': query, 'limit': 30});
+      if (res == null) return null;
+      final list = (res['entries'] as List?) ?? const [];
+      return list
+          .whereType<Map>()
+          .map((row) => WordEntry.fromJson(Map<String, dynamic>.from(row)))
+          .where((e) => e.word.isNotEmpty && e.definition.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The real search: the server edition first, then the hand-written
+  /// bundled entries folded in (their examples are the good ones).
+  /// Bundled-only when the cloud is away.
+  Future<List<WordEntry>> searchEverywhere(String query) async {
+    final bundled = await search(query);
+    final server = await searchServer(query);
+    if (server == null) return bundled;
+    final seen = <String>{for (final e in server) '${e.word}|${e.pos}'};
+    return [
+      ...server,
+      ...bundled.where((e) => !seen.contains('${e.word}|${e.pos}')),
+    ];
+  }
+
   Future<List<WordEntry>> search(String query) async {
     final all = await entries();
     final q = query.trim().toLowerCase();
