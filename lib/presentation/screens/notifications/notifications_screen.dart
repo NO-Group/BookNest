@@ -43,6 +43,44 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  /// Every notification type leads somewhere real: chats open, books
+  /// open, profiles open. Tapping also settles that one notification.
+  void _openNotification(Map<String, dynamic> item, String type) {
+    final id = item['id']?.toString() ?? '';
+    if (id.isNotEmpty) {
+      BackendApi.instance.call(
+          'notifications.read', {'notificationId': id});
+    }
+    switch (type) {
+      case 'dm':
+      case 'message':
+        final conversationId = item['conversationId']?.toString() ?? '';
+        if (conversationId.isNotEmpty) {
+          context.push('/chat/$conversationId');
+        }
+        return;
+      case 'review':
+      case 'like':
+      case 'bookmark':
+      case 'boost':
+      case 'book':
+        final bookId = item['bookId']?.toString() ?? '';
+        if (bookId.isNotEmpty) {
+          context.push('/book/$bookId');
+        }
+        return;
+      case 'follow':
+        final actorId = item['actorId']?.toString() ?? '';
+        if (actorId.isNotEmpty) {
+          context.push('/user/$actorId');
+        }
+        return;
+      default:
+        // System notices live here — nothing to open.
+        return;
+    }
+  }
+
   IconData _icon(String type) {
     switch (type) {
       case 'dm':
@@ -146,11 +184,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             borderRadius: BorderRadius.circular(16),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(16),
-                              onTap: type == 'dm' &&
-                                      item['conversationId'] != null
-                                  ? () => context.push(
-                                      '/chat/${item['conversationId']}')
-                                  : null,
+                              onTap: () =>
+                                  _openNotification(item, type),
                               child: Padding(
                                 padding: const EdgeInsets.all(13),
                                 child: Row(

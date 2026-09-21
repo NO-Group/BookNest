@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +13,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/theme.dart';
 import '../../config/locales.dart';
@@ -556,15 +558,19 @@ class _ChatBubbleState extends State<ChatBubble>
         dark: dark,
       );
     } else {
-      content = Text(
-        _text,
-        style: TextStyle(
+      content = _LinkText(
+        text: _text,
+        baseStyle: TextStyle(
           color: mine
               ? Colors.white
               : (dark ? BookNestColors.darkTextPrimary : BookNestColors.navyDeep),
           height: 1.35,
           fontSize: 15,
         ),
+        linkColor: BookNestColors.cyan,
+        // A message that is (mostly) a link earns a preview card.
+        showPreview: _type == 'text' && firstUrlIn(_text) != null,
+        url: firstUrlIn(_text),
       );
     }
 
@@ -3485,6 +3491,239 @@ class _ChatThemeSheetState extends State<_ChatThemeSheet> {
               ),
               const SizedBox(height: 10),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Links in chat: tappable everywhere, preview cards for link messages ─────
+
+final RegExp _urlPattern = RegExp(
+    r'https?:\/\/[^\s<>"]+[^\s<>"\.,;:!\)\]]',
+    caseSensitive: false);
+
+/// The first URL in a message body, or null.
+String? firstUrlIn(String text) {
+  final m = _urlPattern.firstMatch(text);
+  return m?.group(0);
+}
+
+/// Chat text with every URL tappable — and when the message is a link,
+/// a compact preview card (host, title, image) fetched server-side so
+/// the app never touches arbitrary URLs itself.
+class _LinkText extends StatefulWidget {
+  final String text;
+  final TextStyle baseStyle;
+  final Color linkColor;
+  final bool showPreview;
+  final String? url;
+
+  const _LinkText({
+    required this.text,
+    required this.baseStyle,
+    required this.linkColor,
+    this.showPreview = false,
+    this.url,
+  });
+
+  @override
+  State<_LinkText> createState() => _LinkTextState();
+}
+
+class _LinkTextState extends State<_LinkText> {
+  final List<TapGestureRecognizer> _recognizers = [];
+
+  @override
+  void dispose() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
+    super.dispose();
+  }
+
+  Future<void> _open(String link) async {
+    final parsed = Uri.tryParse(link);
+    if (parsed == null) return;
+    await launchUrl(parsed, mode: LaunchMode.externalApplication);
+  }
+
+  TextSpan _buildSpans(String text) {
+    final spans = <TextSpan>[];
+    var cursor = 0;
+    for (final match in _urlPattern.allMatches(text)) {
+      if (match.start > cursor) {
+        spans.add(TextSpan(text: text.substring(cursor, match.start)));
+      }
+      final link = match.group(0);
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () => _open(link!);
+      _recognizers.add(recognizer);
+      spans.add(TextSpan(
+        text: link,
+        style: TextStyle(
+            color: widget.linkColor,
+            decoration: TextDecoration.underline,
+            decorationColor: widget.linkColor.withOpacity(.5),
+            fontWeight: FontWeight.w600),
+        recognizer: recognizer,
+      ));
+      cursor = match.end;
+    }
+    if (cursor < text.length) {
+      spans.add(TextSpan(text: text.substring(cursor)));
+    }
+    return TextSpan(style: widget.baseStyle, children: spans);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        RichText(
+          text: _buildSpans(widget.text),
+        ),
+        if (widget.showPreview && widget.url != null)
+          _LinkPreviewCard(url: widget.url!, onOpen: _open),
+      ],
+    );
+    return body;
+  }
+}
+
+/// One link's preview, fetched once per URL per session through the
+/// edge function. Compact: host line, title, image when there is one.
+class _LinkPreviewCard extends StatefulWidget {
+  final String url;
+  final void Function(String) onOpen;
+
+  const _LinkPreviewCard({required this.url, required this.onOpen});
+
+  @override
+  State<_LinkPreviewCard> createState() => _LinkPreviewCardState();
+}
+
+class _LinkPreviewCardState extends State<_LinkPreviewCard> {
+  static final Map<String, Map<String, dynamic>?> _fetched = {};
+  Map<String, dynamic>? _preview;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (_fetched.containsKey(widget.url)) {
+      if (mounted) {
+        setState(() {
+          _preview = _fetched[widget.url];
+          _loading = false;
+        });
+      }
+      return;
+    }
+    final res = await BackendApi.instance
+        .call('link.preview', {'url': widget.url});
+    final preview = res?['preview'];
+    _fetched[widget.url] =
+        preview is Map ? Map<String, dynamic>.from(preview) : null;
+    if (!mounted) return;
+    setState(() {
+      _preview = _fetched[widget.url];
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 12,
+              height: 12,
+              child: const CircularProgressIndicator(
+                  strokeWidth: 2, color: BookNestColors.cyan),
+            ),
+            const SizedBox(width: 8),
+            Text('Loading preview…',
+                style: TextStyle(
+                    fontSize: 11.5,
+                    color: BookNestColors.cyan.withOpacity(.8))),
+          ],
+        ),
+      );
+    }
+    final preview = _preview;
+    if (preview == null) return const SizedBox.shrink();
+    final title = preview['title']?.toString() ?? '';
+    final host = preview['host']?.toString() ?? '';
+    final image = preview['imageUrl']?.toString() ?? '';
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Material(
+        color: Colors.black.withOpacity(.18),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => widget.onOpen(widget.url),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(9),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(host.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: .6,
+                              color: BookNestColors.cyan)),
+                      if (title.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.25)),
+                        ),
+                    ],
+                  ),
+                ),
+                if (image.startsWith('http')) ...[
+                  const SizedBox(width: 9),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl:
+                          CloudinaryService.transformUrl(image, width: 160),
+                      width: 62,
+                      height: 62,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 160,
+                      errorWidget: (_, __, ___) => const SizedBox(width: 62),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),

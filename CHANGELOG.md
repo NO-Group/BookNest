@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.26.3+51 — 2026-09-20 · The half-baked sweep: links, search, notifications
+
+- **Links in chat are alive.** Every URL in a message is tappable, and
+  a message that IS a link gets a real preview card — host, title and
+  the page's own image, fetched server-side by a new SSRF-guarded
+  `link.preview` edge action (the app itself never touches arbitrary
+  URLs; the phone-side fetch was the reason previews never worked).
+- **Global search is actually global.** It found books and readers —
+  it now also finds **group spaces** (clubs, communities,
+  organizations, schools) and **Word Nest dictionary entries**, each
+  with its own section and one-tap navigation.
+- **Notifications now lead somewhere.** Every type opens its
+  destination — chats, the reviewed/liked book, the new follower's
+  profile — and tapping settles that notification. Before, only chat
+  notifications were tappable at all.
+
 ## 2.26.2+50 — 2026-09-19 · The repository pattern for books
 
 - Books now speak through one **BookRepository**: the shelf, a single

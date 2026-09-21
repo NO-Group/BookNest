@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/dictionary_service.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 
@@ -24,6 +25,8 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
 
   List<Map<String, dynamic>> _books = [];
   List<Map<String, dynamic>> _people = [];
+  List<Map<String, dynamic>> _groups = [];
+  List<WordEntry> _words = [];
   bool _searching = false;
   bool _searched = false;
 
@@ -48,6 +51,8 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
         setState(() {
           _books = [];
           _people = [];
+          _groups = [];
+          _words = [];
           _searched = false;
         });
         return;
@@ -60,6 +65,8 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     setState(() => _searching = true);
     try {
       final pattern = '${Uri.encodeComponent(term)}';
+      final lowercase = term.toLowerCase();
+      final kinds = ['clubs', 'communities', 'organizations', 'schools'];
       final results = await Future.wait<dynamic>([
         BackendApi.instance
             .call('books.list', {'search': term, 'limit': 20})
@@ -70,8 +77,30 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
             .select('id, username, display_name, avatar_url')
             .or('display_name.ilike.%$pattern%,username.ilike.%$pattern%')
             .limit(12),
+        // Every public group space, name-matched here — the shelves are
+        // small enough that a client pass is honest and instant.
+        Future.wait<List<dynamic>>(kinds
+            .map((kind) => BackendApi.instance
+                .call('groups.list', {'kind': kind})
+                .then((res) => (res?['groups'] as List?) ?? const []))),
+        DictionaryService.instance.search(term),
       ]);
       if (!mounted) return;
+      final groupRows = <Map<String, dynamic>>[];
+      final perKind = results[2] as List<List<dynamic>>;
+      for (var k = 0; k < kinds.length; k++) {
+        for (final row in perKind[k]) {
+          final g = Map<String, dynamic>.from(row as Map);
+          final name =
+              (g['name'] ?? g['title'] ?? '').toString().toLowerCase();
+          if (name.contains(lowercase)) {
+            g['kind'] = kinds[k];
+            groupRows.add(g);
+          }
+          if (groupRows.length >= 8) break;
+        }
+        if (groupRows.length >= 8) break;
+      }
       setState(() {
         _books = (results[0] as List)
             .map((row) => Map<String, dynamic>.from(row as Map))
@@ -79,6 +108,8 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
         _people = (results[1] as List)
             .map((row) => Map<String, dynamic>.from(row as Map))
             .toList();
+        _groups = groupRows;
+        _words = (results[3] as List<WordEntry>).take(6).toList();
         _searching = false;
         _searched = true;
       });
@@ -241,6 +272,98 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                           )),
                       const SizedBox(height: 18),
                     ],
+                    if (_groups.isNotEmpty) ...[
+                      const SectionHeader(title: 'Group spaces'),
+                      const SizedBox(height: 10),
+                      ..._groups.map((group) => Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Material(
+                              color: theme.colorScheme.surface
+                                  .withOpacity(.72),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  side: BorderSide(
+                                      color: BookNestColors.cyan
+                                          .withOpacity(.16))),
+                              borderRadius: BorderRadius.circular(16),
+                              child: ListTile(
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(16)),
+                                leading: CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: BookNestColors.navy,
+                                  child: Text(
+                                    (group['name'] ?? group['title'] ?? '#')
+                                        .toString()
+                                        .characters
+                                        .first
+                                        .toUpperCase(),
+                                    style: const TextStyle(
+                                        color: BookNestColors.cyan,
+                                        fontWeight: FontWeight.w800),
+                                  ),
+                                ),
+                                title: Text(
+                                    (group['name'] ?? group['title'] ?? '')
+                                        .toString(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700)),
+                                subtitle: Text(
+                                    _kindLabel(group['kind'].toString()),
+                                    style: TextStyle(
+                                        color: theme.hintColor,
+                                        fontSize: 12)),
+                                trailing: const Icon(
+                                    Icons.chevron_right_rounded),
+                                onTap: () => context.push(
+                                    '/${_kindRoute(group['kind'].toString())}/${group['id']}'),
+                              ),
+                            ),
+                          )),
+                      const SizedBox(height: 18),
+                    ],
+                    if (_words.isNotEmpty) ...[
+                      const SectionHeader(title: 'Word Nest'),
+                      const SizedBox(height: 10),
+                      ..._words.map((entry) => Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Material(
+                              color: theme.colorScheme.surface
+                                  .withOpacity(.72),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  side: BorderSide(
+                                      color: BookNestColors.cyan
+                                          .withOpacity(.16))),
+                              borderRadius: BorderRadius.circular(16),
+                              child: ListTile(
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(16)),
+                                leading: const Icon(
+                                    Icons.menu_book_rounded,
+                                    color: BookNestColors.cyan),
+                                title: Text(entry.word,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700)),
+                                subtitle: Text(entry.definition,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        color: theme.hintColor,
+                                        fontSize: 12)),
+                                trailing: const Icon(
+                                    Icons.chevron_right_rounded),
+                                onTap: () => context.push(
+                                    '/dictionary?q=${Uri.encodeComponent(entry.word)}'),
+                              ),
+                            ),
+                          )),
+                      const SizedBox(height: 18),
+                    ],
                     if (_books.isNotEmpty) ...[
                       const SectionHeader(title: 'Books'),
                       const SizedBox(height: 10),
@@ -284,7 +407,10 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                             ),
                           )),
                     ],
-                    if (_books.isEmpty && _people.isEmpty)
+                    if (_books.isEmpty &&
+                        _people.isEmpty &&
+                        _groups.isEmpty &&
+                        _words.isEmpty)
                       const Padding(
                         padding: EdgeInsets.only(top: 60),
                         child: EmptyState(
@@ -297,4 +423,23 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                 ),
     );
   }
+
+  String _kindLabel(String kind) {
+    if (kind.isEmpty) return '';
+    return kind[0].toUpperCase() + kind.substring(1);
+  }
+
+  String _kindRoute(String kind) {
+    switch (kind) {
+      case 'communities':
+        return 'community';
+      case 'organizations':
+        return 'organization';
+      case 'schools':
+        return 'school';
+      default:
+        return 'club';
+    }
+  }
 }
+
