@@ -7,6 +7,29 @@ you know it worked.
 
 ---
 
+## 0 · What just shipped (v2.26.3+51) — nothing new for you
+
+Three features that were half-finished are now finished. **You have no
+new clicks for these** — they came alive with this release:
+
+- **Link previews in chats** — send a link in any conversation: it
+  turns tappable and shows a small card (site, title, picture) under
+  the message. One thing to know: this needs the server code updated
+  on Supabase. If you already run the guided kit's **Update server**
+  step after this release, it is live. (If a preview doesn't appear,
+  the card simply stays hidden — nothing breaks.)
+- **Search now finds everything** — books, readers, **group spaces**
+  (clubs, communities, organizations, schools) and **dictionary
+  words**, each in its own section.
+- **Notifications are all tappable** — a review opens the book, a
+  follow opens the person, a chat opens the conversation, and tapping
+  marks it read.
+
+Your standing list (below) is unchanged: install the new APK, then the
+3B → 3C money-and-library steps when ready.
+
+---
+
 ## 1 · Install the current app (5 min)
 
 - [ ] Open **github.com/NO-Group/BookNest** → **Actions** tab.
