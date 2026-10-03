@@ -6,6 +6,7 @@ name: Library to CDN
 # stored chapter TEXT to Cloudinary (free), leaving tiny metadata in
 # MongoDB — nothing is lost, readers fetch text from the CDN in one
 # request. Then it reports exactly how much space was lifted off.
+# Run 3 notes: project awake, server deployed; slug ids now accepted.
 
 on:
   workflow_dispatch:
