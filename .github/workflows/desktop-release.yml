@@ -32,6 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Free artifact storage (quota is 500 MB; keep this run only)
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -130,6 +131,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Free artifact storage (quota is 500 MB; keep this run only)
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -148,6 +150,7 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Build macOS (unsigned for CI)
+        shell: bash
         env:
           CODE_SIGNING_ALLOWED: 'NO'
         run: |
@@ -155,6 +158,7 @@ jobs:
           flutter build macos --release 2>&1 | tee build.log
       - name: Package
         if: success()
+        shell: bash
         run: |
           cd build/macos/Build/Products/Release
           APP=$(ls -d *.app | head -1)
@@ -163,34 +167,43 @@ jobs:
           ls -la ../../../../BookNest-macos.zip
       - uses: actions/upload-artifact@v4
         if: success()
+        id: up
         with:
           name: BookNest-macos
           path: BookNest-macos.zip
       - name: Publish to GitHub Releases
         if: success()
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          ZIP: BookNest-macos.zip
         run: |
           set -o pipefail
+          cd "$GITHUB_WORKSPACE"
+          [ -f "$ZIP" ] || { echo "FATAL: $ZIP missing before publish" >&2; ls -la; exit 1; }
           TAG="pc-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
           NOTES="BookNest for PC — macOS build. Unzip, drag to Applications. Unsigned: right-click → Open the first time."
+          STATUS=0
           TRY() {
-            gh "$@" 2>&1 | tee -a release.log
-            return ${PIPESTATUS[0]}
+            gh "$@" >> release.log 2>&1
+            STATUS=$?
+            tail -n 3 release.log
+            return $STATUS
           }
           : > release.log
-          TRY release create "$TAG" BookNest-macos.zip \
+          TRY release create "$TAG" "$ZIP" \
             --target "$GITHUB_SHA" --title "BookNest for PC — $TAG" --notes "$NOTES" \
-          || TRY release create "$TAG" BookNest-macos.zip \
+          || TRY release create "$TAG" "$ZIP" \
             --title "BookNest for PC — $TAG" --notes "$NOTES" \
-          || TRY release upload "$TAG" BookNest-macos.zip --clobber
-          if [ $? != 0 ]; then
+          || TRY release upload "$TAG" "$ZIP" --clobber
+          if [ "$STATUS" != "0" ]; then
             tail -c 1500 release.log > release-error.txt || echo "release failed" > release-error.txt
             exit 1
           fi
 
       - name: Commit build diagnostics
         if: failure()
+        shell: bash
         run: |
           tail -c 3000 build.log > desktop-error-macos.txt 2>/dev/null || echo "build.log missing" > desktop-error-macos.txt
           [ -f release-error.txt ] && { echo ''; echo '--- release.log tail ---'; cat release-error.txt; } >> desktop-error-macos.txt || true
@@ -218,6 +231,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Free artifact storage (quota is 500 MB; keep this run only)
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -269,11 +283,36 @@ jobs:
             --body-file issue-body.md || true
       - name: Package
         if: success()
+        id: pkg
+        shell: bash
         run: |
           tar -czf BookNest-linux.tar.gz -C build/linux/x64/release/bundle .
-          mv BookNest-linux.tar.gz ~/BookNest-linux.tar.gz
+          ls -la BookNest-linux.tar.gz
       - uses: actions/upload-artifact@v4
         if: success()
+        id: up
         with:
           name: BookNest-linux
-          path: ~/BookNest-linux.tar.gz
+          path: BookNest-linux.tar.gz
+      - name: Retry artifact upload once
+        if: failure() && steps.pkg.outcome == 'success' && steps.up.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BookNest-linux
+          path: BookNest-linux.tar.gz
+          overwrite: true
+      - name: Commit package/upload diagnostics
+        if: failure() && steps.pkg.outcome != 'success'
+        shell: bash
+        run: |
+          { echo "linux package/upload diag $(date -u +%FT%TZ)";
+            echo '--- build.log tail ---';
+            tail -c 1200 build.log 2>/dev/null;
+            echo '--- files ---';
+            ls -la BookNest-linux.tar.gz build/linux/x64/release/bundle 2>&1 | tail -15; } > desktop-error-linux.txt
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git checkout -q -B desktop-diag-linux
+          git add desktop-error-linux.txt
+          git commit -q -m "linux pkg diag $(date -u +%FT%TZ)" || true
+          git push -q -f origin desktop-diag-linux || git push -f origin desktop-diag-linux || true
