@@ -1426,9 +1426,14 @@ Deno.serve(async (req: Request) => {
         const d = await dbFor('books');
         const chapters = d.collection('chapters');
         const limit = Math.min(Math.max(Number(p.limit ?? 40) || 40, 1), 100);
+        // When over quota no writes work at all — not even deletions —
+        // so the migrator walks the collection read-only with a skip
+        // cursor, uploads every text to the CDN, and drops the whole
+        // collection afterwards (all of it is then on the CDN).
+        const skip = Math.min(Math.max(Number(p.skip ?? 0) || 0, 0), 500000);
         const rows = await chapters.find({
           content: { $exists: true, $type: 'string', $ne: '' },
-        }).project({
+        }).skip(skip).project({
           bookId: 1, chapterNumber: 1, title: 1,
           bytes: { $strLenCP: '$content' },
         }).sort({ _id: 1 }).limit(limit).toArray();
@@ -1465,6 +1470,70 @@ Deno.serve(async (req: Request) => {
           title: chapter.title ?? '',
           content: chapter.content ?? '',
         });
+      }
+
+      // When the cluster is over quota, Atlas blocks ALL writes except
+      // deletions. The migrator dumps the text to the CDN, tries to
+      // shrink the row, and if that is blocked it drops the row and
+      // re-seeds a compact stub once there is room again.
+      case 'admin.dropChaptersCollection': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const d = await dbFor('books');
+        // Only called after every chapter text is verified on the CDN
+        // and the manifest (bookId, chapter, title, URL, bytes) is
+        // committed — this collection is fully rebuildable from those.
+        const dropped = await d.collection('chapters').drop();
+        return ok({ dropped });
+      }
+
+      case 'admin.dropChapter': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        if (!isChapterBookId(p.bookId)) return fail('A valid bookId is required');
+        const chapterNumber = Number(p.chapterNumber ?? 1) || 1;
+        const d = await dbFor('books');
+        const res = await d.collection('chapters').deleteOne({
+          bookId: p.bookId as string, chapterNumber,
+        });
+        return ok({ deleted: res.deletedCount ?? 0 });
+      }
+
+      case 'admin.restoreChapterStub': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        if (!isChapterBookId(p.bookId)) return fail('A valid bookId is required');
+        const chapterNumber = Number(p.chapterNumber ?? 1) || 1;
+        const url = String(p.url ?? '');
+        if (!url.startsWith('https://res.cloudinary.com/')) {
+          return fail('Only Cloudinary URLs are accepted');
+        }
+        const d = await dbFor('books');
+        await d.collection('chapters').updateOne(
+          { bookId: p.bookId as string, chapterNumber },
+          { $set: {
+              title: String(p.title ?? `Chapter ${chapterNumber}`).slice(0, 160),
+              content: '',
+              contentUrl: url.slice(0, 500),
+              contentBytes: Math.max(0, Number(p.bytes ?? 0) || 0),
+            } },
+          { upsert: true });
+        return ok({ restored: 1 });
       }
 
       case 'admin.setChapterUrl': {

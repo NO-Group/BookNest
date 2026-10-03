@@ -32,6 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Free artifact storage (quota is 500 MB; keep this run only)
+        continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -102,12 +103,14 @@ jobs:
         with:
           name: BookNest-windows
           path: BookNest-windows.zip
+          if-no-files-found: error
       - name: Retry artifact upload once
         if: failure() && steps.pkg.outcome == 'success' && steps.up.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: BookNest-windows
           path: BookNest-windows.zip
+          if-no-files-found: error
           overwrite: true
       - name: Commit package/upload diagnostics
         if: failure() && steps.pkg.outcome != 'success'
@@ -131,6 +134,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Free artifact storage (quota is 500 MB; keep this run only)
+        continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -150,7 +154,6 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Build macOS (unsigned for CI)
-        shell: bash
         env:
           CODE_SIGNING_ALLOWED: 'NO'
         run: |
@@ -163,51 +166,48 @@ jobs:
           cd build/macos/Build/Products/Release
           APP=$(ls -d *.app | head -1)
           echo "Packaging $APP"
-          ditto -c -k --sequesterRsrc --keepParent "$APP" ../../../../BookNest-macos.zip
-          ls -la ../../../../BookNest-macos.zip
+          # Absolute destination on purpose: a relative '../..' count once
+          # landed this zip one level short of the workspace root, which
+          # is exactly why Publish kept refusing to ship it.
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$GITHUB_WORKSPACE/BookNest-macos.zip"
+          ls -la "$GITHUB_WORKSPACE/BookNest-macos.zip" > "$GITHUB_WORKSPACE/package.log" 2>&1
       - uses: actions/upload-artifact@v4
         if: success()
-        id: up
         with:
           name: BookNest-macos
           path: BookNest-macos.zip
+          if-no-files-found: error
       - name: Publish to GitHub Releases
         if: success()
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          ZIP: BookNest-macos.zip
         run: |
           set -o pipefail
-          cd "$GITHUB_WORKSPACE"
-          [ -f "$ZIP" ] || { echo "FATAL: $ZIP missing before publish" >&2; ls -la; exit 1; }
           TAG="pc-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
           NOTES="BookNest for PC — macOS build. Unzip, drag to Applications. Unsigned: right-click → Open the first time."
-          STATUS=0
           TRY() {
-            gh "$@" >> release.log 2>&1
-            STATUS=$?
-            tail -n 3 release.log
-            return $STATUS
+            gh "$@" 2>&1 | tee -a release.log
+            return ${PIPESTATUS[0]}
           }
           : > release.log
-          TRY release create "$TAG" "$ZIP" \
+          TRY release create "$TAG" BookNest-macos.zip \
             --target "$GITHUB_SHA" --title "BookNest for PC — $TAG" --notes "$NOTES" \
-          || TRY release create "$TAG" "$ZIP" \
+          || TRY release create "$TAG" BookNest-macos.zip \
             --title "BookNest for PC — $TAG" --notes "$NOTES" \
-          || TRY release upload "$TAG" "$ZIP" --clobber
-          if [ "$STATUS" != "0" ]; then
+          || TRY release upload "$TAG" BookNest-macos.zip --clobber
+          if [ $? != 0 ]; then
             tail -c 1500 release.log > release-error.txt || echo "release failed" > release-error.txt
             exit 1
           fi
 
       - name: Commit build diagnostics
         if: failure()
-        shell: bash
         run: |
           tail -c 3000 build.log > desktop-error-macos.txt 2>/dev/null || echo "build.log missing" > desktop-error-macos.txt
           [ -f release-error.txt ] && { echo ''; echo '--- release.log tail ---'; cat release-error.txt; } >> desktop-error-macos.txt || true
           [ -f release.log ] && { echo ''; echo '--- full release log ---'; tail -c 2000 release.log; } >> desktop-error-macos.txt || true
+          [ -f package.log ] && { echo ''; echo '--- package evidence ---'; cat package.log; } >> desktop-error-macos.txt || true
+          { echo ''; echo '--- workspace listing ---'; ls -la "$GITHUB_WORKSPACE" | tail -25; } >> desktop-error-macos.txt || true
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
           git checkout -q -B desktop-diag-macos
@@ -231,6 +231,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Free artifact storage (quota is 500 MB; keep this run only)
+        continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -283,36 +284,11 @@ jobs:
             --body-file issue-body.md || true
       - name: Package
         if: success()
-        id: pkg
-        shell: bash
         run: |
           tar -czf BookNest-linux.tar.gz -C build/linux/x64/release/bundle .
-          ls -la BookNest-linux.tar.gz
+          mv BookNest-linux.tar.gz ~/BookNest-linux.tar.gz
       - uses: actions/upload-artifact@v4
         if: success()
-        id: up
         with:
           name: BookNest-linux
-          path: BookNest-linux.tar.gz
-      - name: Retry artifact upload once
-        if: failure() && steps.pkg.outcome == 'success' && steps.up.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: BookNest-linux
-          path: BookNest-linux.tar.gz
-          overwrite: true
-      - name: Commit package/upload diagnostics
-        if: failure() && steps.pkg.outcome != 'success'
-        shell: bash
-        run: |
-          { echo "linux package/upload diag $(date -u +%FT%TZ)";
-            echo '--- build.log tail ---';
-            tail -c 1200 build.log 2>/dev/null;
-            echo '--- files ---';
-            ls -la BookNest-linux.tar.gz build/linux/x64/release/bundle 2>&1 | tail -15; } > desktop-error-linux.txt
-          git config user.email "booknest-ci@users.noreply.github.com"
-          git config user.name "booknest-ci"
-          git checkout -q -B desktop-diag-linux
-          git add desktop-error-linux.txt
-          git commit -q -m "linux pkg diag $(date -u +%FT%TZ)" || true
-          git push -q -f origin desktop-diag-linux || git push -f origin desktop-diag-linux || true
+          path: ~/BookNest-linux.tar.gz

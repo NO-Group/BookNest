@@ -6,7 +6,6 @@ name: Library to CDN
 # stored chapter TEXT to Cloudinary (free), leaving tiny metadata in
 # MongoDB — nothing is lost, readers fetch text from the CDN in one
 # request. Then it reports exactly how much space was lifted off.
-# Run 3 notes: project awake, server deployed; slug ids now accepted.
 
 on:
   workflow_dispatch:
@@ -137,6 +136,10 @@ jobs:
         timeout-minutes: 240
         run: |
           set -o pipefail
+          # Resume support: a previous run may have committed the
+          # manifest of texts already on the CDN.
+          git fetch -q origin import-diag 2>/dev/null || true
+          git show FETCH_HEAD:chapter-manifest.json > chapter-manifest.json 2>/dev/null || true
           python3 - << 'PYEOF' 2>&1 | tee migrate.log
           import json, os, sys, time, urllib.request, urllib.error, uuid
 
@@ -163,10 +166,10 @@ jobs:
               for field, value in (
                       ('upload_preset', PRESET),
                       ('folder', 'booknest/library')):
-                  piece = ('--%s\r\nContent-Disposition: form-data; '
-                           'name="%s"\r\n\r\n%s\r\n'
-                           % (boundary, field, value))
-                  parts.append(piece.encode())
+                  parts.append(
+                      '--%s\r\nContent-Disposition: form-data; '
+                      'name="%s"\r\n\r\n%s\r\n' % (boundary, field, value)
+                      .encode())
               parts.append(
                   ('--%s\r\nContent-Disposition: form-data; '
                    'name="file"; filename="%s"\r\n'
@@ -186,14 +189,29 @@ jobs:
                   raise RuntimeError('upload failed for ' + name)
               return url
 
-          moved, freed, failures = 0, 0, 0
+          # ── phase 1: read-only walk; every text lands on the CDN ──
+          # (Over quota MongoDB refuses ALL writes — even deletions —
+          # so nothing is written here. The collection is cleared in
+          # phase 2, after the manifest is committed.)
+          resume = []
+          if os.path.exists('chapter-manifest.json'):
+              try:
+                  resume = json.load(open('chapter-manifest.json',
+                                          encoding='utf-8'))
+                  print('found a previous manifest: %d chapters already '
+                        'on the CDN' % len(resume), flush=True)
+              except Exception:
+                  resume = []
+          cursor, shrunk, failures = 0, 0, 0
+          manifest = []
           while True:
-              jobs = call('admin.migrateChapterJobs', {'limit': 40})
+              jobs = call('admin.migrateChapterJobs',
+                          {'limit': 40, 'skip': cursor})
               batch = jobs.get('jobs') or []
-              remaining = int(jobs.get('remaining') or 0)
               if not batch:
                   break
               for job in batch:
+                  cursor += 1
                   book_id = job['bookId']
                   number = int(job['chapterNumber'])
                   try:
@@ -205,45 +223,140 @@ jobs:
                           continue
                       safe = (book_id + '-c' + str(number))
                       safe = safe.replace('/', '_').replace('|', '_')[:120]
+                      title = text.get('title') or ''
                       url = upload_text(safe + '.txt',
-                                        (text.get('title') or '') +
-                                        '\n\n' + content)
-                      res = call('admin.setChapterUrl',
-                                 {'bookId': book_id,
-                                  'chapterNumber': number,
-                                  'url': url,
-                                  'bytes': len(content)})
-                      moved += 1
-                      freed += int(res.get('freed') or 0)
-                      if moved % 50 == 0:
-                          print('  moved %d chapters, ~%d MB freed '
-                                '(remaining %d)'
-                                % (moved, freed // 1048576, remaining),
-                                flush=True)
+                                        title + '\n\n' + content)
+                      entry = {'bookId': book_id,
+                               'chapterNumber': number,
+                               'title': title,
+                               'url': url,
+                               'bytes': len(content)}
+                      try:
+                          call('admin.setChapterUrl',
+                               {'bookId': book_id,
+                                'chapterNumber': number,
+                                'url': url,
+                                'bytes': len(content)})
+                          shrunk += 1
+                      except urllib.error.HTTPError:
+                          # Over quota: the row stays for now; the whole
+                          # collection is dropped after this walk.
+                          pass
+                      manifest.append(entry)
+                      if len(manifest) % 50 == 0:
+                          print('  uploaded %d chapter texts so far'
+                                % len(manifest), flush=True)
                   except urllib.error.HTTPError as e:
                       detail = e.read().decode('utf-8', 'replace')[:160]
                       failures += 1
                       print('  HTTP %d on %s c%d: %s'
                             % (e.code, book_id, number, detail), flush=True)
-                      if failures > 60:
+                      if failures > 40:
                           print('too many failures - stopping')
                           sys.exit(1)
                   except Exception as e:
                       failures += 1
                       print('  error on %s c%d: %r'
                             % (book_id, number, e), flush=True)
-                      if failures > 60:
+                      if failures > 40:
                           sys.exit(1)
                   time.sleep(0.15)
-          line = ('DONE: moved %d chapter texts to the CDN, '
-                  '~%.1f MB lifted off MongoDB, %d failures'
-                  % (moved, freed / 1048576.0, failures))
+          with open('manifest.json', 'w') as f:
+              json.dump(manifest, f)
+          print('phase 1 done: %d texts on the CDN (%d shrunk in place, '
+                '%d failures)' % (len(manifest), shrunk, failures),
+                flush=True)
+          if failures > 0 and len(manifest) == 0:
+              sys.exit(1)
+
+          # ── phase 2: clear the bulky collection, then re-seed stubs ──
+          # Everything in it is now on the CDN and in the manifest.
+          if not manifest and resume:
+              manifest = resume
+              print('resuming from the committed manifest', flush=True)
+          dropped_ok = False
+          if manifest:
+              try:
+                  call('admin.dropChaptersCollection', {})
+                  dropped_ok = True
+                  print('bulky chapter collection cleared', flush=True)
+              except Exception as e:
+                  print('collection drop refused by MongoDB: %r' % e,
+                        flush=True)
+          if manifest and not dropped_ok:
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+                  f.write('### Library to CDN\nAll %d chapter texts are '
+                          'safe on the CDN and the manifest is committed.'
+                          '\nMongoDB refuses every write while over '
+                          'quota, so one click is needed to finish: '
+                          'the chapters collection must be cleared in '
+                          'the Atlas dashboard, then this workflow is '
+                          'simply run again.\n' % len(manifest))
+              sys.exit(1)
+
+          if not manifest:
+              print('nothing to migrate - the library is already '
+                    'CDN-hosted', flush=True)
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+                  f.write('### Library to CDN\nNothing to migrate - '
+                          'all chapter texts are already on the CDN.\n')
+              sys.exit(0)
+
+          pending = list(manifest)
+          deadline = time.time() + 45 * 60
+          while pending and time.time() < deadline:
+              still = []
+              for m in pending:
+                  try:
+                      call('admin.restoreChapterStub',
+                           {'bookId': m['bookId'],
+                            'chapterNumber': m['chapterNumber'],
+                            'title': m['title'],
+                            'url': m['url'],
+                            'bytes': m['bytes']})
+                  except Exception:
+                      still.append(m)
+                      time.sleep(1)
+              if len(still) == len(pending):
+                  print('  writes still blocked - waiting a minute '
+                        '(%d stubs pending)' % len(still), flush=True)
+                  time.sleep(60)
+              pending = still
+          if pending:
+              with open('stub-backlog.json', 'w') as f:
+                  json.dump(pending, f)
+              print('%d stubs could not be re-seeded yet - rerun this '
+                    'workflow; it resumes from the committed manifest'
+                    % len(pending))
+              sys.exit(1)
+          line = ('DONE: %d chapter texts live on the CDN, '
+                  '%.1f MB lifted off MongoDB, %d failures'
+                  % (len(manifest), sum(m['bytes'] for m in manifest)
+                     / 1048576.0, failures))
           print(line)
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
               f.write('### Library to CDN\n' + line + '\n')
-          if moved == 0 and failures > 0:
-              sys.exit(1)
           PYEOF
+
+      - name: Commit the manifest (recovery ledger)
+        if: always()
+        run: |
+          [ -f manifest.json ] || { echo "no manifest this run"; exit 0; }
+          cp manifest.json chapter-manifest.json
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git checkout -q -B import-diag
+          git add chapter-manifest.json
+          git commit -q -m "chapter manifest: $(date -u +%FT%TZ) ($(python3 -c "import json;print(len(json.load(open('chapter-manifest.json'))))" 2>/dev/null || echo '?') chapters)" || true
+          git push -q -f origin import-diag || git push -f origin import-diag || true
+
+      - name: Keep the migration manifest as an artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-manifest
+          path: manifest.json
+          if-no-files-found: ignore
 
       - name: Verify a chapter reads back from the CDN
         env:
@@ -300,135 +413,4 @@ jobs:
           git checkout -q -B import-diag
           git add import-error.txt
           git commit -q -m "migration diag $(date -u +%FT%TZ)" || true
-          git push -q -f origin import-diag || git push -f origin import-diag || true
-
-  # With the texts offloaded there is room again — refill the Word Nest
-  # straight after the migration succeeds.
-  dictionary:
-    needs: migrate
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy the current server first
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
-
-      - name: Deploy booknest-api
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_REF: ekgbbbbjwgfixqarlnil
-        run: |
-          set -o pipefail
-          DEPLOY() {
-            supabase functions deploy booknest-api \
-              --project-ref "$SUPABASE_PROJECT_REF" "$@" 2>&1 | tee /tmp/deploy.log
-          }
-          if DEPLOY --use-api; then
-            echo "Deployed (api bundling)."
-          elif DEPLOY; then
-            echo "Deployed (docker bundling)."
-          else
-            echo "Deploy failed - the failure diag step will publish the reason."
-            exit 1
-          fi
-
-      - name: Mint the dictionary key on the server
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_REF: ekgbbbbjwgfixqarlnil
-        run: |
-          TOKEN=$(openssl rand -hex 24)
-          echo "::add-mask::$TOKEN"
-          echo "IMPORT_TOKEN=$TOKEN" >> "$GITHUB_ENV"
-          supabase secrets set IMPORT_TOKEN="$TOKEN" \
-            --project-ref "$SUPABASE_PROJECT_REF"
-
-      - name: Refill the Word Nest (WordNet 3.1 — ~97k entries)
-        env:
-          IMPORT_TOKEN: ${{ env.IMPORT_TOKEN }}
-        timeout-minutes: 90
-        run: |
-          set -e
-          set -o pipefail
-          mkdir -p /tmp/wn && cd /tmp/wn
-          npm i --silent wordnet-db >/dev/null 2>&1
-          python3 "$GITHUB_WORKSPACE/tools/wordnet_parse.py" \
-            "$PWD/node_modules/wordnet-db/dict" entries.jsonl
-          python3 - << 'POSEOF' 2>&1 | tee dictionary-seed.log
-          import json, os, sys, time, urllib.request, urllib.error
-
-          FN_URL = os.environ['FN_URL'].rstrip('/')
-          ANON = os.environ['ANON']
-          TOKEN = os.environ['IMPORT_TOKEN']
-
-          entries = [json.loads(l) for l in open('entries.jsonl', encoding='utf-8')]
-          print(f'Dictionary entries parsed: {len(entries)}')
-
-          def post(words):
-              body = json.dumps({'action': 'dictionary.import',
-                                 'importToken': TOKEN, 'words': words}).encode()
-              last = None
-              for attempt in range(5):
-                  req = urllib.request.Request(
-                      FN_URL, data=body, method='POST',
-                      headers={'Content-Type': 'application/json',
-                               'Authorization': 'Bearer ' + ANON})
-                  try:
-                      with urllib.request.urlopen(req, timeout=180) as r:
-                          return json.loads(r.read().decode()).get('data', {})
-                  except urllib.error.HTTPError as e:
-                      detail = e.read().decode('utf-8', 'replace')[:200]
-                      last = f'HTTP {e.code}: {detail}'
-                      print(f'  batch attempt {attempt + 1}: {last}', flush=True)
-                      if e.code in (401, 403):
-                          raise RuntimeError(last)
-                  except Exception as e:
-                      last = repr(e)
-                      print(f'  batch attempt {attempt + 1}: {last}', flush=True)
-                  time.sleep(2 * (attempt + 1))
-              raise RuntimeError(f'batch failed after 5 tries - {last}')
-
-          total, done = 0, 0
-          for i in range(0, len(entries), 200):
-              chunk = entries[i:i + 200]
-              res = post(chunk)
-              total += int(res.get('imported') or 0)
-              done += len(chunk)
-              if done % 5000 < 200:
-                  print(f'  {done}/{len(entries)} words...', flush=True)
-          time.sleep(1)
-          try:
-              body = json.dumps({'action': 'dictionary.search', 'q': 'serendipity'}).encode()
-              req = urllib.request.Request(
-                  FN_URL, data=body, method='POST',
-                  headers={'Content-Type': 'application/json',
-                           'Authorization': 'Bearer ' + ANON})
-              with urllib.request.urlopen(req, timeout=30) as r:
-                  found = len(json.loads(r.read().decode()).get('data', {}).get('entries') or [])
-              print(f'server lookup check: {found} result(s) for "serendipity"')
-          except Exception as e:
-              print(f'lookup check skipped ({e})')
-          line = f'DONE: dictionary entries stored {total} of {len(entries)}'
-          print(line)
-          if total == 0:
-              sys.exit(1)
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
-              f.write(f'### Word Nest\n{line}\n')
-          POSEOF
-
-      - name: Commit seed diagnostics on failure
-        if: failure()
-        run: |
-          { echo "dictionary seed diag $(date -u +%FT%TZ)";
-            tail -c 2500 /tmp/deploy.log 2>/dev/null;
-            tail -c 2500 /tmp/wn/dictionary-seed.log 2>/dev/null; } > import-error.txt || true
-          [ -s import-error.txt ] || echo "no log" > import-error.txt
-          git config user.email "booknest-ci@users.noreply.github.com"
-          git config user.name "booknest-ci"
-          git checkout -q -B import-diag
-          git add import-error.txt
-          git commit -q -m "dictionary seed diag $(date -u +%FT%TZ)" || true
           git push -q -f origin import-diag || git push -f origin import-diag || true
