@@ -301,3 +301,134 @@ jobs:
           git add import-error.txt
           git commit -q -m "migration diag $(date -u +%FT%TZ)" || true
           git push -q -f origin import-diag || git push -f origin import-diag || true
+
+  # With the texts offloaded there is room again — refill the Word Nest
+  # straight after the migration succeeds.
+  dictionary:
+    needs: migrate
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy the current server first
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy booknest-api
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ekgbbbbjwgfixqarlnil
+        run: |
+          set -o pipefail
+          DEPLOY() {
+            supabase functions deploy booknest-api \
+              --project-ref "$SUPABASE_PROJECT_REF" "$@" 2>&1 | tee /tmp/deploy.log
+          }
+          if DEPLOY --use-api; then
+            echo "Deployed (api bundling)."
+          elif DEPLOY; then
+            echo "Deployed (docker bundling)."
+          else
+            echo "Deploy failed - the failure diag step will publish the reason."
+            exit 1
+          fi
+
+      - name: Mint the dictionary key on the server
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ekgbbbbjwgfixqarlnil
+        run: |
+          TOKEN=$(openssl rand -hex 24)
+          echo "::add-mask::$TOKEN"
+          echo "IMPORT_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          supabase secrets set IMPORT_TOKEN="$TOKEN" \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Refill the Word Nest (WordNet 3.1 — ~97k entries)
+        env:
+          IMPORT_TOKEN: ${{ env.IMPORT_TOKEN }}
+        timeout-minutes: 90
+        run: |
+          set -e
+          set -o pipefail
+          mkdir -p /tmp/wn && cd /tmp/wn
+          npm i --silent wordnet-db >/dev/null 2>&1
+          python3 "$GITHUB_WORKSPACE/tools/wordnet_parse.py" \
+            "$PWD/node_modules/wordnet-db/dict" entries.jsonl
+          python3 - << 'POSEOF' 2>&1 | tee dictionary-seed.log
+          import json, os, sys, time, urllib.request, urllib.error
+
+          FN_URL = os.environ['FN_URL'].rstrip('/')
+          ANON = os.environ['ANON']
+          TOKEN = os.environ['IMPORT_TOKEN']
+
+          entries = [json.loads(l) for l in open('entries.jsonl', encoding='utf-8')]
+          print(f'Dictionary entries parsed: {len(entries)}')
+
+          def post(words):
+              body = json.dumps({'action': 'dictionary.import',
+                                 'importToken': TOKEN, 'words': words}).encode()
+              last = None
+              for attempt in range(5):
+                  req = urllib.request.Request(
+                      FN_URL, data=body, method='POST',
+                      headers={'Content-Type': 'application/json',
+                               'Authorization': 'Bearer ' + ANON})
+                  try:
+                      with urllib.request.urlopen(req, timeout=180) as r:
+                          return json.loads(r.read().decode()).get('data', {})
+                  except urllib.error.HTTPError as e:
+                      detail = e.read().decode('utf-8', 'replace')[:200]
+                      last = f'HTTP {e.code}: {detail}'
+                      print(f'  batch attempt {attempt + 1}: {last}', flush=True)
+                      if e.code in (401, 403):
+                          raise RuntimeError(last)
+                  except Exception as e:
+                      last = repr(e)
+                      print(f'  batch attempt {attempt + 1}: {last}', flush=True)
+                  time.sleep(2 * (attempt + 1))
+              raise RuntimeError(f'batch failed after 5 tries - {last}')
+
+          total, done = 0, 0
+          for i in range(0, len(entries), 200):
+              chunk = entries[i:i + 200]
+              res = post(chunk)
+              total += int(res.get('imported') or 0)
+              done += len(chunk)
+              if done % 5000 < 200:
+                  print(f'  {done}/{len(entries)} words...', flush=True)
+          time.sleep(1)
+          try:
+              body = json.dumps({'action': 'dictionary.search', 'q': 'serendipity'}).encode()
+              req = urllib.request.Request(
+                  FN_URL, data=body, method='POST',
+                  headers={'Content-Type': 'application/json',
+                           'Authorization': 'Bearer ' + ANON})
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  found = len(json.loads(r.read().decode()).get('data', {}).get('entries') or [])
+              print(f'server lookup check: {found} result(s) for "serendipity"')
+          except Exception as e:
+              print(f'lookup check skipped ({e})')
+          line = f'DONE: dictionary entries stored {total} of {len(entries)}'
+          print(line)
+          if total == 0:
+              sys.exit(1)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write(f'### Word Nest\n{line}\n')
+          POSEOF
+
+      - name: Commit seed diagnostics on failure
+        if: failure()
+        run: |
+          { echo "dictionary seed diag $(date -u +%FT%TZ)";
+            tail -c 2500 /tmp/deploy.log 2>/dev/null;
+            tail -c 2500 /tmp/wn/dictionary-seed.log 2>/dev/null; } > import-error.txt || true
+          [ -s import-error.txt ] || echo "no log" > import-error.txt
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git checkout -q -B import-diag
+          git add import-error.txt
+          git commit -q -m "dictionary seed diag $(date -u +%FT%TZ)" || true
+          git push -q -f origin import-diag || git push -f origin import-diag || true
