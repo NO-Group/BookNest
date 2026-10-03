@@ -43,6 +43,5 @@ Note: Recompile with -Xlint:deprecation for details.
 Note: Some input files use unchecked or unsafe operations.
 Note: Recompile with -Xlint:unchecked for details.
 4 warnings
-Caught exception: Already watching path: /home/runner/work/BookNest/BookNest/android
-Running Gradle task 'assembleRelease'...                          961.4s
+Running Gradle task 'assembleRelease'...                          958.5s
 ✓ Built build/app/outputs/flutter-apk/app-release.apk (119.2MB)
