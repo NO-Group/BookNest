@@ -70,15 +70,16 @@ jobs:
           if code != 200:
               sys.exit(1)
           status = (info.get('status') or '').upper()
-          if status == 'ACTIVE':
-              print('already awake')
+          if status.startswith('ACTIVE'):
+              print('already awake (' + status + ')')
               sys.exit(0)
-          if status not in ('INACTIVE', 'PAUSED', 'PAUSING', 'RESTORING'):
-              print('unexpected status - trying restore anyway')
-          code, resp = api('/projects/%s/restore' % REF, 'POST')
-          print('restore request: HTTP %s %r' % (code, resp), flush=True)
-          if code not in (200, 201):
-              sys.exit(1)
+          if status == 'RESTORING':
+              print('restore already in progress - waiting')
+          else:
+              code, resp = api('/projects/%s/restore' % REF, 'POST')
+              print('restore request: HTTP %s %r' % (code, resp), flush=True)
+              if code not in (200, 201):
+                  sys.exit(1)
           deadline = time.time() + 25 * 60
           while time.time() < deadline:
               time.sleep(20)
@@ -86,8 +87,8 @@ jobs:
               status = ((info.get('status') or '') if code == 200
                         else '').upper()
               print('  ...status: %s' % (status or code), flush=True)
-              if status == 'ACTIVE':
-                  print('project is awake')
+              if status.startswith('ACTIVE'):
+                  print('project is awake (' + status + ')')
                   sys.exit(0)
           print('project did not wake in 25 minutes')
           sys.exit(1)
