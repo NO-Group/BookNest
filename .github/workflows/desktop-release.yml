@@ -76,13 +76,39 @@ jobs:
             --body-file issue-body.md || true
       - name: Package
         if: success()
+        id: pkg
         shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath BookNest-windows.zip
+        run: |-
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath BookNest-windows.zip
+          Get-Item BookNest-windows.zip | Select-Object Name, Length
       - uses: actions/upload-artifact@v4
         if: success()
+        id: up
         with:
           name: BookNest-windows
           path: BookNest-windows.zip
+      - name: Retry artifact upload once
+        if: failure() && steps.pkg.outcome == 'success' && steps.up.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BookNest-windows
+          path: BookNest-windows.zip
+          overwrite: true
+      - name: Commit package/upload diagnostics
+        if: failure() && steps.pkg.outcome != 'success'
+        shell: bash
+        run: |
+          { echo "windows package/upload diag $(date -u +%FT%TZ)";
+            echo '--- build.log tail ---';
+            tail -c 1500 build.log 2>/dev/null;
+            echo '--- files ---';
+            ls -la BookNest-windows.zip build/windows/x64/runner/Release/ 2>&1 | tail -30; } > desktop-error-windows.txt
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git checkout -q -B desktop-diag-windows
+          git add desktop-error-windows.txt
+          git commit -q -m "windows pkg diag $(date -u +%FT%TZ)" || true
+          git push -q -f origin desktop-diag-windows || git push -f origin desktop-diag-windows || true
 
   macos:
     runs-on: macos-latest
@@ -121,21 +147,17 @@ jobs:
           set -o pipefail
           TAG="pc-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
           NOTES="BookNest for PC — macOS build. Unzip, drag to Applications. Unsigned: right-click → Open the first time."
-          gh release create "$TAG" BookNest-macos.zip \
+          TRY() {
+            gh "$@" 2>&1 | tee -a release.log
+            return ${PIPESTATUS[0]}
+          }
+          : > release.log
+          TRY release create "$TAG" BookNest-macos.zip \
             --target "$GITHUB_SHA" --title "BookNest for PC — $TAG" --notes "$NOTES" \
-            2>&1 | tee release.log
-          STATUS=${PIPESTATUS[0]}
-          if [ "$STATUS" != "0" ]; then
-            gh release create "$TAG" BookNest-macos.zip \
-              --title "BookNest for PC — $TAG" --notes "$NOTES" \
-              2>&1 | tee -a release.log
-            STATUS=${PIPESTATUS[0]}
-          fi
-          if [ "$STATUS" != "0" ]; then
-            gh release upload "$TAG" BookNest-macos.zip --clobber 2>&1 | tee -a release.log
-            STATUS=${PIPESTATUS[0]}
-          fi
-          if [ "$STATUS" != "0" ]; then
+          || TRY release create "$TAG" BookNest-macos.zip \
+            --title "BookNest for PC — $TAG" --notes "$NOTES" \
+          || TRY release upload "$TAG" BookNest-macos.zip --clobber
+          if [ $? != 0 ]; then
             tail -c 1500 release.log > release-error.txt || echo "release failed" > release-error.txt
             exit 1
           fi
@@ -144,7 +166,8 @@ jobs:
         if: failure()
         run: |
           tail -c 3000 build.log > desktop-error-macos.txt 2>/dev/null || echo "build.log missing" > desktop-error-macos.txt
-          [ -f release-error.txt ] && cat release-error.txt >> desktop-error-macos.txt || true
+          [ -f release-error.txt ] && { echo ''; echo '--- release.log tail ---'; cat release-error.txt; } >> desktop-error-macos.txt || true
+          [ -f release.log ] && { echo ''; echo '--- full release log ---'; tail -c 2000 release.log; } >> desktop-error-macos.txt || true
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
           git checkout -q -B desktop-diag-macos
