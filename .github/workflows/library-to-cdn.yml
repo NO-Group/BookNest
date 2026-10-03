@@ -38,6 +38,61 @@ jobs:
             exit 1
           fi
 
+      - name: Wake the project (free tier sleeps after a week idle)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          python3 - << 'PYEOF'
+          import json, os, sys, time, urllib.request, urllib.error
+
+          REF = 'ekgbbbbjwgfixqarlnil'
+          TOK = os.environ['SUPABASE_ACCESS_TOKEN']
+          API = 'https://api.supabase.com/v1'
+
+          def api(path, method='GET'):
+              req = urllib.request.Request(
+                  API + path, data=b'' if method == 'POST' else None,
+                  method=method,
+                  headers={'Authorization': 'Bearer ' + TOK,
+                           'Content-Type': 'application/json'})
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as r:
+                      body = r.read().decode()
+                      return r.status, (json.loads(body) if body else {})
+              except urllib.error.HTTPError as e:
+                  return e.code, e.read().decode('utf-8', 'replace')[:300]
+
+          code, info = api('/projects/' + REF)
+          if code != 200:
+              print('cannot read project status (HTTP %s): %r' % (code, info))
+              sys.exit(1)
+          status = (info.get('status') or '').upper()
+          print('project status: ' + status)
+          if status == 'ACTIVE':
+              print('already awake')
+              sys.exit(0)
+          if status not in ('INACTIVE', 'PAUSED', 'PAUSING', 'RESTORING'):
+              print('unexpected status - trying restore anyway')
+          code, resp = api('/projects/%s/restore' % REF, 'POST')
+          print('restore request: HTTP %s %r' % (code, resp))
+          if code not in (200, 201):
+              sys.exit(1)
+          deadline = time.time() + 12 * 60
+          while time.time() < deadline:
+              time.sleep(20)
+              code, info = api('/projects/' + REF)
+              status = ((info.get('status') or '') if code == 200
+                        else '').upper()
+              print('  ...status: %s' % (status or code), flush=True)
+              if status == 'ACTIVE':
+                  print('project is awake')
+                  sys.exit(0)
+          print('project did not wake in 12 minutes')
+          sys.exit(1)
+          PYEOF
+
       - name: Deploy the current server first
         uses: supabase/setup-cli@v1
         with:
