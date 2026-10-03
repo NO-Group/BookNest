@@ -7,6 +7,27 @@ you know it worked.
 
 ---
 
+## This build, 2.30.0 — the storage fix (do these 3 in order)
+
+Your MongoDB alerts were real: the book import filled the free
+database past its 512 MB limit, because it stored every book's full
+text inside it. Everything you built is safe. This build moves the
+texts to your free Cloudinary media space (the law the app already
+follows for covers) and keeps only small info in the database.
+
+1. Wait for the two Actions runs that start from this push to finish:
+   **Library to CDN** (moves the texts out — its summary tells you how
+   much space was freed) and **BookNest Desktop Release** (your PC
+   installers). Check them on the Actions tab of this repo.
+2. When "Library to CDN" finishes green, open the app's Word Nest —
+   the dictionary refills on first open from the app's bundled pages,
+   with the database no longer full. If it still looks empty, tell me.
+3. Download your PC installers from the Desktop run's artifacts when
+   green: Windows zip, macOS app, Linux tar.gz.
+
+Nothing else is on you this time. Comics are gone everywhere as you
+ordered; the app no longer uses Firebase at all.
+
 ## 0 · What just shipped (v2.29.0+54)
 
 Anime grew an **ink engine** (draw freehand on panels, six colors,

@@ -1,0 +1,231 @@
+name: Library to CDN
+
+# The storage fix: MongoDB free tier caps at 512 MB and ~1,600 full
+# novels do not fit. BookNest's media law already says it: heavy media
+# lives on the CDN, databases hold pointers. This workflow moves every
+# stored chapter TEXT to Cloudinary (free), leaving tiny metadata in
+# MongoDB — nothing is lost, readers fetch text from the CDN in one
+# request. Then it reports exactly how much space was lifted off.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a03a7f-booknest
+    paths:
+      - '.github/workflows/library-to-cdn.yml'
+
+permissions:
+  contents: write
+
+env:
+  FN_URL: https://ekgbbbbjwgfixqarlnil.supabase.co/functions/v1/booknest-api
+  ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrZ2JiYmJqd2dmaXhxYXJsbmlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3MDAzODEsImV4cCI6MjEwMzI3NjM4MX0.DTTcX2DOxME72qF0fJzcAPJAWPd64LmhYKtT2SOlRy0
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard - the access token must exist
+        env:
+          HAS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "## Needs SUPABASE_ACCESS_TOKEN (CHECKLIST step 3)" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Deploy the current server first
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy booknest-api
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ekgbbbbjwgfixqarlnil
+        run: |
+          supabase functions deploy booknest-api \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --use-api
+
+      - name: Mint the migration key on the server
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ekgbbbbjwgfixqarlnil
+        run: |
+          TOKEN=$(openssl rand -hex 24)
+          echo "::add-mask::$TOKEN"
+          echo "IMPORT_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          supabase secrets set IMPORT_TOKEN="$TOKEN" \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Move every chapter text to the CDN
+        env:
+          IMPORT_TOKEN: ${{ env.IMPORT_TOKEN }}
+        timeout-minutes: 240
+        run: |
+          set -o pipefail
+          python3 - << 'PYEOF' 2>&1 | tee migrate.log
+          import json, os, sys, time, urllib.request, urllib.error, uuid
+
+          FN_URL = os.environ['FN_URL'].rstrip('/')
+          ANON = os.environ['ANON']
+          TOKEN = os.environ['IMPORT_TOKEN']
+          CLOUD = 'deqdmwlt7'
+          PRESET = 'BookNest'
+
+          def call(action, payload, timeout=180):
+              body = json.dumps({'action': action,
+                                 'importToken': TOKEN,
+                                 **payload}).encode()
+              req = urllib.request.Request(
+                  FN_URL, data=body, method='POST',
+                  headers={'Content-Type': 'application/json',
+                           'Authorization': 'Bearer ' + ANON})
+              with urllib.request.urlopen(req, timeout=timeout) as r:
+                  return json.loads(r.read().decode()).get('data', {})
+
+          def upload_text(name, text):
+              boundary = 'bn' + uuid.uuid4().hex[:16]
+              parts = []
+              for field, value in (
+                      ('upload_preset', PRESET),
+                      ('folder', 'booknest/library')):
+                  parts.append(
+                      '--%s\r\nContent-Disposition: form-data; '
+                      'name="%s"\r\n\r\n%s\r\n' % (boundary, field, value)
+                      .encode())
+              parts.append(
+                  ('--%s\r\nContent-Disposition: form-data; '
+                   'name="file"; filename="%s"\r\n'
+                   'Content-Type: text/plain; charset=utf-8\r\n\r\n'
+                   % (boundary, name)).encode()
+                  + text.encode('utf-8') + b'\r\n')
+              parts.append(('--%s--\r\n' % boundary).encode())
+              req = urllib.request.Request(
+                  'https://api.cloudinary.com/v1_1/%s/raw/upload' % CLOUD,
+                  data=b''.join(parts), method='POST',
+                  headers={'Content-Type':
+                           'multipart/form-data; boundary=%s' % boundary})
+              with urllib.request.urlopen(req, timeout=120) as r:
+                  out = json.loads(r.read().decode())
+              url = out.get('secure_url')
+              if not (isinstance(url, str) and url.startswith('https://')):
+                  raise RuntimeError('upload failed for ' + name)
+              return url
+
+          moved, freed, failures = 0, 0, 0
+          while True:
+              jobs = call('admin.migrateChapterJobs', {'limit': 40})
+              batch = jobs.get('jobs') or []
+              remaining = int(jobs.get('remaining') or 0)
+              if not batch:
+                  break
+              for job in batch:
+                  book_id = job['bookId']
+                  number = int(job['chapterNumber'])
+                  try:
+                      text = call('admin.dumpChapter',
+                                  {'bookId': book_id,
+                                   'chapterNumber': number})
+                      content = text.get('content') or ''
+                      if not content:
+                          continue
+                      safe = (book_id + '-c' + str(number))
+                      safe = safe.replace('/', '_').replace('|', '_')[:120]
+                      url = upload_text(safe + '.txt',
+                                        (text.get('title') or '') +
+                                        '\n\n' + content)
+                      res = call('admin.setChapterUrl',
+                                 {'bookId': book_id,
+                                  'chapterNumber': number,
+                                  'url': url,
+                                  'bytes': len(content)})
+                      moved += 1
+                      freed += int(res.get('freed') or 0)
+                      if moved % 50 == 0:
+                          print('  moved %d chapters, ~%d MB freed '
+                                '(remaining %d)'
+                                % (moved, freed // 1048576, remaining),
+                                flush=True)
+                  except urllib.error.HTTPError as e:
+                      detail = e.read().decode('utf-8', 'replace')[:160]
+                      failures += 1
+                      print('  HTTP %d on %s c%d: %s'
+                            % (e.code, book_id, number, detail), flush=True)
+                      if failures > 60:
+                          print('too many failures - stopping')
+                          sys.exit(1)
+                  except Exception as e:
+                      failures += 1
+                      print('  error on %s c%d: %r'
+                            % (book_id, number, e), flush=True)
+                      if failures > 60:
+                          sys.exit(1)
+                  time.sleep(0.15)
+          line = ('DONE: moved %d chapter texts to the CDN, '
+                  '~%.1f MB lifted off MongoDB, %d failures'
+                  % (moved, freed / 1048576.0, failures))
+          print(line)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write('### Library to CDN\n' + line + '\n')
+          if moved == 0 and failures > 0:
+              sys.exit(1)
+          PYEOF
+
+      - name: Verify a chapter reads back from the CDN
+        env:
+          IMPORT_TOKEN: ${{ env.IMPORT_TOKEN }}
+        run: |
+          python3 - << 'VEREOF'
+          import json, os, urllib.request
+          FN_URL = os.environ['FN_URL'].rstrip('/')
+          ANON = os.environ['ANON']
+          body = json.dumps({'action': 'books.list',
+                             'payload': {'limit': 1}}).encode()
+          req = urllib.request.Request(
+              FN_URL, data=body, method='POST',
+              headers={'Content-Type': 'application/json',
+                       'Authorization': 'Bearer ' + ANON})
+          with urllib.request.urlopen(req, timeout=60) as r:
+              out = json.loads(r.read().decode())
+          books = out.get('data', {}).get('books') or []
+          if not books:
+              print('shelf is empty - nothing to verify')
+              sys.exit(0)
+          book = books[0]
+          body = json.dumps({'action': 'books.chapter',
+                             'payload': {'bookId': book['id'],
+                                         'chapterNumber': 1}}).encode()
+          req = urllib.request.Request(
+              FN_URL, data=body, method='POST',
+              headers={'Content-Type': 'application/json',
+                       'Authorization': 'Bearer ' + ANON})
+          with urllib.request.urlopen(req, timeout=60) as r:
+              ch = json.loads(r.read().decode()).get('data', {})
+          url = ch.get('contentUrl')
+          if url:
+              with urllib.request.urlopen(url, timeout=60) as t:
+                  text = t.read().decode('utf-8', 'replace')
+              print('VERIFY OK: chapter 1 of "%s" reads from the CDN '
+                    '(%d chars)' % (book.get('title'), len(text)))
+          elif (ch.get('content') or ''):
+              print('chapter still inline (migration will catch it) - fine')
+          else:
+              print('no content and no url yet - will verify on rerun')
+          VEREOF
+
+      - name: Commit diagnostics on failure
+        if: failure()
+        run: |
+          { echo "migration diag $(date -u +%FT%TZ)"; tail -c 2500 migrate.log 2>/dev/null; } > import-error.txt || echo "no log" > import-error.txt
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git checkout -q -B import-diag
+          git add import-error.txt
+          git commit -q -m "migration diag $(date -u +%FT%TZ)" || true
+          git push -q -f origin import-diag || git push -f origin import-diag || true

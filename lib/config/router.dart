@@ -21,9 +21,6 @@ import '../presentation/screens/settings/settings_screen.dart';
 import '../presentation/screens/wallet/wallet_screen.dart';
 import '../presentation/screens/wallet/store_screen.dart';
 import '../presentation/screens/jenny/jenny_screen.dart';
-import '../presentation/screens/anime/comics_browse_screen.dart';
-import '../presentation/screens/anime/comic_editor_screen.dart';
-import '../presentation/screens/anime/comic_reader_screen.dart';
 import '../presentation/screens/dictionary/dictionary_screen.dart';
 import '../presentation/screens/dictionary/word_detail_screen.dart';
 import '../services/dictionary_service.dart';
@@ -209,22 +206,6 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/store', builder: (context, state) => const StoreScreen()),
     GoRoute(path: '/jenny', builder: (context, state) => const JennyScreen()),
 
-    // ── Anime: the comic studio, the shelf and a single comic ──
-    GoRoute(
-      path: '/anime',
-      builder: (context, state) => const ComicsBrowseScreen(),
-    ),
-    GoRoute(
-      path: '/anime/studio',
-      builder: (context, state) => ComicEditorScreen(
-        comicId: state.uri.queryParameters['edit'],
-      ),
-    ),
-    GoRoute(
-      path: '/anime/:id',
-      builder: (context, state) =>
-          ComicReaderScreen(comicId: state.pathParameters['id'] ?? ''),
-    ),
     GoRoute(
       path: '/dictionary',
       builder: (context, state) => DictionaryScreen(

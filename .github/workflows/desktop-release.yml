@@ -9,6 +9,8 @@ name: Desktop Release
 # When a build fails, the exact compiler error is committed into the
 # repo (desktop-error-<os>.txt) so it can be read from anywhere — the
 # commit rebases over anything that landed while the build ran.
+# v3 of this pipeline builds WITHOUT Firebase entirely (removed from
+# the app), which takes its heavy C++ SDK out of the Windows build.
 
 on:
   workflow_dispatch:

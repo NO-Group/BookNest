@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'package:http/http.dart' as http;
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -167,7 +168,15 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
         'chapterNumber': widget.chapterNumber,
       });
       if (!mounted || chapter == null) return;
-      final content = chapter['content']?.toString() ?? '';
+      var content = chapter['content']?.toString() ?? '';
+      final contentUrl = chapter['contentUrl']?.toString() ?? '';
+      if (content.trim().isEmpty &&
+          contentUrl.startsWith('https://res.cloudinary.com/')) {
+        try {
+          final fetched = await http.get(Uri.parse(contentUrl));
+          if (fetched.statusCode == 200) content = fetched.body;
+        } catch (_) {}
+      }
       if (isQuillDelta(content)) {
         _body.document = quill.Document.fromJson(
             jsonDecode(content) as List<dynamic>);

@@ -1030,3 +1030,21 @@ build. User-facing copy swept — no dev text on any screen.
   and sync everywhere you sign in.
 - Like counters now animate as they change.
 - Android 13+ themed (monochrome) app icon for wallpaper-tinted launchers.
+
+## [2.30.0] — Storage fix + comics removed
+
+### Fixed
+- MongoDB free-tier saturation (515 MB / 512 MB): all imported chapter
+  texts migrate to Cloudinary raw storage; MongoDB keeps metadata only.
+- Reader and chapter editor fetch CDN-hosted texts transparently.
+- Dictionary re-seeds now that the database has room again.
+- Android push rebuilt without Firebase (no Firebase left anywhere).
+
+### Removed
+- Anime/comics feature entirely (owner decision): screens, routes,
+  profile entry, Discover shelf, edge actions, MongoDB domain.
+
+### Changed
+- Library import is manual-only and stores contentUrl at import time —
+  bulk text never enters MongoDB again.
+- New "Library to CDN" workflow: one-click migration + verification.

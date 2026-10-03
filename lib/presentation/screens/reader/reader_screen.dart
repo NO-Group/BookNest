@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:go_router/go_router.dart';
 
@@ -195,7 +196,20 @@ class _ReaderScreenState extends State<ReaderScreen>
       return;
     }
     _chapterNumber = (res['chapterNumber'] as num?)?.toInt() ?? chapterNumber;
-    final content = res['content']?.toString() ?? '';
+    var content = res['content']?.toString() ?? '';
+    // Full texts live on the media CDN — fetch when pointed there.
+    final contentUrl = res['contentUrl']?.toString() ?? '';
+    if (content.trim().isEmpty &&
+        contentUrl.startsWith('https://res.cloudinary.com/')) {
+      try {
+        final fetched = await http.get(Uri.parse(contentUrl));
+        if (fetched.statusCode == 200) {
+          content = fetched.body;
+        }
+      } catch (_) {
+        // Offline or CDN hiccup — a retry fetches again.
+      }
+    }
     quill.QuillController? rich;
     if (isQuillDelta(content)) {
       try {
