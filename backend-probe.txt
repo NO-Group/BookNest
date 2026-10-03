@@ -1,4 +1,4 @@
-Live probe of the deployed booknest-api — 2026-10-03T10:17:31Z
+Live probe of the deployed booknest-api — 2026-10-03T10:23:10Z
 ("Sign in required" = the action EXISTS on the server;
  "Unknown action" = the deployed file predates it;
  ping's  field shows the deployed file's version)
