@@ -11,49 +11,38 @@ If no such version exists, report the issue to the plugin. If necessary, here is
 an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
 
 If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
-lib/presentation/components/comic_canvas.dart:636:7: Error: No named parameter with the name 'fill'.
-      fill: isCaption ? const Color(0xE60B1531) : null,
-      ^^^^
-lib/presentation/components/comic_canvas.dart:425:9: Context: Found this candidate, but the arguments don't match.
-  const SpeechBubbleView({
-        ^^^^^^^^^^^^^^^^
-lib/presentation/components/comic_canvas.dart:667:40: Error: The getter 'dx' isn't defined for the type 'DragUpdateDetails'.
- - 'DragUpdateDetails' is from 'package:flutter/src/gestures/drag_details.dart' ('/opt/hostedtoolcache/flutter/stable-3.47.5-x64/flutter/packages/flutter/lib/src/gestures/drag_details.dart').
-Try correcting the name to the name of an existing getter, or defining a getter or field named 'dx'.
-              _anchorX = (_anchorX + d.dx / _panel.width).clamp(0.0, 1.0);
-                                       ^^
-lib/presentation/components/comic_canvas.dart:668:40: Error: The getter 'dy' isn't defined for the type 'DragUpdateDetails'.
- - 'DragUpdateDetails' is from 'package:flutter/src/gestures/drag_details.dart' ('/opt/hostedtoolcache/flutter/stable-3.47.5-x64/flutter/packages/flutter/lib/src/gestures/drag_details.dart').
-Try correcting the name to the name of an existing getter, or defining a getter or field named 'dy'.
-              _anchorY = (_anchorY + d.dy / _panel.height).clamp(0.0, 1.0);
-                                       ^^
-lib/presentation/components/comic_canvas.dart:415:16: Error: Final field 'fill' is not initialized.
-Try to initialize the field in the declaration or in every constructor.
-  final Color? fill;
-               ^^^^
-lib/presentation/components/comic_canvas.dart:416:16: Error: Final field 'outline' is not initialized.
-Try to initialize the field in the declaration or in every constructor.
-  final Color? outline;
-               ^^^^^^^
-lib/presentation/components/comic_canvas.dart:417:16: Error: Final field 'textColor' is not initialized.
-Try to initialize the field in the declaration or in every constructor.
-  final Color? textColor;
-               ^^^^^^^^^
-Target kernel_snapshot_program failed: Exception
-
-
-FAILURE: Build failed with an exception.
-
-* What went wrong:
-Execution failed for task ':app:compileFlutterBuildRelease'.
-> Process 'command '/opt/hostedtoolcache/flutter/stable-3.47.5-x64/flutter/bin/flutter'' finished with non-zero exit value 1
-
-* Try:
-> Run with --stacktrace option to get the stack trace.
-> Run with --info or --debug option to get more log output.
-> Run with --scan to generate a Build Scan (Powered by Develocity).
-> Get more help at https://help.gradle.org.
-
-BUILD FAILED in 1m 21s
-Running Gradle task 'assembleRelease'...                           82.4s
-Gradle task assembleRelease failed with exit code 1
+Expected to find fonts for (MaterialIcons, packages/cupertino_icons/CupertinoIcons), but found (MaterialIcons). This usually means you are referring to font families in an IconData class but not including them in the assets section of your pubspec.yaml, are missing the package that would include them, or are missing "uses-material-design: true".
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 53888 bytes (96.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Checking the license for package CMake 3.22.1 in /usr/local/lib/android/sdk/licenses
+License for package CMake 3.22.1 accepted.
+Preparing "Install CMake 3.22.1 v.3.22.1".
+"Install CMake 3.22.1 v.3.22.1" ready.
+Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
+"Install CMake 3.22.1 v.3.22.1" complete.
+"Install CMake 3.22.1 v.3.22.1" finished.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+/home/runner/.pub-cache/hosted/pub.dev/flutter_webrtc-0.12.12+hotfix.1/android/src/main/java/com/cloudwebrtc/webrtc/SurfaceTextureRenderer.java:125: warning: [removal] onSurfaceDestroyed() in Callback has been deprecated and marked for removal
+              public void onSurfaceDestroyed() {
+                          ^
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+4 warnings
+Caught exception: Already watching path: /home/runner/work/BookNest/BookNest/android
+Running Gradle task 'assembleRelease'...                          919.4s
+✓ Built build/app/outputs/flutter-apk/app-release.apk (119.2MB)
