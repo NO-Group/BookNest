@@ -1,48 +1,54 @@
 Running Gradle task 'assembleRelease'...                        
-WARNING: Your Android app project: app located at: /home/runner/work/BookNest/BookNest/android/app/build.gradle.kts
-applies the Kotlin Gradle Plugin, which will cause build failures in future versions of Flutter.
-Please migrate your app to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers
 
-WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): flutter_webrtc, home_widget, package_info_plus, pdfx, share_plus, wakelock_plus
-Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
+FAILURE: Build failed with an exception.
 
-Please check the changelogs of these plugins and upgrade to a version that supports Built-in Kotlin.
-If no such version exists, report the issue to the plugin. If necessary, here is a guide on filing
-an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
+* Where:
+Settings file '/home/runner/work/BookNest/BookNest/android/settings.gradle.kts' line: 20
 
-If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
-Expected to find fonts for (MaterialIcons, packages/cupertino_icons/CupertinoIcons), but found (MaterialIcons). This usually means you are referring to font families in an IconData class but not including them in the assets section of your pubspec.yaml, are missing the package that would include them, or are missing "uses-material-design: true".
-Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 53888 bytes (96.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
-Checking the license for package CMake 3.22.1 in /usr/local/lib/android/sdk/licenses
-License for package CMake 3.22.1 accepted.
-Preparing "Install CMake 3.22.1 v.3.22.1".
-"Install CMake 3.22.1 v.3.22.1" ready.
-Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
-"Install CMake 3.22.1 v.3.22.1" complete.
-"Install CMake 3.22.1 v.3.22.1" finished.
-warning: [options] source value 8 is obsolete and will be removed in a future release
-warning: [options] target value 8 is obsolete and will be removed in a future release
-warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
-3 warnings
-warning: [options] source value 8 is obsolete and will be removed in a future release
-warning: [options] target value 8 is obsolete and will be removed in a future release
-warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
-3 warnings
-warning: [options] source value 8 is obsolete and will be removed in a future release
-warning: [options] target value 8 is obsolete and will be removed in a future release
-warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
-3 warnings
-warning: [options] source value 8 is obsolete and will be removed in a future release
-warning: [options] target value 8 is obsolete and will be removed in a future release
-warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
-/home/runner/.pub-cache/hosted/pub.dev/flutter_webrtc-0.12.12+hotfix.1/android/src/main/java/com/cloudwebrtc/webrtc/SurfaceTextureRenderer.java:125: warning: [removal] onSurfaceDestroyed() in Callback has been deprecated and marked for removal
-              public void onSurfaceDestroyed() {
-                          ^
-Note: Some input files use or override a deprecated API.
-Note: Recompile with -Xlint:deprecation for details.
-Note: Some input files use unchecked or unsafe operations.
-Note: Recompile with -Xlint:unchecked for details.
-4 warnings
-Caught exception: Already watching path: /home/runner/work/BookNest/BookNest/android
-Running Gradle task 'assembleRelease'...                          919.4s
-✓ Built build/app/outputs/flutter-apk/app-release.apk (119.2MB)
+* What went wrong:
+Error resolving plugin [id: 'dev.flutter.flutter-plugin-loader', version: '1.0.0']
+> A problem occurred configuring project ':gradle'.
+   > Could not resolve all artifacts for configuration 'classpath'.
+      > Could not find org.jetbrains.kotlin:kotlin-stdlib:2.2.0.
+        Searched in the following locations:
+          - https://plugins.gradle.org/m2/org/jetbrains/kotlin/kotlin-stdlib/2.2.0/kotlin-stdlib-2.2.0.pom
+        Required by:
+            buildscript of project ':gradle'
+      > Could not resolve org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20.
+        Required by:
+            buildscript of project ':gradle' > org.jetbrains.kotlin.jvm:org.jetbrains.kotlin.jvm.gradle.plugin:2.2.20
+         > Could not resolve org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20.
+            > Could not parse POM https://plugins.gradle.org/m2/org/jetbrains/kotlin/kotlin-gradle-plugin/2.2.20/kotlin-gradle-plugin-2.2.20.pom
+               > Could not find org.jetbrains.kotlin:kotlin-gradle-plugins-bom:2.2.20.
+                 Searched in the following locations:
+                   - https://plugins.gradle.org/m2/org/jetbrains/kotlin/kotlin-gradle-plugins-bom/2.2.20/kotlin-gradle-plugins-bom-2.2.20.pom
+      > Could not find org.jetbrains.kotlin:kotlin-gradle-plugin-api:2.2.0.
+        Searched in the following locations:
+          - https://plugins.gradle.org/m2/org/jetbrains/kotlin/kotlin-gradle-plugin-api/2.2.0/kotlin-gradle-plugin-api-2.2.0.pom
+        Required by:
+            buildscript of project ':gradle' > org.gradle.kotlin.kotlin-dsl:org.gradle.kotlin.kotlin-dsl.gradle.plugin:6.2.0 > org.gradle.kotlin:gradle-kotlin-dsl-plugins:6.2.0
+      > Could not resolve org.jetbrains.kotlin:kotlin-sam-with-receiver:2.2.0.
+        Required by:
+            buildscript of project ':gradle' > org.gradle.kotlin.kotlin-dsl:org.gradle.kotlin.kotlin-dsl.gradle.plugin:6.2.0 > org.gradle.kotlin:gradle-kotlin-dsl-plugins:6.2.0
+         > Could not resolve org.jetbrains.kotlin:kotlin-sam-with-receiver:2.2.0.
+            > Could not parse POM https://plugins.gradle.org/m2/org/jetbrains/kotlin/kotlin-sam-with-receiver/2.2.0/kotlin-sam-with-receiver-2.2.0.pom
+               > Could not find org.jetbrains.kotlin:kotlin-gradle-plugins-bom:2.2.0.
+                 Searched in the following locations:
+                   - https://plugins.gradle.org/m2/org/jetbrains/kotlin/kotlin-gradle-plugins-bom/2.2.0/kotlin-gradle-plugins-bom-2.2.0.pom
+      > Could not find org.jetbrains.kotlin:kotlin-stdlib:2.2.0.
+        Searched in the following locations:
+          - https://plugins.gradle.org/m2/org/jetbrains/kotlin/kotlin-stdlib/2.2.0/kotlin-stdlib-2.2.0.pom
+        Required by:
+            buildscript of project ':gradle' > org.gradle.kotlin.kotlin-dsl:org.gradle.kotlin.kotlin-dsl.gradle.plugin:6.2.0 > org.gradle.kotlin:gradle-kotlin-dsl-plugins:6.2.0
+> There are 2 more failures with identical causes.
+
+* Try:
+> If the artifact you are trying to retrieve can be found in the repository but without metadata in 'Maven POM' format, you need to adjust the 'metadataSources { ... }' of the repository declaration.
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 38s
+Running Gradle task 'assembleRelease'...                           39.5s
+Gradle task assembleRelease failed with exit code 1
