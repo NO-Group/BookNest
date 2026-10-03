@@ -7,6 +7,31 @@ you know it worked.
 
 ---
 
+## This build — the storage fix, nearly automatic
+
+Your MongoDB alerts were real: the free database filled past its
+512 MB limit because the book import stored every full chapter text
+inside it. Nothing is lost. This build fixes it for good:
+
+1. The **Library to CDN** workflow (Actions tab) moves every chapter
+   text to your free Cloudinary space automatically. If MongoDB lets
+   it finish, there is NOTHING for you to do — the run's summary will
+   say so.
+2. Only if its summary says MongoDB refused every write, do this one
+   click: log into cloud.mongodb.com → your Books cluster → Browse
+   Collections → the `books` database → hover the `chapters`
+   collection → the trash icon → confirm. (Safe: every text is
+   already on the CDN, and the workflow keeps a complete manifest to
+   rebuild from.) Then run the **Library to CDN** workflow again
+   (Actions tab → the workflow → "Run workflow").
+3. When it finishes, download your PC installers from the latest
+   **Desktop Release** run's artifacts: Windows zip, macOS app,
+   Linux tar.gz.
+
+Also in this build: comics are gone everywhere as you ordered, books
+open properly when tapped (a real bug fixed), and the Word Nest
+dictionary refills itself after the storage fix.
+
 ## This build, 2.30.0 — the storage fix (do these 3 in order)
 
 Your MongoDB alerts were real: the book import filled the free

@@ -76,6 +76,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Free artifact storage (quota is 500 MB; keep this run only)
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
