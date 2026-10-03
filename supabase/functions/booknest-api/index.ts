@@ -773,7 +773,11 @@ const isUuid = (v: unknown): boolean =>
 
 // Books may carry either a native ObjectId (published after the MongoDB
 // cutover) or the legacy Supabase UUID (migrated rows) — both are valid.
-const isAnyId = (v: unknown): boolean => isHexId(v) || isUuid(v);
+// Ids come in three shapes: Mongo ObjectIds (hex), UUIDs (user-authored
+// books), and readable slugs for imported classics ('bulk-alice-s-...').
+// One charset covers all three; anything else simply finds no document.
+const isAnyId = (v: unknown): boolean =>
+  typeof v === 'string' && /^[\w|-]{1,200}$/.test(v);
 const bookOid = (id: string) => (isHexId(id) ? new ObjectId(id) : id);
 const isDupKey = (e: unknown): boolean =>
   e instanceof Error && e.message.includes('E11000');
