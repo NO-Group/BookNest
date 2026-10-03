@@ -166,10 +166,10 @@ jobs:
               for field, value in (
                       ('upload_preset', PRESET),
                       ('folder', 'booknest/library')):
-                  parts.append(
-                      '--%s\r\nContent-Disposition: form-data; '
-                      'name="%s"\r\n\r\n%s\r\n' % (boundary, field, value)
-                      .encode())
+                  piece = ('--%s\r\nContent-Disposition: form-data; '
+                           'name="%s"\r\n\r\n%s\r\n'
+                           % (boundary, field, value))
+                  parts.append(piece.encode())
               parts.append(
                   ('--%s\r\nContent-Disposition: form-data; '
                    'name="file"; filename="%s"\r\n'
