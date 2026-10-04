@@ -135,11 +135,38 @@ jobs:
           flutter build apk --release 2>&1 | tee build.log
 
       - name: Upload APK artifact
+        continue-on-error: true # quota accounting can lag; the Release below is the real channel
         uses: actions/upload-artifact@v4
         with:
           name: BookNest-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+
+      - name: Publish APK to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          VER="$(grep '^version:' pubspec.yaml | sed 's/version: //;s/+.*//')"
+          TAG="app-${VER}-${GITHUB_RUN_ID}"
+          cp build/app/outputs/flutter-apk/app-release.apk booknest.apk
+          NOTES="BookNest ${VER} for Android. Download booknest.apk and install it (allow installs from this source when asked)."
+          TRY() {
+            gh "$@" 2>&1 | tee -a release-apk.log
+            return ${PIPESTATUS[0]}
+          }
+          : > release-apk.log
+          TRY release create "$TAG" booknest.apk \
+            --target "$GITHUB_SHA" --title "BookNest ${VER} for Android" --notes "$NOTES" \
+          || TRY release create "$TAG" booknest.apk \
+            --title "BookNest ${VER} for Android" --notes "$NOTES" \
+          || TRY release upload "$TAG" booknest.apk --clobber
+          COUNT="$(gh release view "$TAG" --json assets --jq '[.assets[].name] | length')"
+          if [ "${COUNT:-0}" = "0" ]; then
+            tail -c 1500 release-apk.log
+            exit 1
+          fi
+          echo "APK live on release $TAG"
 
       # If the build fails, the last part of the build log is posted as
       # a comment on PR #4 (reachable via the GitHub API even when the
