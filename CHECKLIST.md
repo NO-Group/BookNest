@@ -44,11 +44,14 @@ follows for covers) and keeps only small info in the database.
    **Library to CDN** (moves the texts out — its summary tells you how
    much space was freed) and **BookNest Desktop Release** (your PC
    installers). Check them on the Actions tab of this repo.
-2. When "Library to CDN" finishes green, open the app's Word Nest —
-   the dictionary refills on first open from the app's bundled pages,
-   with the database no longer full. If it still looks empty, tell me.
-3. Download your PC installers from the Desktop run's artifacts when
-   green: Windows zip, macOS app, Linux tar.gz.
+2. When "Library to CDN" finishes green, the Word Nest dictionary
+   fills itself on the server as the run's last step (96k words).
+   Open Word Nest in the app and it is simply there. If it still
+   looks empty, tell me.
+3. Download your PC installers from this repo's **Releases** page
+   (right side): the newest "BookNest for PC" entry has the Windows
+   zip, the macOS app and the Linux tar.gz together. The phone APK
+   lives there too ("BookNest … for Android" → booknest.apk).
 
 Nothing else is on you this time. Comics are gone everywhere as you
 ordered; the app no longer uses Firebase at all.
