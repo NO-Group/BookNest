@@ -12,6 +12,7 @@ on:
     branches:
       - main
       - arena/01a03a7f-booknest
+      - arena/01a106c8-booknest
 
 permissions:
   contents: write

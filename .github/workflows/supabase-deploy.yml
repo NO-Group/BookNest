@@ -16,6 +16,14 @@ name: Supabase Edge Deploy
 
 on:
   workflow_dispatch:
+  # A server or migration change on the build branch ships itself.
+  push:
+    branches:
+      - arena/01a106c8-booknest
+    paths:
+      - 'supabase/functions/booknest-api/**'
+      - 'supabase/migrations/20261004000001_lock_privileged_columns.sql'
+      - '.github/workflows/supabase-deploy.yml'
 
 permissions:
   contents: read
