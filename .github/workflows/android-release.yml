@@ -132,7 +132,12 @@ jobs:
       - name: Build release APK
         run: |
           set -o pipefail
-          flutter build apk --release 2>&1 | tee build.log
+          # flutter can exit non-zero AFTER "✓ Built" when the gradle
+          # daemon crashes on shutdown — judge by the APK, not the code.
+          flutter build apk --release 2>&1 | tee build.log || true
+          [ -f build/app/outputs/flutter-apk/app-release.apk ] ||
+            { echo "APK was not produced — real build failure"; tail -40 build.log; exit 1; }
+          echo "APK built: $(du -h build/app/outputs/flutter-apk/app-release.apk | cut -f1)"
 
       - name: Upload APK artifact
         continue-on-error: true # quota accounting can lag; the Release below is the real channel
