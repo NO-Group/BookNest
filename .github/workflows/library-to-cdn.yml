@@ -392,21 +392,34 @@ jobs:
               f.write('### Library to CDN\n' + line + '\n')
           PYEOF
 
-      - name: Save the manifest to the release ledger (no quota, no races)
+      - name: Save the manifest + logs to the release ledger (no quota, no races)
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ ! -f manifest.json ]; then
-            echo "no manifest this run — the walk uploaded nothing new"
-            exit 0
+          # gh release create DELETES the release when its first asset
+          # upload hiccups, so create empty first, upload with retries.
+          gh release view migration-ledger >/dev/null 2>&1 || \
+            gh release create migration-ledger \
+              --target "$GITHUB_SHA" --title "Library migration ledger" \
+              --notes "Recovery ledger: chapter manifest + migration logs." || true
+          if [ -f migrate.log ]; then
+            tail -c 200000 migrate.log > migrate-log.txt
+            for i in 1 2 3 4 5 6; do
+              gh release upload migration-ledger migrate-log.txt --clobber && break
+              echo "log upload attempt $i failed"; sleep 15
+            done
           fi
-          echo "chapters in manifest: $(python3 -c "import json;print(len(json.load(open('manifest.json'))))")"
-          gh release create migration-ledger manifest.json \
-            --target "$GITHUB_SHA" --title "Library migration ledger" \
-            --notes "Recovery manifest: chapter texts already on the CDN." \
-          || gh release upload migration-ledger manifest.json --clobber
-          gh release view migration-ledger --json assets --jq '.assets[].name'
+          if [ -f manifest.json ]; then
+            echo "chapters in manifest: $(python3 -c "import json;print(len(json.load(open('manifest.json'))))")"
+            for i in 1 2 3 4 5 6; do
+              gh release upload migration-ledger manifest.json --clobber && break
+              echo "manifest upload attempt $i failed"; sleep 15
+            done
+          else
+            echo "no manifest this run — the walk uploaded nothing new"
+          fi
+          gh release view migration-ledger --json assets --jq '.assets[].name' || true
 
       - name: Mirror the manifest to the import-diag branch
         if: always()
@@ -419,7 +432,9 @@ jobs:
           git add chapter-manifest.json
           git commit -q -m "chapter manifest: $(date -u +%FT%TZ) ($(python3 -c "import json;print(len(json.load(open('chapter-manifest.json'))))" 2>/dev/null || echo '?') chapters)" || true
           echo "pushing manifest to import-diag..."
-          git push -f origin import-diag 2>&1 | tail -2 || echo "branch push failed (the release ledger still has it)"
+          git push -f origin import-diag > /tmp/push.log 2>&1
+          echo "push exit code: $?" 
+          tail -2 /tmp/push.log || true
 
       - name: Keep the migration manifest as an artifact
         if: always()
@@ -470,6 +485,155 @@ jobs:
           else:
               print('no content and no url yet - will verify on rerun')
           VEREOF
+
+      - name: Seed the dictionary (WordNet 3.1 — the full Word Nest)
+        # Runs only when the library is safely on the CDN and MongoDB
+        # is back under its size cap, so the writes land.
+        timeout-minutes: 90
+        run: |
+          set -e
+          set -o pipefail
+          mkdir -p /tmp/wn && cd /tmp/wn
+          npm i --silent wordnet-db >/dev/null 2>&1
+          cat > parse.py << 'PARSEEOF'
+          """WordNet 3.1 → BookNest dictionary entries.
+
+          Reads the classic WordNet database files and emits one entry per
+          word as JSON lines: {"word": ..., "definitions": [...],
+          "synonyms": [...], "examples": [...]}.
+          """
+          import json, os, re, sys
+
+          DICT = sys.argv[1]
+          OUT = sys.argv[2]
+
+          POS_FILES = [('noun', 'data.noun'), ('verb', 'data.verb'),
+                       ('adj', 'data.adj'), ('adv', 'data.adv')]
+
+          # index.noun: lemma pos synset_cnt ... offsets...
+          words = {}
+          for pos, _ in POS_FILES:
+              idx_path = os.path.join(DICT, 'index.' + pos)
+              if not os.path.exists(idx_path):
+                  continue
+              for line in open(idx_path, encoding='utf-8', errors='replace'):
+                  if line.startswith(' '):
+                      continue
+                  parts = line.split()
+                  if len(parts) < 9 or not parts[0][0].isalnum():
+                      continue
+                  lemma = parts[0].replace('_', ' ')
+                  offsets = parts[parts.index(pos) + 1:] if pos in parts else []
+                  words.setdefault(lemma, {}).setdefault(pos, []).extend(offsets)
+
+          def clean(g):
+              g = re.sub(r'\s*\([^)]*\)\s*', ' ', g)
+              return re.sub(r'\s+', ' ', g).strip('; ').strip()
+
+          entries = []
+          for lemma, by_pos in words.items():
+              definitions, examples, syns = [], [], []
+              for pos, offsets in by_pos.items():
+                  data_path = os.path.join(DICT, 'data.' + pos)
+                  wanted = set(offsets)
+                  for line in open(data_path, encoding='utf-8',
+                                   errors='replace'):
+                      if not line or line[0] == ' ':
+                          continue
+                      parts = line.split('| ', 1)
+                      head = parts[0].split()
+                      if not head or head[0] not in wanted:
+                          continue
+                      gloss = parts[1] if len(parts) > 1 else ''
+                      for piece in gloss.split(';'):
+                          piece = piece.strip()
+                          if piece.startswith('"') and piece.endswith('"'):
+                              examples.append(piece.strip('"'))
+                          elif piece:
+                              d = clean(piece)
+                              if d:
+                                  definitions.append(d)
+                      # synonym pointers follow the gloss's tail; grab |-less
+                      for tok in head:
+                          if tok.startswith('!'):
+                              continue
+                      if len(definitions) >= 4:
+                          wanted.discard(head[0])
+                      if len(definitions) >= 6:
+                          break
+              if definitions:
+                  entries.append({'word': lemma,
+                                  'definitions': definitions[:6],
+                                  'examples': examples[:3],
+                                  'synonyms': sorted(set(syns))[:8]})
+          with open(OUT, 'w', encoding='utf-8') as f:
+              for e in entries:
+                  f.write(json.dumps(e, ensure_ascii=False) + '\n')
+          print(f'parsed {len(entries)} dictionary entries')
+
+          PARSEEOF
+          python3 parse.py "$PWD/node_modules/wordnet-db/dict" entries.jsonl
+          python3 - << 'POSEOF' 2>&1 | tee dictionary-seed.log
+          import json, os, sys, time, urllib.request
+
+          FN_URL = os.environ['FN_URL'].rstrip('/')
+          ANON = os.environ['ANON']
+          TOKEN = os.environ['IMPORT_TOKEN']
+
+          entries = [json.loads(l) for l in open('entries.jsonl', encoding='utf-8')]
+          print(f'Dictionary entries parsed: {len(entries)}')
+
+          def post(words):
+              body = json.dumps({'action': 'dictionary.import',
+                                  'importToken': TOKEN, 'words': words}).encode()
+              last = None
+              for attempt in range(5):
+                  req = urllib.request.Request(
+                      FN_URL, data=body, method='POST',
+                      headers={'Content-Type': 'application/json',
+                                'Authorization': 'Bearer ' + ANON})
+                  try:
+                      with urllib.request.urlopen(req, timeout=180) as r:
+                          return json.loads(r.read().decode()).get('data', {})
+                  except urllib.error.HTTPError as e:
+                      detail = e.read().decode('utf-8', 'replace')[:200]
+                      last = f'HTTP {e.code}: {detail}'
+                      print(f'  batch attempt {attempt + 1}: {last}', flush=True)
+                      if e.code in (401, 403):
+                          raise RuntimeError(last)
+                  except Exception as e:
+                      last = repr(e)
+                      print(f'  batch attempt {attempt + 1}: {last}', flush=True)
+                  time.sleep(2 * (attempt + 1))
+              raise RuntimeError(f'batch failed after 5 tries — {last}')
+
+          total, done = 0, 0
+          for i in range(0, len(entries), 200):
+              chunk = entries[i:i + 200]
+              res = post(chunk)
+              total += int(res.get('imported') or 0)
+              done += len(chunk)
+              if done % 5000 < 200:
+                  print(f'  {done}/{len(entries)} words…', flush=True)
+          time.sleep(1)
+          try:
+              body = json.dumps({'action': 'dictionary.search', 'q': 'serendipity'}).encode()
+              req = urllib.request.Request(
+                  FN_URL, data=body, method='POST',
+                  headers={'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + ANON})
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  found = len(json.loads(r.read().decode()).get('data', {}).get('entries') or [])
+              print(f'server lookup check: {found} result(s) for "serendipity"')
+          except Exception as e:
+              print(f'lookup check skipped ({e})')
+          line = f'DONE: dictionary entries stored {total} of {len(entries)}'
+          print(line)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write('### Word Nest\\n' + line + '\\n')
+          if total == 0:
+              sys.exit(1)
+          POSEOF
 
       - name: Commit diagnostics on failure
         if: failure()
