@@ -492,7 +492,8 @@ class SupabaseService {
       'username': username,
       'display_name': displayName ?? username,
       'phone_number': phoneNumber,
-      'gems': 77, // Welcome bonus
+      // gems are server-owned: new rows get the 77-gem welcome bonus from
+      // the column default, and the database ignores client-sent values.
     });
   }
 }

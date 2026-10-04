@@ -464,17 +464,49 @@ function serviceClient() {
   );
 }
 
-const WRITABLE_TABLES = new Set([
-  'profiles', 'posts', 'clubs', 'club_members', 'communities',
-  'community_members', 'organizations', 'organization_members', 'schools',
-  'school_members', 'club_books', 'book_chapters', 'announcement_groups',
-]);
-const OWNER_COLUMN: Record<string, string> = {
-  posts: 'created_by', clubs: 'owner_id', communities: 'owner_id',
-  organizations: 'owner_id', schools: 'owner_id', club_books: 'added_by',
-  club_members: 'user_id', community_members: 'user_id',
-  organization_members: 'user_id', school_members: 'user_id', profiles: 'id',
+// ── gems: one honest ledger. Balance lives in profiles, history in Mongo.
+// Module scope on purpose: fulfillOrder() (Paystack purchases) runs outside
+// the action switch, and a function declared inside that switch is
+// block-scoped — purchases used to die with "grantGems is not defined".
+async function grantGems(uid: string, delta: number, reason: string, day: string | null = null) {
+  const prof = await serviceClient().from('profiles')
+    .select('gems').eq('id', uid).single();
+  const current = prof.error ? 0 : Math.max(0, Number(prof.data?.gems ?? 0));
+  const next = Math.max(0, current + delta);
+  await serviceClient().from('profiles').update({ gems: next }).eq('id', uid);
+  await (await dbFor('users')).collection('gem_ledger').insertOne({
+    userId: uid, delta, reason, day,
+    createdAt: new Date(),
+  });
+  return next;
+}
+
+// db.write runs with the SERVICE ROLE (RLS bypassed), so it is a strict
+// allowlist: only the reader's own profile row, and only harmless columns.
+// Everything else (posts, groups, books, chapters, members, announcement
+// groups) has its own Mongo-backed action and is never written here.
+//   ✗ gems / id / created_at — gems are bought with real money; they move
+//     only through grantGems() on the server.
+const WRITABLE_COLUMNS: Record<string, ReadonlySet<string>> = {
+  profiles: new Set([
+    'username', 'display_name', 'avatar_url', 'cover_url', 'phone_number',
+  ]),
 };
+const OWNER_COLUMN: Record<string, string> = { profiles: 'id' };
+
+/** Keeps only allowlisted columns; returns null when nothing is left. */
+function writableValues(
+  table: string,
+  raw: unknown,
+): Record<string, unknown> | null {
+  const allowed = WRITABLE_COLUMNS[table];
+  if (!allowed || !raw || typeof raw !== 'object') return null;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (allowed.has(key)) out[key] = value;
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 // ---------------------------------------------------------------------------
 // Legacy SQL → MongoDB cutover migration (one-time, idempotent, preserving ids)
@@ -778,6 +810,13 @@ const isUuid = (v: unknown): boolean =>
 // One charset covers all three; anything else simply finds no document.
 const isAnyId = (v: unknown): boolean =>
   typeof v === 'string' && /^[\w|-]{1,200}$/.test(v);
+/** Chapter rows key on the book id — ObjectId hex, UUID or bulk slug. */
+const isChapterBookId = isAnyId;
+
+/** Writing-unit labels a book can use. Module scope on purpose: a `const`
+ *  inside the action switch is never initialised for the cases after it
+ *  (temporal dead zone), which made createDraft/publish/update throw. */
+const UNIT_TYPES = ['chapter', 'part', 'act', 'episode', 'volume'];
 const bookOid = (id: string) => (isHexId(id) ? new ObjectId(id) : id);
 const isDupKey = (e: unknown): boolean =>
   e instanceof Error && e.message.includes('E11000');
@@ -1395,7 +1434,7 @@ Deno.serve(async (req: Request) => {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.24',
+          server: '2.25',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -1763,31 +1802,27 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in to make changes.', 401);
         const table = String(p.table ?? '');
         const op = String(p.op ?? 'insert');
-        if (!WRITABLE_TABLES.has(table)) return fail('Table not writable.', 400);
+        if (!WRITABLE_COLUMNS[table]) return fail('Table not writable.', 400);
         const ownerCol = OWNER_COLUMN[table];
+        const values = writableValues(table, p.values);
+        if (!values) return fail('Nothing writable in that change.', 400);
         const db = serviceClient().from(table);
         if (op === 'insert') {
-          const values = { ...(p.values as Record<string, unknown> ?? {}) };
-          if (ownerCol) values[ownerCol] = uid;
-          const { data, error } = await db.insert(values).select().single();
-          if (error) return fail(error.message, 400);
-          return ok({ row: data });
-        }
-        if (op === 'update') {
-          const match = { ...(p.match as Record<string, unknown> ?? {}) };
-          if (ownerCol) match[ownerCol] = uid;
-          const { data, error } = await db.update(p.values ?? {}).match(match)
+          // Insert only ever creates the caller's OWN row.
+          const { data, error } = await db.upsert({ ...values, [ownerCol]: uid })
             .select().single();
           if (error) return fail(error.message, 400);
           return ok({ row: data });
         }
-        if (op === 'delete') {
-          const match = { ...(p.match as Record<string, unknown> ?? {}) };
-          if (ownerCol) match[ownerCol] = uid;
-          const { error } = await db.delete().match(match);
+        if (op === 'update') {
+          // The match is always pinned to the caller's own row — whatever
+          // else the client sent is ignored.
+          const { data, error } = await db.update(values).eq(ownerCol, uid)
+            .select().single();
           if (error) return fail(error.message, 400);
-          return ok({ deleted: true });
+          return ok({ row: data });
         }
+        // No deletes through the generic path — account.delete owns that.
         return fail('Unsupported op.', 400);
       }
 
@@ -1795,7 +1830,7 @@ Deno.serve(async (req: Request) => {
       case 'wallet.summary': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const col = dbFor('users').collection('gem_ledger');
+        const col = (await dbFor('users')).collection('gem_ledger');
         const ledger = await col.find({ userId: uid })
           .sort({ createdAt: -1 }).limit(50).toArray();
         const prof = await serviceClient().from('profiles')
@@ -1813,7 +1848,7 @@ Deno.serve(async (req: Request) => {
       case 'wallet.claim': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const col = dbFor('users').collection('gem_ledger');
+        const col = (await dbFor('users')).collection('gem_ledger');
         const day = todayUtc();
         const existing = await col.findOne({ userId: uid, reason: 'daily', day });
         if (existing) {
@@ -1831,7 +1866,7 @@ Deno.serve(async (req: Request) => {
       case 'wallet.history': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const col = dbFor('users').collection('gem_ledger');
+        const col = (await dbFor('users')).collection('gem_ledger');
         const rows = await col.find({ userId: uid })
           .sort({ createdAt: -1 }).limit(30).toArray();
         return ok({
@@ -2008,7 +2043,7 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in required', 401);
         const message = String(p.message ?? '').trim();
         if (!message) return fail('Say something to Jenny first.');
-        const col = dbFor('chats').collection('jenny_messages');
+        const col = (await dbFor('chats')).collection('jenny_messages');
         const recent = await col.find({ userId: uid })
           .sort({ createdAt: -1 }).limit(10).toArray();
         const history = recent.reverse().map((d: any) => ({
@@ -2077,22 +2112,8 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── books: draft + chapter append (editor flow, Mongo-first) ─────────
-      // ── gems: one honest ledger. Balance lives in profiles, history in Mongo.
-      async function grantGems(uid: string, delta: number, reason: string, day: string | null = null) {
-        const prof = await serviceClient().from('profiles')
-          .select('gems').eq('id', uid).single();
-        const current = prof.error ? 0 : Math.max(0, Number(prof.data?.gems ?? 0));
-        const next = Math.max(0, current + delta);
-        await serviceClient().from('profiles').update({ gems: next }).eq('id', uid);
-        await (await dbFor('users')).collection('gem_ledger').insertOne({
-          userId: uid, delta, reason, day,
-          createdAt: new Date(),
-        });
-        return next;
-      }
-
       // ── book identity: unique Book IDs, drafts, sequels, units ───────────
-      const UNIT_TYPES = ['chapter', 'part', 'act', 'episode', 'volume'];
+      // (grantGems + UNIT_TYPES live at module scope — see above the handler.)
 
       function cleanBookCode(raw: unknown): string | null {
         if (typeof raw !== 'string') return null;
@@ -2607,7 +2628,7 @@ Deno.serve(async (req: Request) => {
           for (const pr of profs.data ?? []) authors.set(String(pr.id), pr as Record<string, unknown>);
         }
         const ids = rows.map((r) => String(r._id));
-        const col = dbFor('social').collection('event_rsvps');
+        const col = (await dbFor('social')).collection('event_rsvps');
         const counts = ids.length
           ? await col.aggregate([
               { $match: { postId: { $in: ids } } },
@@ -2642,7 +2663,7 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in required', 401);
         const postId = String(p.postId ?? '');
         if (!postId) return fail('postId is required');
-        const col = dbFor('social').collection('event_rsvps');
+        const col = (await dbFor('social')).collection('event_rsvps');
         const existing = await col.findOne({ userId: uid, postId });
         if (existing) {
           await col.deleteOne({ _id: existing._id });
@@ -2657,7 +2678,7 @@ Deno.serve(async (req: Request) => {
       case 'streak.get': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const col = dbFor('social').collection('reading_logs');
+        const col = (await dbFor('social')).collection('reading_logs');
         const days = await col.distinct('day', { userId: uid });
         return ok({
           ...(computeStreaks(days.map(String))),
@@ -2670,7 +2691,7 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in required', 401);
         const day = todayUtc();
         const minutes = Math.max(0, Math.min(600, Number(p.minutes ?? 0) || 0));
-        const col = dbFor('social').collection('reading_logs');
+        const col = (await dbFor('social')).collection('reading_logs');
         const existing = await col.findOne({ userId: uid, day });
         let created = false;
         if (!existing) {
@@ -2693,7 +2714,7 @@ Deno.serve(async (req: Request) => {
           const current = prof.error ? 0 : Number(prof.data?.gems ?? 0);
           await serviceClient().from('profiles')
             .update({ gems: current + gemsAwarded }).eq('id', uid);
-          await dbFor('users').collection('gem_ledger').insertOne({
+          await (await dbFor('users')).collection('gem_ledger').insertOne({
             userId: uid, delta: gemsAwarded, reason: 'reading_streak', day,
             createdAt: new Date(),
           });
@@ -2759,7 +2780,7 @@ Deno.serve(async (req: Request) => {
           const current = prof.error ? 0 : Number(prof.data?.gems ?? 0);
           await supa.from('profiles')
             .update({ gems: current + gemsAwarded }).eq('id', authorId);
-          await dbFor('users').collection('gem_ledger').insertOne({
+          await (await dbFor('users')).collection('gem_ledger').insertOne({
             userId: authorId, delta: gemsAwarded, reason: 'book_publish',
             day: todayUtc(), createdAt: new Date(),
           });
@@ -4851,6 +4872,10 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'groups.announcements.list': {
+        // Signed-out readers may browse; the viewer id only decides whether
+        // the manager controls show. (It was referenced but never defined,
+        // so every announcements list failed with "uid is not defined".)
+        const uid = await currentUserId(req);
         const groupId = typeof p.groupId === 'string' ? p.groupId : '';
         if (!groupId) return fail('A valid groupId is required');
         const rows = await (await dbFor('groups')).collection('announcements')

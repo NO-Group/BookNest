@@ -22,7 +22,6 @@ import 'services/background_link.dart';
 import 'services/notification_service.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'services/supabase_service.dart';
 import 'presentation/components/booknest_keyboard.dart';
 
@@ -33,8 +32,14 @@ Future<void> main() async {
   await SupabaseService().initialize();
   // Self-heal: guarantee a profiles row exists for returning users whose
   // signup predated the auto-create trigger (fixes empty chat/search results).
+  // Bounded: on a slow or offline network the app must still open — the
+  // heal simply finishes in the background (it is idempotent).
   if (SupabaseService().auth.currentUser != null) {
-    await SupabaseService().ensureProfile();
+    try {
+      await SupabaseService()
+          .ensureProfile()
+          .timeout(const Duration(seconds: 4));
+    } catch (_) {}
   }
   unawaited(_startupAftercare());
   unawaited(PushService.instance.warmUp());

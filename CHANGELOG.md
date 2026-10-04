@@ -1,5 +1,50 @@
 # Changelog
 
+## 2.31.0+57 — 2026-10-04 · Security + reliability fix drop
+
+**Security**
+- **Gems can no longer be self-granted.** Any signed-in reader could set
+  their own `profiles.gems` (sold for real money) through the public API.
+  A database trigger now pins privileged columns for end users —
+  `profiles.gems/id/created_at`, `club_books.moderation_status`,
+  `organizations/schools.is_verified`, `*_members.role` — while the server
+  (service role) keeps granting gems normally
+  (`supabase/migrations/20261004000001_lock_privileged_columns.sql`, also
+  folded into `backend/booknest_complete_setup.sql`).
+- **`db.write` locked down.** The service-role generic writer accepted any
+  column on 13 tables and let anyone edit/delete any chapter or
+  announcement group. It now only updates the caller's own profile, and
+  only `username, display_name, avatar_url, cover_url, phone_number`.
+
+**Server fixes (edge function → server 2.25)**
+- Paid gem purchases crashed after payment (`grantGems is not defined` —
+  it was block-scoped inside the action switch). Moved to module scope.
+- Book drafts, publishing and book updates threw
+  `Cannot access 'UNIT_TYPES' before initialization` (a `const` inside the
+  switch). Moved to module scope.
+- Wallet, daily gem claim, gem history, Streaks, Events, RSVP, the reading
+  streak reward and the book-approval reward all called `.collection()` on
+  an un-awaited Promise — 10 call sites fixed.
+- Group announcements never loaded (`uid` referenced but never defined).
+- Admin chapter tools referenced a missing `isChapterBookId`.
+
+**App fixes**
+- Startup can no longer hang on a slow network (profile self-heal bounded
+  to 4 s).
+- Club chat room list is now actually cached (`chats.list` cache key).
+- `/wrapped`, `/random-chat`, `/moderator`, `/shared` require sign-in.
+- Client no longer sends `gems` on profile creation; duplicate import
+  removed; app version strings back in sync.
+
+**Desktop**
+- The PC app was still named **tether** / `com.example` (from the project
+  template). It is now **BookNest** (`booknest.exe`, N.O Group) on
+  Windows, macOS and Linux. PC users sign in once more after updating.
+- Windows now ships a real installer, **BookNest-Setup.exe**, plus the
+  portable zip — both bundle the Visual C++ runtime so the app starts on
+  fresh PCs. All three OS builds publish to one "BookNest … for PC"
+  release.
+
 ## 2.29.0+54 — 2026-09-21 · Anime upgraded + voice-first chats + PCs
 
 - **Anime upgraded — the ink engine begins.** A real freehand **sketch

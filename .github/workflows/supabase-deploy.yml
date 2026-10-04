@@ -1,21 +1,28 @@
 name: Supabase Edge Deploy
 
-# Deploys the booknest edge function straight from CI so the server never
-# lags the app. One-time setup by the owner (dashboard only, no terminal):
-#   1. Supabase dashboard → Account → Access Tokens → Generate token
+# Ships the server side in one click: applies the database security
+# migrations, deploys the booknest-api edge function, then asks the live
+# server which version it is running.
+#
+# One-time setup by the owner (dashboard only, no terminal):
+#   1. Supabase dashboard → Account (top-right avatar) → Access Tokens →
+#      Generate new token
 #   2. GitHub repo → Settings → Secrets and variables → Actions →
-#      "New repository secret", twice:
-#        SUPABASE_ACCESS_TOKEN  = the token from step 1
-#        SUPABASE_PROJECT_REF   = Supabase dashboard → Project Settings →
-#                                 General → Reference ID
+#      "New repository secret":
+#        SUPABASE_ACCESS_TOKEN = the token from step 1
+#      (optional) SUPABASE_PROJECT_REF — defaults to this app's public
+#      project ref, so it is only needed if the project ever moves.
 #   3. GitHub → Actions tab → "Supabase Edge Deploy" → Run workflow.
-# After that, deploying the server is ONE click — no more manual pasting.
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  # Public by design (it is in the app's Supabase URL).
+  DEFAULT_PROJECT_REF: ekgbbbbjwgfixqarlnil
 
 jobs:
   deploy-edge:
@@ -24,21 +31,52 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Guard — secrets present?
+      - name: Guard — access token present?
         env:
           HAS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
-          HAS_REF: ${{ secrets.SUPABASE_PROJECT_REF != '' }}
         run: |
-          if [ "$HAS_TOKEN" != "true" ] || [ "$HAS_REF" != "true" ]; then
+          if [ "$HAS_TOKEN" != "true" ]; then
             {
-              echo "## Missing secrets"
+              echo "## Missing secret"
               echo ""
-              echo "Add **SUPABASE_ACCESS_TOKEN** and **SUPABASE_PROJECT_REF**"
-              echo "under Settings → Secrets and variables → Actions"
-              echo "(see ops/SUPABASE_AUTO_DEPLOY.md), then re-run."
-            } >> $GITHUB_STEP_SUMMARY
+              echo "Add **SUPABASE_ACCESS_TOKEN** under Settings → Secrets and"
+              echo "variables → Actions (Supabase dashboard → Account → Access"
+              echo "Tokens → Generate), then re-run this workflow."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
+
+      - name: Resolve project ref
+        env:
+          REF_SECRET: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          # Accept a bare ref or a pasted URL; fall back to the app's ref.
+          REF="$(printf '%s' "$REF_SECRET" | grep -oE '[a-z]{20}' | head -1)"
+          REF="${REF:-$DEFAULT_PROJECT_REF}"
+          echo "PROJECT_REF=$REF" >> "$GITHUB_ENV"
+          echo "Deploying to project $REF"
+
+      - name: Syntax gate (refuse to deploy a file that does not parse)
+        run: npx -y esbuild@0.24.0 supabase/functions/booknest-api/index.ts --format=esm --log-level=error > /dev/null
+
+      - name: Apply database security migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Idempotent migrations only — each is safe to run on every deploy.
+          for f in supabase/migrations/20261004000001_lock_privileged_columns.sql; do
+            echo "applying $f"
+            jq -Rs '{query: .}' "$f" > body.json
+            code=$(curl -sS -o resp.json -w '%{http_code}' -X POST \
+              "https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query" \
+              -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data @body.json)
+            echo "HTTP $code: $(head -c 400 resp.json)"
+            [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || exit 1
+          done
+          echo "- Database security migration applied ✅" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Supabase CLI
         uses: supabase/setup-cli@v1
@@ -48,8 +86,28 @@ jobs:
       - name: Deploy booknest-api
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           supabase functions deploy booknest-api \
-            --project-ref "$SUPABASE_PROJECT_REF" \
+            --project-ref "$PROJECT_REF" \
             --use-api
+
+      - name: Smoke test — which server version is live?
+        run: |
+          set -uo pipefail
+          WANT="$(grep -oE "server: '[0-9.]+'" supabase/functions/booknest-api/index.ts | head -1 | grep -oE "[0-9.]+")"
+          ANON="$(grep -A3 'supabaseAnonKey = ' lib/config/app_config.dart | grep -oE "eyJ[^']+")"
+          for i in 1 2 3 4 5 6; do
+            OUT="$(curl -s --max-time 20 -X POST \
+              "https://${PROJECT_REF}.supabase.co/functions/v1/booknest-api" \
+              -H "Authorization: Bearer $ANON" -H "Content-Type: application/json" \
+              -d '{"action":"ping"}')"
+            GOT="$(printf '%s' "$OUT" | grep -oE '"server":"[0-9.]+"' | grep -oE '[0-9.]+' || true)"
+            echo "try $i: live server=${GOT:-?} (want $WANT)"
+            if [ "$GOT" = "$WANT" ]; then
+              echo "- Edge function live: server $GOT ✅" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Live server did not report $WANT: ${OUT:0:300}"
+          exit 1

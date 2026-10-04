@@ -42,7 +42,7 @@ class BackendApi {
     'books.list',
     'books.get',
     'dm.list',
-    'chat.rooms',
+    'chats.list',
     'notifications.list',
     'reviews.list',
   };
@@ -72,7 +72,7 @@ class BackendApi {
     'chat.read': 'chats',
     'chat.ensure': 'chats',
     'chat.pin': 'chats',
-    'chat.rooms': 'chats',
+    'chats.list': 'chats',
     'calls.ice': 'chats',
     'notifications.list': 'notifications',
     'reviews.list': 'books',

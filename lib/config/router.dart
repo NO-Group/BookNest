@@ -107,6 +107,10 @@ const Set<String> _protectedRoutes = {
   '/jenny',
   '/events',
   '/streaks',
+  '/wrapped',
+  '/random-chat',
+  '/moderator',
+  '/shared',
 };
 
 /// Global auth redirect.

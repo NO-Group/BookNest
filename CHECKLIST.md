@@ -1,5 +1,39 @@
 # BookNest — Your Checklist (from the chat-backup release to publishing)
 
+---
+
+## This build, 2.31.0 — security fixes (do these 2 to finish)
+
+The new APK and PC installers are on the **Releases** page. The app-side
+fixes are inside them. The **server** fixes (paid gems, wallet, streaks,
+events, publishing, announcements, the gem-exploit lock) only take effect
+once the server is updated — one of these, whichever is easier:
+
+1. **One-click (recommended):** Supabase dashboard → your avatar (top
+   right) → **Access Tokens** → *Generate new token*. Then GitHub → this
+   repo → Settings → Secrets and variables → Actions → *New repository
+   secret* → name `SUPABASE_ACCESS_TOKEN`, paste the token. Then Actions →
+   **Supabase Edge Deploy** → Run workflow (branch
+   `arena/01a106c8-booknest`). It applies the database lock, deploys the
+   server and checks the live version says **2.25**.
+2. **By hand:** Supabase → SQL Editor → paste
+   `supabase/migrations/20261004000001_lock_privileged_columns.sql` → Run
+   (prints *BookNest privileged columns locked*). Then Edge Functions →
+   booknest-api → paste `supabase/functions/booknest-api/index.ts` →
+   Deploy.
+
+**Signing key (do before the Play Store):** the release keystore is still
+committed in `android/key/`. It stays for now on purpose — removing it
+would make CI sign with a different key and every installed copy would
+refuse to update. To move it out: GitHub → Settings → Secrets → Actions →
+add `KEYSTORE_BASE64` (= `base64 -w0 android/key/booknest-release.jks`)
+and `KEYSTORE_PROPERTIES_BASE64` (= `base64 -w0
+android/key/booknest-keystore.properties`); the Android workflow already
+prefers them. Then delete the two files from the repo. Because the key is
+in git history, publish to Play with **Play App Signing** (Google holds
+the real app key; this one becomes just the upload key, which can be
+reset).
+
 Everything the code side has shipped (v2.6 → v2.25) is built, green, and
 waiting. What follows is **every action only you can do**, in order,
 dashboard-click level. Tick them top to bottom — each has a "proof" so
