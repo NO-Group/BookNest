@@ -160,7 +160,7 @@ jobs:
             --target "$GITHUB_SHA" --title "BookNest ${VER} for Android" --notes "$NOTES" \
           || TRY release create "$TAG" booknest.apk \
             --title "BookNest ${VER} for Android" --notes "$NOTES" \
-          || TRY release upload "$TAG" booknest.apk --clobber
+          || TRY release upload "$TAG" build/app/outputs/flutter-apk/app-release.apk#booknest.apk --clobber
           COUNT="$(gh release view "$TAG" --json assets --jq '[.assets[].name] | length')"
           if [ "${COUNT:-0}" = "0" ]; then
             tail -c 1500 release-apk.log
@@ -198,9 +198,14 @@ jobs:
             git add diag/build-error-tail.txt
             git commit -q -m "CI build diagnostics for ${GITHUB_SHA} [skip ci]"
             # The probe job may have pushed first — rebase and retry.
+            # NEVER force-push this branch: a stale diag commit would
+            # rewind newer work (that is how today's branch reset happened).
             git pull --rebase -q origin "${GITHUB_REF_NAME}" || true
             git push -q origin "HEAD:${GITHUB_REF_NAME}" ||
-              git push -q -f origin "HEAD:${GITHUB_REF_NAME}" || true
+              { git fetch -q origin "${GITHUB_REF_NAME}" &&
+                git rebase -q "origin/${GITHUB_REF_NAME}" || true
+                git push -q origin "HEAD:${GITHUB_REF_NAME}" ||
+                echo "diag push skipped — branch moved again"; }
           fi
 
       - name: Upload build log artifact

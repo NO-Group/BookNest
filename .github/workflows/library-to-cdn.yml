@@ -133,15 +133,21 @@ jobs:
       - name: Move every chapter text to the CDN
         env:
           IMPORT_TOKEN: ${{ env.IMPORT_TOKEN }}
-        timeout-minutes: 240
+          GH_TOKEN: ${{ github.token }}
+        timeout-minutes: 350
         run: |
           set -o pipefail
           # Resume support: a previous run may have committed the
           # manifest of texts already on the CDN.
-          git fetch -q origin import-diag 2>/dev/null || true
-          git show FETCH_HEAD:chapter-manifest.json > chapter-manifest.json 2>/dev/null || true
+          gh release download migration-ledger -p 'manifest.json' -O chapter-manifest.json 2>/dev/null || true
+          if [ ! -s chapter-manifest.json ]; then
+            git fetch -q origin import-diag 2>/dev/null || true
+            git show FETCH_HEAD:chapter-manifest.json > chapter-manifest.json 2>/dev/null || true
+          fi
           python3 - << 'PYEOF' 2>&1 | tee migrate.log
           import json, os, sys, time, urllib.request, urllib.error, uuid
+          import threading
+          from concurrent.futures import ThreadPoolExecutor
 
           FN_URL = os.environ['FN_URL'].rstrip('/')
           ANON = os.environ['ANON']
@@ -202,65 +208,104 @@ jobs:
                         'on the CDN' % len(resume), flush=True)
               except Exception:
                   resume = []
-          cursor, shrunk, failures = 0, 0, 0
-          manifest = []
-          while True:
+          done = {(e['bookId'], e['chapterNumber']) for e in resume}
+          cursor, shrunk, failures, consecutive = 0, 0, 0, 0
+          stats_lock = threading.Lock()
+
+          def handle(job):
+              # Runs on a worker thread; returns a manifest entry or None.
+              # Transient Atlas TLS hiccups are retried before counting.
+              global shrunk, failures, consecutive
+              book_id = job['bookId']
+              number = int(job['chapterNumber'])
+              if (book_id, number) in done:
+                  return None
+              text = None
+              for attempt in range(3):
+                  try:
+                      text = call('admin.dumpChapter',
+                                  {'bookId': book_id,
+                                   'chapterNumber': number})
+                      break
+                  except urllib.error.HTTPError as e:
+                      detail = e.read().decode('utf-8', 'replace')[:120]
+                      if attempt == 2:
+                          with stats_lock:
+                              failures += 1
+                              consecutive += 1
+                          print('  HTTP %d on %s c%d (gave up): %s'
+                                % (e.code, book_id, number, detail),
+                                flush=True)
+                          return None
+                      time.sleep(2 + 3 * attempt)
+                  except Exception as e:
+                      if attempt == 2:
+                          with stats_lock:
+                              failures += 1
+                              consecutive += 1
+                          print('  error on %s c%d (gave up): %r'
+                                % (book_id, number, e), flush=True)
+                          return None
+                      time.sleep(2 + 3 * attempt)
+              content = (text or {}).get('content') or ''
+              if not content:
+                  return None
+              safe = (book_id + '-c' + str(number))
+              safe = safe.replace('/', '_').replace('|', '_')[:120]
+              title = (text or {}).get('title') or ''
+              try:
+                  url = upload_text(safe + '.txt',
+                                    title + '\n\n' + content)
+              except Exception as e:
+                  with stats_lock:
+                      failures += 1
+                      consecutive += 1
+                  print('  upload failed on %s c%d: %r'
+                        % (book_id, number, e), flush=True)
+                  return None
+              with stats_lock:
+                  consecutive = 0
+              entry = {'bookId': book_id,
+                       'chapterNumber': number,
+                       'title': title,
+                       'url': url,
+                       'bytes': len(content)}
+              try:
+                  call('admin.setChapterUrl',
+                       {'bookId': book_id,
+                        'chapterNumber': number,
+                        'url': url,
+                        'bytes': len(content)})
+                  shrunk += 1
+              except urllib.error.HTTPError:
+                  # Over quota: the row stays for now; the whole
+                  # collection is dropped after this walk.
+                  pass
+              except Exception:
+                  pass
+              return entry
+
+          pool = ThreadPoolExecutor(max_workers=4)
+          manifest = list(resume)
+          while consecutive <= 60:
               jobs = call('admin.migrateChapterJobs',
                           {'limit': 40, 'skip': cursor})
               batch = jobs.get('jobs') or []
               if not batch:
                   break
-              for job in batch:
-                  cursor += 1
-                  book_id = job['bookId']
-                  number = int(job['chapterNumber'])
-                  try:
-                      text = call('admin.dumpChapter',
-                                  {'bookId': book_id,
-                                   'chapterNumber': number})
-                      content = text.get('content') or ''
-                      if not content:
-                          continue
-                      safe = (book_id + '-c' + str(number))
-                      safe = safe.replace('/', '_').replace('|', '_')[:120]
-                      title = text.get('title') or ''
-                      url = upload_text(safe + '.txt',
-                                        title + '\n\n' + content)
-                      entry = {'bookId': book_id,
-                               'chapterNumber': number,
-                               'title': title,
-                               'url': url,
-                               'bytes': len(content)}
-                      try:
-                          call('admin.setChapterUrl',
-                               {'bookId': book_id,
-                                'chapterNumber': number,
-                                'url': url,
-                                'bytes': len(content)})
-                          shrunk += 1
-                      except urllib.error.HTTPError:
-                          # Over quota: the row stays for now; the whole
-                          # collection is dropped after this walk.
-                          pass
-                      manifest.append(entry)
-                      if len(manifest) % 50 == 0:
-                          print('  uploaded %d chapter texts so far'
-                                % len(manifest), flush=True)
-                  except urllib.error.HTTPError as e:
-                      detail = e.read().decode('utf-8', 'replace')[:160]
-                      failures += 1
-                      print('  HTTP %d on %s c%d: %s'
-                            % (e.code, book_id, number, detail), flush=True)
-                      if failures > 40:
-                          print('too many failures - stopping')
-                          sys.exit(1)
-                  except Exception as e:
-                      failures += 1
-                      print('  error on %s c%d: %r'
-                            % (book_id, number, e), flush=True)
-                      if failures > 40:
-                          sys.exit(1)
-                  time.sleep(0.15)
+              cursor += len(batch)
+              fresh = [e for e in pool.map(handle, batch) if e]
+              if fresh:
+                  manifest.extend(fresh)
+                  json.dump(manifest, open('manifest.json', 'w'))
+              if len(manifest) % 80 < 8:
+                  print('  uploaded %d chapter texts so far'
+                        % len(manifest), flush=True)
+          pool.shutdown(wait=True)
+          if consecutive > 60:
+              print('too many consecutive failures - stopping; the '
+                    'manifest so far is committed, rerun to resume')
+              sys.exit(1)
           with open('manifest.json', 'w') as f:
               json.dump(manifest, f)
           print('phase 1 done: %d texts on the CDN (%d shrunk in place, '
@@ -304,24 +349,33 @@ jobs:
 
           pending = list(manifest)
           deadline = time.time() + 45 * 60
+          stub_tries = [0]
+
+          def seed(m):
+              try:
+                  call('admin.restoreChapterStub',
+                       {'bookId': m['bookId'],
+                        'chapterNumber': m['chapterNumber'],
+                        'title': m['title'],
+                        'url': m['url'],
+                        'bytes': m['bytes']})
+                  return None
+              except Exception:
+                  with stats_lock:
+                      stub_tries[0] += 1
+                  time.sleep(0.5)
+                  return m
+
+          pool2 = ThreadPoolExecutor(max_workers=8)
           while pending and time.time() < deadline:
-              still = []
-              for m in pending:
-                  try:
-                      call('admin.restoreChapterStub',
-                           {'bookId': m['bookId'],
-                            'chapterNumber': m['chapterNumber'],
-                            'title': m['title'],
-                            'url': m['url'],
-                            'bytes': m['bytes']})
-                  except Exception:
-                      still.append(m)
-                      time.sleep(1)
-              if len(still) == len(pending):
+              results = [r for r in pool2.map(seed, pending)]
+              still = [m for m in results if m is not None]
+              if len(still) == len(pending) and pending:
                   print('  writes still blocked - waiting a minute '
                         '(%d stubs pending)' % len(still), flush=True)
                   time.sleep(60)
               pending = still
+          pool2.shutdown(wait=True)
           if pending:
               with open('stub-backlog.json', 'w') as f:
                   json.dump(pending, f)
@@ -338,17 +392,34 @@ jobs:
               f.write('### Library to CDN\n' + line + '\n')
           PYEOF
 
-      - name: Commit the manifest (recovery ledger)
+      - name: Save the manifest to the release ledger (no quota, no races)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f manifest.json ]; then
+            echo "no manifest this run — the walk uploaded nothing new"
+            exit 0
+          fi
+          echo "chapters in manifest: $(python3 -c "import json;print(len(json.load(open('manifest.json'))))")"
+          gh release create migration-ledger manifest.json \
+            --target "$GITHUB_SHA" --title "Library migration ledger" \
+            --notes "Recovery manifest: chapter texts already on the CDN." \
+          || gh release upload migration-ledger manifest.json --clobber
+          gh release view migration-ledger --json assets --jq '.assets[].name'
+
+      - name: Mirror the manifest to the import-diag branch
         if: always()
         run: |
-          [ -f manifest.json ] || { echo "no manifest this run"; exit 0; }
+          [ -f manifest.json ] || exit 0
           cp manifest.json chapter-manifest.json
           git config user.email "booknest-ci@users.noreply.github.com"
           git config user.name "booknest-ci"
           git checkout -q -B import-diag
           git add chapter-manifest.json
           git commit -q -m "chapter manifest: $(date -u +%FT%TZ) ($(python3 -c "import json;print(len(json.load(open('chapter-manifest.json'))))" 2>/dev/null || echo '?') chapters)" || true
-          git push -q -f origin import-diag || git push -f origin import-diag || true
+          echo "pushing manifest to import-diag..."
+          git push -f origin import-diag 2>&1 | tail -2 || echo "branch push failed (the release ledger still has it)"
 
       - name: Keep the migration manifest as an artifact
         if: always()
@@ -414,3 +485,5 @@ jobs:
           git add import-error.txt
           git commit -q -m "migration diag $(date -u +%FT%TZ)" || true
           git push -q -f origin import-diag || git push -f origin import-diag || true
+
+# trigger: rerun CDN migration 2026-10-04
