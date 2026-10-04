@@ -1,0 +1,12 @@
+Building Linux application...                                   
+CMake Error at /usr/local/share/cmake-3.31/Modules/FindPkgConfig.cmake:645 (message):
+  The following required packages were not found:
+
+   - gstreamer-1.0
+
+Call Stack (most recent call first):
+  /usr/local/share/cmake-3.31/Modules/FindPkgConfig.cmake:873 (_pkg_check_modules_internal)
+  flutter/ephemeral/.plugin_symlinks/audioplayers_linux/linux/CMakeLists.txt:24 (pkg_check_modules)
+
+
+Unable to generate build files
