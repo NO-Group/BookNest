@@ -1435,7 +1435,7 @@ Deno.serve(async (req: Request) => {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.26',
+          server: '2.26.1',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -1618,6 +1618,7 @@ Deno.serve(async (req: Request) => {
         const chaptersCol = d.collection('chapters');
         let imported = 0;
         let skipped = 0;
+        const errors: string[] = [];
         for (const row of rows) {
           try {
             const title = String(row.title ?? '').trim().slice(0, 200);
@@ -1707,11 +1708,12 @@ Deno.serve(async (req: Request) => {
               },
             })) as never, { ordered: false });
             imported += 1;
-          } catch (_) {
+          } catch (e) {
             skipped += 1;
+            if (errors.length < 5) errors.push(String((e as Error)?.message ?? e).slice(0, 300));
           }
         }
-        return ok({ imported, skipped });
+        return ok({ imported, skipped, errors });
       }
 
       // ── library covers: one unique AI cover per library book ─────────────

@@ -61,7 +61,7 @@ CUTOFF_DEATH_YEAR = dt.date.today().year - 71  # 2026 → died 1955 or earlier
 UA = 'BookNest-library/2.0 (https://github.com/NO-Group/BookNest)'
 RAW = 'https://raw.githubusercontent.com'
 
-report: dict = {'started': dt.datetime.utcnow().isoformat() + 'Z', 'cutoff': CUTOFF_DEATH_YEAR,
+report: dict = {'started': dt.datetime.now(dt.timezone.utc).isoformat(), 'cutoff': CUTOFF_DEATH_YEAR,
                 'se': {}, 'gt': {}, 'excluded_copyright': [], 'errors': []}
 
 
@@ -812,6 +812,10 @@ def post_books(books: list[dict], phase: str):
             out = api('admin.importBooks', {'books': payload})
             imported += int(out.get('imported', 0))
             skipped += int(out.get('skipped', 0))
+            for err in out.get('errors') or []:
+                if len(report['errors']) < 40:
+                    report['errors'].append(f'{phase}: {err}')
+                log(f'  server error: {err}')
         sent += len(batch)
         if sent % 200 < len(batch):
             log(f'  {phase}: posted {sent}/{len(books)} (imported {imported}, unchanged/skipped {skipped})')
@@ -848,7 +852,7 @@ def verify(books: list[dict]):
 
 def write_report():
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    report['finished'] = dt.datetime.utcnow().isoformat() + 'Z'
+    report['finished'] = dt.datetime.now(dt.timezone.utc).isoformat()
     (REPORT_DIR / 'import-report.json').write_text(json.dumps(report, indent=1, ensure_ascii=False))
     lines = ['# Library import report', '',
              f"- Started {report['started']} · finished {report['finished']}",

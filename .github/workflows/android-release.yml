@@ -13,6 +13,14 @@ on:
       - main
       - arena/01a03a7f-booknest
       - arena/01a106c8-booknest
+    # Only app changes build an APK (library/server work does not).
+    paths:
+      - 'lib/**'
+      - 'android/**'
+      - 'assets/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/android-release.yml'
 
 permissions:
   contents: write
