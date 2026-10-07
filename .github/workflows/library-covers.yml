@@ -1,0 +1,136 @@
+name: Library Covers (AI)
+
+# One unique AI-painted cover for every library book (members' own books
+# are never touched). Art: Pollinations FLUX, seeded per book; typography:
+# open-licence Google Fonts; uniqueness: perceptual-hash check across the
+# whole library; hosting: Cloudinary (images only). Resumable — books that
+# already have an AI cover are skipped, so reruns finish the remainder.
+# Settings: tools/library/covers.env (pushing it starts a run).
+# Optional secret POLLINATIONS_TOKEN (free "seed" tier) makes it ~3× faster.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a106c8-booknest
+    paths:
+      - 'tools/library/covers.env'
+      - '.github/workflows/library-covers.yml'
+
+concurrency:
+  group: library-import-token
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      mode: ${{ steps.cfg.outputs.mode }}
+      shards: ${{ steps.cfg.outputs.shards }}
+      count: ${{ steps.cfg.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: cfg
+        run: |
+          set -a; . tools/library/covers.env; set +a
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "count=$SHARDS" >> "$GITHUB_OUTPUT"
+          echo "shards=$(python3 -c "import json;print(json.dumps(list(range(int('$SHARDS')))))")" >> "$GITHUB_OUTPUT"
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Wait for the server, mint the import key
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: bash .github/scripts/library-token.sh
+      - run: pip install -q pillow imagehash
+      - name: Which books need a cover?
+        env:
+          WORK_DIR: work
+        run: |
+          set -a; . tools/library/covers.env; set +a
+          MODE=index python3 tools/library/covers.py
+      - name: Probe — paint samples
+        if: steps.cfg.outputs.mode == 'probe'
+        env:
+          WORK_DIR: work
+          POLLINATIONS_TOKEN: ${{ secrets.POLLINATIONS_TOKEN }}
+        run: |
+          set -a; . tools/library/covers.env; set +a
+          MODE=probe python3 tools/library/covers.py
+      - name: Publish samples to the branch
+        if: always() && steps.cfg.outputs.mode == 'probe'
+        run: bash .github/scripts/commit-library-output.sh "Cover probe samples" tools/library/samples
+      - uses: actions/upload-artifact@v4
+        if: steps.cfg.outputs.mode == 'all'
+        with:
+          name: covers-books
+          path: work/books.json
+          retention-days: 3
+
+  paint:
+    needs: setup
+    if: needs.setup.outputs.mode == 'all'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.setup.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: covers-books
+          path: work
+      - run: pip install -q pillow imagehash
+      - name: Paint shard ${{ matrix.shard }}
+        env:
+          MODE: shard
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ needs.setup.outputs.count }}
+          WORK_DIR: work
+          TIME_BUDGET_MIN: '320'
+          POLLINATIONS_TOKEN: ${{ secrets.POLLINATIONS_TOKEN }}
+        run: python3 tools/library/covers.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: covers-manifest-${{ matrix.shard }}
+          path: work/manifest-*.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
+
+  finalize:
+    needs: [setup, paint]
+    if: always() && needs.setup.outputs.mode == 'all'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: covers-*
+          path: work
+          merge-multiple: true
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Mint the import key
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: bash .github/scripts/library-token.sh
+      - name: Duplicate check across shards, record covers
+        env:
+          MODE: finalize
+          WORK_DIR: work
+        run: |
+          python3 tools/library/covers.py | tee covers-final.txt
+          mkdir -p tools/library/reports && cp covers-final.txt tools/library/reports/covers-report.txt
+      - name: Publish the report
+        if: always()
+        run: bash .github/scripts/commit-library-output.sh "Library covers report" tools/library/reports

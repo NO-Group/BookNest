@@ -27,14 +27,25 @@ class ReaderPaginator {
   static List<Paragraph> parse(String markdown) {
     final paragraphs = <Paragraph>[];
     var buffer = <String>[];
+    // Markdown hard breaks (two trailing spaces or a trailing backslash)
+    // keep verse lines on their own lines instead of reflowing them.
+    var breakAfter = <bool>[];
     void flush() {
       if (buffer.isEmpty) return;
-      paragraphs.add(Paragraph(text: buffer.join(' ').trim()));
+      final out = StringBuffer();
+      for (var i = 0; i < buffer.length; i++) {
+        if (i > 0) out.write(breakAfter[i - 1] ? '\n' : ' ');
+        out.write(buffer[i]);
+      }
+      paragraphs.add(Paragraph(text: out.toString().trim()));
       buffer = [];
+      breakAfter = [];
     }
 
     for (final rawLine in markdown.split('\n')) {
-      final line = rawLine.trim();
+      final hardBreak = rawLine.endsWith('  ') || rawLine.trimRight().endsWith('\\');
+      var line = rawLine.trim();
+      if (line.endsWith('\\')) line = line.substring(0, line.length - 1).trimRight();
       if (line.isEmpty) {
         flush();
         continue;
@@ -55,6 +66,10 @@ class ReaderPaginator {
         paragraphs.add(const Paragraph(text: '⁂', isSubheading: true));
       } else {
         buffer.add(line);
+        breakAfter.add(hardBreak);
+        // A long poem is split into page-sized stanzas so one paragraph
+        // never outgrows a page.
+        if (hardBreak && breakAfter.where((b) => b).length >= 12) flush();
       }
     }
     flush();

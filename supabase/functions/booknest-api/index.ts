@@ -23,6 +23,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { MongoClient, ObjectId } from 'npm:mongodb@6.7.0';
+import { cleanSource, isLibrarySource, resolveSourceText } from './library_text.ts';
 
 const MONGO_URI = Deno.env.get('MONGO_URI') ?? '';
 const MONGO_DB_NAME = Deno.env.get('MONGO_DB_NAME') ?? 'booknest';
@@ -1434,7 +1435,7 @@ Deno.serve(async (req: Request) => {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.25',
+          server: '2.26',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -1624,21 +1625,36 @@ Deno.serve(async (req: Request) => {
             if (!title) { skipped += 1; continue; }
             const slug = (title + '|' + author).toLowerCase()
               .replace(/[^a-z0-9|]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 90);
-            const id = 'bulk-' + slug;
+            // The importer may pin an existing library id (same book, better
+            // edition) so likes, views and reading progress carry over.
+            const id = typeof row.id === 'string' && /^bulk-[a-z0-9|-]{1,90}$/.test(row.id)
+              ? row.id
+              : 'bulk-' + slug;
             const chaptersRaw = Array.isArray(row.chapters) ? row.chapters : [];
             const chapters = chaptersRaw.slice(0, 300).map((c, i) => ({
               chapterNumber: Number(c.chapterNumber ?? i + 1) || i + 1,
               title: String(c.title ?? `Chapter ${i + 1}`).slice(0, 160),
               content: String(c.content ?? '').slice(0, 400_000),
-            })).filter((c) => c.content.length > 0);
+              // Library editions: a pinned pointer instead of the text.
+              source: cleanSource(c.source),
+            })).filter((c) => c.content.length > 0 || c.source !== null);
             if (chapters.length === 0) { skipped += 1; continue; }
+            const edition = row.edition === 'se' || row.edition === 'gt'
+              ? String(row.edition) : '';
             const crypto_ = globalThis.crypto;
             const digest = await crypto_.subtle.digest('SHA-256',
-              new TextEncoder().encode(chapters.map((c) => c.content).join('\u0000')));
+              new TextEncoder().encode(chapters.map((c) =>
+                c.content || `${c.title}\u0001${JSON.stringify(c.source)}`).join('\u0000')));
             const contentHash = [...new Uint8Array(digest)].slice(0, 16)
               .map((b) => b.toString(16).padStart(2, '0')).join('');
             const existing = await booksCol.findOne({ _id: id });
             if (existing && existing.contentHash === contentHash) {
+              skipped += 1;
+              continue;
+            }
+            // A Standard Ebooks edition is the better text: a Gutenberg
+            // pass never downgrades it.
+            if (existing && existing.edition === 'se' && edition === 'gt') {
               skipped += 1;
               continue;
             }
@@ -1653,7 +1669,10 @@ Deno.serve(async (req: Request) => {
                   title,
                   authorName: author,
                   authorId: existing?.authorId ?? null,
-                  description: String(row.description ?? '').slice(0, 1200),
+                  // No description sent = keep the current (often hand-written) one.
+                  description: row.description == null && existing
+                    ? String(existing.description ?? '')
+                    : String(row.description ?? '').slice(0, 1200),
                   genre: String(row.genre ?? 'Classics').slice(0, 40),
                   coverUrl: cover,
                   contentFormat: 'markdown',
@@ -1661,6 +1680,10 @@ Deno.serve(async (req: Request) => {
                   status: 'published',
                   contentHash,
                   chaptersCount: chapters.length,
+                  ...(edition ? { edition } : {}),
+                  ...(Array.isArray(row.subjects)
+                    ? { subjects: row.subjects.slice(0, 8).map((x: unknown) => String(x).slice(0, 80)) }
+                    : {}),
                   updatedAt: now,
                 },
                 $setOnInsert: {
@@ -1673,18 +1696,97 @@ Deno.serve(async (req: Request) => {
             if (existing && existing.contentHash !== contentHash) {
               await chaptersCol.deleteMany({ bookId: id });
             }
-            for (const c of chapters) {
-              await chaptersCol.updateOne(
-                { bookId: id, chapterNumber: c.chapterNumber },
-                { $set: { title: c.title, content: c.content } },
-                { upsert: true });
-            }
+            // One round trip per book (a 300-chapter book used to be 300).
+            await chaptersCol.bulkWrite(chapters.map((c) => ({
+              replaceOne: {
+                filter: { bookId: id, chapterNumber: c.chapterNumber },
+                replacement: c.source
+                  ? { bookId: id, chapterNumber: c.chapterNumber, title: c.title, content: '', source: c.source }
+                  : { bookId: id, chapterNumber: c.chapterNumber, title: c.title, content: c.content },
+                upsert: true,
+              },
+            })) as never, { ordered: false });
             imported += 1;
           } catch (_) {
             skipped += 1;
           }
         }
         return ok({ imported, skipped });
+      }
+
+      // ── library covers: one unique AI cover per library book ─────────────
+      // The cover job reads the index, paints a cover per book, hosts it
+      // on the media CDN and records it here. Author-owned books are
+      // never touched (authorId set = a member's own book and cover).
+      case 'admin.libraryIndex': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const d = await dbFor('books');
+        const limit = Math.min(Math.max(Number(p.limit ?? 500) || 500, 1), 1000);
+        // Library books carry string ids (bulk-…); members' books use ObjectIds.
+        const query: Record<string, unknown> = { authorId: null, _id: { $type: 'string' } };
+        if (typeof p.after === 'string' && p.after) query._id = { $type: 'string', $gt: p.after };
+        const rows = await d.collection('books').find(query as never).project({
+          _id: 1, title: 1, authorName: 1, genre: 1, description: 1,
+          coverUrl: 1, coverStyle: 1, coverHash: 1, edition: 1,
+          subjects: 1, chaptersCount: 1,
+        }).sort({ _id: 1 }).limit(limit).toArray();
+        return ok({
+          books: rows.map((b) => ({
+            id: String(b._id),
+            title: b.title ?? '',
+            authorName: b.authorName ?? '',
+            genre: b.genre ?? '',
+            description: String(b.description ?? '').slice(0, 600),
+            coverUrl: b.coverUrl ?? null,
+            coverStyle: b.coverStyle ?? null,
+            coverHash: b.coverHash ?? null,
+            edition: b.edition ?? null,
+            subjects: Array.isArray(b.subjects) ? b.subjects : [],
+            chaptersCount: b.chaptersCount ?? 0,
+          })),
+          next: rows.length === limit ? String(rows[rows.length - 1]._id) : null,
+        });
+      }
+
+      case 'admin.setCovers': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const rows = Array.isArray(p.covers) ? p.covers : [];
+        if (rows.length === 0) return fail('No covers in the batch');
+        if (rows.length > 100) return fail('Batch too large — send 100 or fewer');
+        const ops = [];
+        for (const row of rows) {
+          const id = String(row?.id ?? '');
+          const url = String(row?.coverUrl ?? '');
+          if (!id || id.length > 140) continue;
+          if (!/^https:\/\/res\.cloudinary\.com\/[\w-]+\/image\/upload\/[\w./%-]+$/.test(url)) continue;
+          ops.push({
+            updateOne: {
+              filter: { _id: id, authorId: null },
+              update: { $set: {
+                coverUrl: url.slice(0, 500),
+                coverStyle: String(row?.coverStyle ?? 'ai-v1').slice(0, 20),
+                coverHash: String(row?.coverHash ?? '').slice(0, 40),
+                coverUpdatedAt: new Date(),
+              } },
+            },
+          });
+        }
+        if (ops.length === 0) return ok({ updated: 0, skipped: rows.length });
+        const d = await dbFor('books');
+        const res = await d.collection('books').bulkWrite(ops as never, { ordered: false });
+        return ok({ updated: res.modifiedCount, matched: res.matchedCount, skipped: rows.length - ops.length });
       }
 
       // ── dictionary: Word Nest server edition (WordNet 3.1) ─────────────
@@ -2855,10 +2957,20 @@ Deno.serve(async (req: Request) => {
         const chapter = await d.collection('chapters')
           .findOne({ bookId: p.bookId as string, chapterNumber });
         if (!chapter) return fail('Chapter not found', 404);
+        let content = String(chapter.content ?? '');
+        if (!content && isLibrarySource(chapter.source)) {
+          // Library classics are read through from their pinned public
+          // source (Standard Ebooks / GITenberg) — nothing is stored.
+          try {
+            content = await resolveSourceText(chapter.source);
+          } catch (_) {
+            return fail('This chapter is temporarily unavailable — please try again in a moment', 503);
+          }
+        }
         return ok({
           chapterNumber: chapter.chapterNumber,
           title: chapter.title,
-          content: chapter.content ?? '',
+          content,
           // Heavy full texts live on the media CDN (MongoDB free-tier
           // friendly). The reader fetches the URL directly when given.
           contentUrl: chapter.contentUrl ?? null,

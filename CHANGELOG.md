@@ -1,5 +1,41 @@
 # Changelog
 
+## 2.32.0+58 — 2026-10-07 · The big library
+
+**Library (server 2.26)**
+- **~3,200 books, every one from GitHub.** All of Standard Ebooks
+  (github.com/standardebooks — the best-edited public-domain editions) plus
+  the most-read Project Gutenberg texts via GITenberg (github.com/GITenberg).
+- **No new storage, no text on Cloudinary.** MongoDB keeps only per-chapter
+  pointers pinned to exact commits; the edge function reads the chapter from
+  GitHub (jsDelivr fallback, in-memory cache) when a reader opens it and
+  returns it inline — older app versions read the new books unchanged.
+  Existing Gutenberg books move to pointers too, keeping their ids (likes,
+  views, reviews stay).
+- **Copyright: life + 70.** A book is imported only when every author and
+  translator died in 1955 or earlier (Nigeria, UK, EU and most countries) —
+  US-only public domain is not enough.
+- **Real genres.** Library books now use the app's genre list, so they show
+  on genre shelves (the first importer used labels like "Crime" that no
+  shelf matched).
+- **A unique AI cover for every library book**: painted per book (FLUX,
+  seeded by the book), title set in open-licence Google Fonts, perceptual
+  duplicate check across the whole library, hosted on Cloudinary. Members'
+  own books and covers are never touched.
+- New admin actions: `admin.libraryIndex`, `admin.setCovers`;
+  `admin.importBooks` accepts chapter pointers and writes each book's
+  chapters in one bulk write.
+
+**Reader**
+- Poetry keeps its line breaks in page mode (markdown hard breaks are
+  honoured; long poems split into page-sized stanzas).
+
+**Tooling**
+- `tools/library/import_github.py` + `library-github-import.yml`,
+  `tools/library/covers.py` + `library-covers.yml` (settings in
+  `tools/library/import.env` / `covers.env`; reports land in
+  `tools/library/reports/`).
+
 ## 2.31.0+57 — 2026-10-04 · Security + reliability fix drop
 
 **Security**
