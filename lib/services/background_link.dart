@@ -331,6 +331,7 @@ class LinkTaskHandler extends TaskHandler {
       final request = await client.postUrl(Uri.parse(
           '${AppConfig.supabaseUrl}/functions/v1/${AppConfig.edgeFunctionName}'));
       request.headers.set('apikey', AppConfig.supabaseAnonKey);
+      request.headers.set('x-region', AppConfig.edgeRegion);
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
       final payload = <String, dynamic>{'linkPass': pass};
       if (ids.isNotEmpty) payload['ids'] = ids;

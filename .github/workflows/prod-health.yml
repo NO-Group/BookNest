@@ -133,6 +133,17 @@ jobs:
               -H "Authorization: Bearer $ANON" -H 'Content-Type: application/json' -d '{"action":"ping"}')"
             echo "  - ping #$i: $T · $(jq -c '.data.timing // .timing // empty' /tmp/p.txt 2>/dev/null)" >> live.txt
           done
+          echo "- latency series pinned to eu-west-1 (what the app sends from 2.33):" >> live.txt
+          for i in 1 2 3 4 5 6; do
+            T="$(curl -s -o /tmp/p.txt -w '%{time_starttransfer}s / %{time_total}s' --max-time 40 -X POST "$URL" \
+              -H "Authorization: Bearer $ANON" -H 'x-region: eu-west-1' -H 'Content-Type: application/json' -d '{"action":"ping"}')"
+            echo "  - ping #$i: $T · $(jq -c '.data.timing // .timing // empty' /tmp/p.txt 2>/dev/null)" >> live.txt
+          done
+          for i in 1 2 3; do
+            T="$(curl -s -o /dev/null -w '%{time_starttransfer}s / %{time_total}s' --max-time 40 -X POST "$URL" \
+              -H "Authorization: Bearer $ANON" -H 'x-region: eu-west-1' -H 'Content-Type: application/json' -d '{"action":"books.list","payload":{"limit":20}}')"
+            echo "  - books.list(20) eu-west-1 #$i: $T" >> live.txt
+          done
           for i in 1 2 3; do
             T="$(curl -s -o /dev/null -w '%{time_starttransfer}s / %{time_total}s' --max-time 40 -X POST "$URL" \
               -H "Authorization: Bearer $ANON" -H 'Content-Type: application/json' -d '{"action":"books.list","payload":{"limit":20}}')"
@@ -141,6 +152,26 @@ jobs:
           REST="$(curl -s -o /tmp/r.txt -w '%{http_code}' --max-time 30 "https://$REF.supabase.co/rest/v1/" -H "apikey: $ANON")"
           AUTH="$(curl -s -o /tmp/a.txt -w '%{http_code}' --max-time 30 "https://$REF.supabase.co/auth/v1/health" -H "apikey: $ANON")"
           { echo ""; echo "## Live checks"; echo ""; cat live.txt; echo "- REST API → http $REST"; echo "- Auth health → http $AUTH $(head -c 160 /tmp/a.txt)"; } >> report.md
+
+      - name: Edge function logs (why instances restart)
+        continue-on-error: true
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          API=https://api.supabase.com/v1
+          START="$(date -u -d '-30 min' +%FT%TZ)"; END="$(date -u +%FT%TZ)"
+          SQL="select function_logs.timestamp, event_message, metadata.event_type, metadata.level from function_logs cross join unnest(metadata) as metadata order by timestamp desc limit 60"
+          OUT="$(curl -s --max-time 40 -G "$API/projects/$REF/analytics/endpoints/logs.all" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --data-urlencode "sql=$SQL" --data-urlencode "iso_timestamp_start=$START" --data-urlencode "iso_timestamp_end=$END")"
+          {
+            echo ""; echo "## Edge function logs (last 30 min)"; echo ""
+            echo '```'
+            printf '%s' "$OUT" | jq -r '(.result // [])[] | "\(.timestamp) \(.event_type // "") \(.level // "") \(.event_message | tostring | .[0:220])"' 2>/dev/null | head -60 \
+              || printf '%s' "$OUT" | head -c 1500
+            printf '%s' "$OUT" | jq -r 'select(.error) | "error: \(.error|tostring|.[0:400])"' 2>/dev/null || true
+            echo '```'
+          } >> report.md
 
       - name: Cloudflare + R2
         env:

@@ -70,6 +70,16 @@ class AppConfig {
 
   static const String edgeFunctionName = 'booknest-api';
 
+  /// Region the edge function runs in. By default Supabase runs it next to
+  /// the caller (a US phone → California), but the data lives in Western
+  /// Europe (MongoDB on GCP Belgium, Supabase in Ireland), and every
+  /// transatlantic database round trip cost seconds. eu-west-1 sits next
+  /// to both. Sent as the `x-region` header.
+  static const String edgeRegion = String.fromEnvironment(
+    'EDGE_REGION',
+    defaultValue: 'eu-west-1',
+  );
+
   /// Deep link to this project's edge function in the Supabase dashboard —
   /// the exact page where the owner pastes a server update and hits Deploy.
   /// (Project ref is public — it's already in supabaseUrl.)

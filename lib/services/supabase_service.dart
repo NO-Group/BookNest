@@ -24,6 +24,9 @@ class SupabaseService {
     await Supabase.initialize(
       url: AppConfig.supabaseUrl,
       anonKey: AppConfig.supabaseAnonKey,
+      // Pins edge-function calls next to the data (see AppConfig.edgeRegion);
+      // the other Supabase services ignore this header.
+      headers: const <String, String>{'x-region': AppConfig.edgeRegion},
       // Only log auth/network debug output in debug builds — never in release.
       debug: kDebugMode,
     );
