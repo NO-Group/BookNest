@@ -1,0 +1,95 @@
+{
+ "started": "2026-10-21T20:06:07.434415+00:00",
+ "mode": "plan",
+ "errors": [],
+ "plan": {
+  "inline": 18722,
+  "cdn": 0,
+  "r2": 0,
+  "github": 0,
+  "empty": 0,
+  "inline_MB": 507.9,
+  "member_rows_untouched": 2,
+  "manifest_entries": 0,
+  "missing_rows_to_repair": 0
+ },
+ "mongo_total_MB": 515.0,
+ "mongo_top": [
+  {
+   "db": "books",
+   "collection": "chapters",
+   "count": 18724,
+   "dataMB": 510.85,
+   "storageMB": 353.18,
+   "indexMB": 0.97
+  },
+  {
+   "db": "books",
+   "collection": "books",
+   "count": 1589,
+   "dataMB": 1.24,
+   "storageMB": 0.58,
+   "indexMB": 0.45
+  },
+  {
+   "db": "social",
+   "collection": "book_bookmarks",
+   "count": 1,
+   "dataMB": 0,
+   "storageMB": 0.04,
+   "indexMB": 0.11
+  },
+  {
+   "db": "reviews",
+   "collection": "reviews",
+   "count": 1,
+   "dataMB": 0,
+   "storageMB": 0.04,
+   "indexMB": 0.11
+  },
+  {
+   "db": "chats",
+   "collection": "conversations",
+   "count": 4,
+   "dataMB": 0,
+   "storageMB": 0.04,
+   "indexMB": 0.11
+  },
+  {
+   "db": "chats",
+   "collection": "messages",
+   "count": 20,
+   "dataMB": 0.01,
+   "storageMB": 0.04,
+   "indexMB": 0.07
+  },
+  {
+   "db": "social",
+   "collection": "book_likes",
+   "count": 1,
+   "dataMB": 0,
+   "storageMB": 0.04,
+   "indexMB": 0.07
+  },
+  {
+   "db": "social",
+   "collection": "user_stats",
+   "count": 2,
+   "dataMB": 0,
+   "storageMB": 0.04,
+   "indexMB": 0.07
+  }
+ ],
+ "chapters_after": {
+  "_id": null,
+  "total": 18724,
+  "inline": 18724,
+  "inlineBytes": 532559082,
+  "cdn": 0,
+  "pointers": 0,
+  "inlineMB": 507.9,
+  "inlineBookCount": 1589,
+  "inlineLibraryBooks": 1587
+ },
+ "finished": "2026-10-21T20:07:01.712312+00:00"
+}
