@@ -1466,9 +1466,19 @@ Deno.serve(async (req: Request) => {
           const t1 = Date.now();
           await d.command({ ping: 1 });
           const t2 = Date.now();
+          // Where the function ran vs. where the database lives (Atlas tags
+          // every replica-set member with its cloud region).
+          let dbRegion: unknown = null;
+          try {
+            const hello = await d.command({ hello: 1 }) as Record<string, unknown>;
+            const tags = (hello.tags ?? {}) as Record<string, unknown>;
+            dbRegion = tags.region ? `${tags.provider ?? ''}:${tags.region}` : null;
+          } catch (_) { /* optional */ }
           return ok({ ...base, db: d.databaseName, mongo: 'ready',
             timing: { connectMs: t1 - t0, mongoPingMs: t2 - t1,
-              isolateAgeMs: t0 - ISOLATE_BOOT, served: servedRequests } });
+              isolateAgeMs: t0 - ISOLATE_BOOT, served: servedRequests,
+              fnRegion: Deno.env.get('SB_REGION') ?? Deno.env.get('DENO_REGION') ?? null,
+              dbRegion } });
         } catch (_) {
           return ok({ ...base, db: null, mongo: 'unreachable' });
         }
