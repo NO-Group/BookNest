@@ -1457,7 +1457,7 @@ Deno.serve(async (req: Request) => {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.27.0',
+          server: '2.27.1',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -1911,34 +1911,44 @@ Deno.serve(async (req: Request) => {
         const errors: string[] = [];
         let deleted = 0, written = 0;
         const failed: { bookId: string; chapterNumber: number }[] = [];
-        if (mode === 'reinsert') {
-          for (const c of clean) {
-            const r = await col.deleteMany({ bookId: c.bookId, chapterNumber: c.chapterNumber });
-            deleted += r.deletedCount ?? 0;
+        // Bulk operations: one round trip per step instead of one per row.
+        const failedIdx = (e: unknown): Set<number> | null => {
+          const we = (e as { writeErrors?: unknown })?.writeErrors;
+          const list = Array.isArray(we) ? we : we ? [we] : [];
+          if (!list.length) return null;
+          return new Set(list.map((w: { index?: number; err?: { index?: number } }) =>
+            Number(w?.index ?? w?.err?.index ?? -1)));
+        };
+        if (clean.length && mode === 'reinsert') {
+          const r = await col.deleteMany({ $or: clean.map((c) => ({ bookId: c.bookId, chapterNumber: c.chapterNumber })) });
+          deleted += r.deletedCount ?? 0;
+          const docs = clean.map((c) => ({ bookId: c.bookId, chapterNumber: c.chapterNumber, title: c.title,
+            content: '', source: c.source, contentBytes: c.contentBytes }));
+          try {
+            const ins = await col.insertMany(docs, { ordered: false });
+            written += ins.insertedCount ?? docs.length;
+          } catch (e) {
+            const bad = failedIdx(e);
+            errors.push(String((e as Error)?.message ?? e).slice(0, 200));
+            clean.forEach((c, i) => {
+              if (!bad || bad.has(i)) failed.push({ bookId: c.bookId, chapterNumber: c.chapterNumber });
+            });
+            written += clean.length - failed.length;
           }
-          for (const c of clean) {
-            try {
-              await col.insertOne({ bookId: c.bookId, chapterNumber: c.chapterNumber, title: c.title,
-                content: '', source: c.source, contentBytes: c.contentBytes });
-              written += 1;
-            } catch (e) {
-              failed.push({ bookId: c.bookId, chapterNumber: c.chapterNumber });
-              if (errors.length < 3) errors.push(String((e as Error)?.message ?? e).slice(0, 200));
-            }
-          }
-        } else {
-          for (const c of clean) {
-            try {
-              const r = await col.updateOne(
-                { bookId: c.bookId, chapterNumber: c.chapterNumber },
-                { $set: { title: c.title, content: '', source: c.source, contentBytes: c.contentBytes },
-                  $unset: { contentUrl: '' } },
-                { upsert: true });
-              written += (r.modifiedCount ?? 0) + (r.upsertedCount ?? 0);
-            } catch (e) {
-              failed.push({ bookId: c.bookId, chapterNumber: c.chapterNumber });
-              if (errors.length < 3) errors.push(String((e as Error)?.message ?? e).slice(0, 200));
-            }
+        } else if (clean.length) {
+          try {
+            const r = await col.bulkWrite(clean.map((c) => ({ updateOne: {
+              filter: { bookId: c.bookId, chapterNumber: c.chapterNumber },
+              update: { $set: { title: c.title, content: '', source: c.source, contentBytes: c.contentBytes },
+                $unset: { contentUrl: '' } },
+              upsert: true } })), { ordered: false });
+            written += (r.modifiedCount ?? 0) + (r.upsertedCount ?? 0);
+          } catch (e) {
+            const bad = failedIdx(e);
+            errors.push(String((e as Error)?.message ?? e).slice(0, 200));
+            clean.forEach((c, i) => {
+              if (!bad || bad.has(i)) failed.push({ bookId: c.bookId, chapterNumber: c.chapterNumber });
+            });
           }
         }
         return ok({ mode, accepted: clean.length, rejected: items.length - clean.length,

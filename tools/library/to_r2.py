@@ -58,7 +58,9 @@ def api(action: str, payload: dict, timeout: int = 180):
     last = None
     for attempt in range(6):
         req = urllib.request.Request(FN_URL, data=body, method='POST',
-                                     headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + ANON})
+                                     headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + ANON,
+                                              # Run next to the database (CI runners sit in the US).
+                                              'x-region': os.environ.get('EDGE_REGION', 'eu-west-1')})
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 out = json.loads(r.read().decode())
@@ -217,14 +219,14 @@ def main():
     batches, cur, cur_bytes = [], [], 0
     order_index = {b: i for i, b in enumerate(books_order)}
     for c in sorted(inline_todo, key=lambda c: (order_index.get(c['bookId'], 10 ** 9), c['chapterNumber'])):
-        if cur and (len(cur) >= 150 or cur_bytes + c['inlineBytes'] > 6_000_000):
+        if cur and (len(cur) >= 40 or cur_bytes + c['inlineBytes'] > 4_000_000):
             batches.append(cur)
             cur, cur_bytes = [], 0
         cur.append(c)
         cur_bytes += c['inlineBytes']
     if cur:
         batches.append(cur)
-    with cf.ThreadPoolExecutor(4) as pool:
+    with cf.ThreadPoolExecutor(12) as pool:
         futs = [pool.submit(copy_inline, b) for b in batches] + [pool.submit(copy_cdn, c) for c in cdn_todo]
         for i, f in enumerate(cf.as_completed(futs), 1):
             try:
@@ -252,8 +254,8 @@ def main():
     stats = {'written': 0, 'deleted': 0, 'rejected': 0}
 
     def repoint(items: list[dict], mode: str):
-        for i in range(0, len(items), 200):
-            chunk = items[i:i + 200]
+        for i in range(0, len(items), 400):
+            chunk = items[i:i + 400]
             out = api('admin.repointChapters', {'mode': mode, 'items': chunk}, timeout=240)
             stats['written'] += int(out.get('written', 0))
             stats['deleted'] += int(out.get('deleted', 0))
