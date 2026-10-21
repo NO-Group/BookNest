@@ -1,0 +1,51 @@
+
+name: Cleanup BookNest Storage
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delete all existing artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          echo "Listing existing artifacts..."
+
+          gh api --paginate \
+            "repos/$GH_REPO/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.expired == false) | .id' \
+            > /tmp/artifact-ids.txt
+
+          total=$(wc -l < /tmp/artifact-ids.txt)
+          echo "Found $total active artifacts."
+
+          while read -r id; do
+            [ -z "$id" ] && continue
+            gh api --method DELETE \
+              "repos/$GH_REPO/actions/artifacts/$id"
+            echo "Deleted artifact $id"
+          done < /tmp/artifact-ids.txt
+
+          echo "Artifact cleanup complete."
+
+      - name: Delete all Actions caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          gh cache delete --all \
+            --repo "$GH_REPO" || true
+
+          echo "Cache cleanup attempted."
