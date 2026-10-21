@@ -1,7 +1,11 @@
 {
- "started": "2026-10-21T20:06:07.434415+00:00",
- "mode": "plan",
- "errors": [],
+ "started": "2026-10-21T20:08:16.884676+00:00",
+ "mode": "migrate",
+ "errors": [
+  "repoint: you are over your space quota, using 513 MB of 512 MB. Writes are blocked on your cluster. Free up storage by deleting unnecessary data or add storage by updating cluster tier. Add a payment method an",
+  "repoint: you are over your space quota, using 513 MB of 512 MB. Writes are blocked on your cluster. Free up storage by deleting unnecessary data or add storage by updating cluster tier. Add a payment method an",
+  "repoint: you are over your space quota, using 513 MB of 512 MB. Writes are blocked on your cluster. Free up storage by deleting unnecessary data or add storage by updating cluster tier. Add a payment method an"
+ ],
  "plan": {
   "inline": 18722,
   "cdn": 0,
@@ -13,15 +17,75 @@
   "manifest_entries": 0,
   "missing_rows_to_repair": 0
  },
- "mongo_total_MB": 515.0,
+ "copied": 618,
+ "copy_failures": 0,
+ "manifest": "manifests/library-chapters-20261021T201325Z.jsonl",
+ "repoint": {
+  "written": 618,
+  "deleted": 618,
+  "rejected": 0,
+  "still_pending": 0
+ },
+ "pending_sample": [],
+ "verify": [
+  {
+   "book": "bulk-don-quixote|miguel-de-1547-1616-ormsby-john-1829-1895-translator-cervantes-saavedra",
+   "ch": 188,
+   "match": true,
+   "bytes": 19323
+  },
+  {
+   "book": "bulk-les-mis-rables|victor-1802-1885-hapgood-isabel-florence-1850-1928-translator-hugo",
+   "ch": 265,
+   "match": true,
+   "bytes": 6203
+  },
+  {
+   "book": "bulk-don-quixote|miguel-de-1547-1616-ormsby-john-1829-1895-translator-cervantes-saavedra",
+   "ch": 115,
+   "match": true,
+   "bytes": 25716
+  },
+  {
+   "book": "bulk-les-mis-rables|victor-1802-1885-hapgood-isabel-florence-1850-1928-translator-hugo",
+   "ch": 112,
+   "match": true,
+   "bytes": 4043
+  },
+  {
+   "book": "bulk-don-quixote|miguel-de-1547-1616-ormsby-john-1829-1895-translator-cervantes-saavedra",
+   "ch": 171,
+   "match": true,
+   "bytes": 14452
+  },
+  {
+   "book": "bulk-les-mis-rables|victor-1802-1885-hapgood-isabel-florence-1850-1928-translator-hugo",
+   "ch": 190,
+   "match": true,
+   "bytes": 4033
+  },
+  {
+   "book": "bulk-don-quixote|miguel-de-1547-1616-ormsby-john-1829-1895-translator-cervantes-saavedra",
+   "ch": 43,
+   "match": true,
+   "bytes": 46
+  },
+  {
+   "book": "bulk-les-mis-rables|victor-1802-1885-hapgood-isabel-florence-1850-1928-translator-hugo",
+   "ch": 166,
+   "match": true,
+   "bytes": 17383
+  }
+ ],
+ "mongo_total_MB": 507.9,
  "mongo_top": [
   {
    "db": "books",
    "collection": "chapters",
    "count": 18724,
-   "dataMB": 510.85,
+   "dataMB": 503.77,
    "storageMB": 353.18,
-   "indexMB": 0.97
+   "indexMB": 1.02
   },
   {
    "db": "books",
@@ -83,13 +147,13 @@
  "chapters_after": {
   "_id": null,
   "total": 18724,
-  "inline": 18724,
-  "inlineBytes": 532559082,
+  "inline": 18106,
+  "inlineBytes": 525027187,
   "cdn": 0,
-  "pointers": 0,
-  "inlineMB": 507.9,
-  "inlineBookCount": 1589,
-  "inlineLibraryBooks": 1587
+  "pointers": 618,
+  "inlineMB": 500.7,
+  "inlineBookCount": 1586,
+  "inlineLibraryBooks": 1584
  },
- "finished": "2026-10-21T20:07:01.712312+00:00"
+ "finished": "2026-10-21T20:20:30.650204+00:00"
 }
