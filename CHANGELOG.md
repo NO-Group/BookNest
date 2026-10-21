@@ -30,8 +30,15 @@
   where they are.
 - Remixes and sequels of library classics carry their chapter text again;
   before, they opened empty in the editor.
-- Ping reports timing (database connect and round trip, warm instance),
-  so the slow first answers can be traced.
+- **About 3× faster answers (3.4 s → 1.1 s per call).** Supabase ran the
+  function next to the caller (for example California) while the data
+  lives in Western Europe, so every database round trip crossed the
+  Atlantic. The app now pins calls to eu-west-1 with the `x-region`
+  header. `ping` reports the timing and the regions.
+- **Migration done (21 Oct):** all 18,722 library chapters (508 MB) are
+  in R2 and verified. MongoDB dropped from 515 MB, over the free-tier
+  limit with writes blocked, to 13 MB. Sign-ups, publishing, chats and
+  the book import can write again.
 - Removed the old "texts to Cloudinary" job; Cloudinary is for images
   only.
 
