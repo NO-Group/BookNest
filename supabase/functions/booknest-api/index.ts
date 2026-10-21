@@ -1435,7 +1435,7 @@ Deno.serve(async (req: Request) => {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.26.2',
+          server: '2.26.3',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -1659,12 +1659,6 @@ Deno.serve(async (req: Request) => {
               skipped += 1;
               continue;
             }
-            // Replacing a book: drop its old chapters FIRST. Deletes still
-            // work when the free cluster is over quota, and a pointer-based
-            // book takes a tiny fraction of the space of the old full text.
-            if (existing) {
-              await chaptersCol.deleteMany({ bookId: id });
-            }
             const now = new Date();
             const cover = typeof row.coverUrl === 'string' &&
                     row.coverUrl.startsWith('http')
@@ -1700,6 +1694,11 @@ Deno.serve(async (req: Request) => {
                   createdAt: now,
                 } } as never,
               { upsert: true });
+            // Old chapters go only after the book row was written, so a
+            // failed write (e.g. storage quota) never leaves a book empty.
+            if (existing && existing.contentHash !== contentHash) {
+              await chaptersCol.deleteMany({ bookId: id });
+            }
             // One round trip per book (a 300-chapter book used to be 300).
             await chaptersCol.bulkWrite(chapters.map((c) => ({
               replaceOne: {
