@@ -19,6 +19,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - BookNest
       - arena/01a03a7f-booknest
       - arena/01a106c8-booknest
     paths:

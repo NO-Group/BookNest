@@ -125,6 +125,19 @@ jobs:
               -d "{\"action\":\"$a\",\"limit\":1}")"; RC=$?
             echo "- $a → curl=$RC http=$OUT body: $(head -c 260 /tmp/o.txt | tr '\n' ' ')" >> live.txt
           done
+          # Latency series: back-to-back calls show warm vs. cold cost; ping's
+          # timing field splits it into database connect / round trip.
+          echo "- latency series (tls+connect / first byte / total, server timing):" >> live.txt
+          for i in 1 2 3 4 5 6; do
+            T="$(curl -s -o /tmp/p.txt -w '%{time_appconnect}s / %{time_starttransfer}s / %{time_total}s' --max-time 40 -X POST "$URL" \
+              -H "Authorization: Bearer $ANON" -H 'Content-Type: application/json' -d '{"action":"ping"}')"
+            echo "  - ping #$i: $T · $(jq -c '.data.timing // .timing // empty' /tmp/p.txt 2>/dev/null)" >> live.txt
+          done
+          for i in 1 2 3; do
+            T="$(curl -s -o /dev/null -w '%{time_starttransfer}s / %{time_total}s' --max-time 40 -X POST "$URL" \
+              -H "Authorization: Bearer $ANON" -H 'Content-Type: application/json' -d '{"action":"books.list","payload":{"limit":20}}')"
+            echo "  - books.list(20) #$i: $T" >> live.txt
+          done
           REST="$(curl -s -o /tmp/r.txt -w '%{http_code}' --max-time 30 "https://$REF.supabase.co/rest/v1/" -H "apikey: $ANON")"
           AUTH="$(curl -s -o /tmp/a.txt -w '%{http_code}' --max-time 30 "https://$REF.supabase.co/auth/v1/health" -H "apikey: $ANON")"
           { echo ""; echo "## Live checks"; echo ""; cat live.txt; echo "- REST API → http $REST"; echo "- Auth health → http $AUTH $(head -c 160 /tmp/a.txt)"; } >> report.md

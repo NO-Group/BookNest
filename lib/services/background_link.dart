@@ -81,8 +81,10 @@ class LinkService {
             }
           } catch (_) {}
           try {
+            // Google Play restricts the direct exemption request, so open
+            // the system list where the reader can exempt BookNest.
             if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
-              await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+              await FlutterForegroundTask.openIgnoreBatteryOptimizationSettings();
             }
           } catch (_) {}
           await _provisionPass();

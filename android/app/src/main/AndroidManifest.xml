@@ -1,14 +1,15 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Release builds run with no debug-network overrides: without this
          permission the APK ships with NO network access at all. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <!-- Book covers & avatars: photo access on modern Android, legacy media
-         access only up to Android 12 (the system photo picker handles newer). -->
+    <!-- Book covers & avatars use the system photo picker, which needs no
+         permission (Google Play photo policy: no READ_MEDIA_IMAGES). Legacy
+         storage only up to Android 12 for older file pickers. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-feature android:name="android.hardware.camera.any" android:required="false"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
@@ -17,7 +18,13 @@
          remoteMessaging has no Android 15 dataSync time cap. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING"/>
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <!-- No REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: Google Play restricts it.
+         The app opens the system battery list instead (no permission). -->
+    <!-- Strip restricted permissions that plugins might merge back in. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove"/>
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:node="remove"/>
     <application
         android:label="BookNest"
         android:name="${applicationName}"

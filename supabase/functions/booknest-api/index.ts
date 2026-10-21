@@ -1209,7 +1209,13 @@ async function hitLimit(
 // ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
+// Latency diagnostics for ping: is this isolate warm, and how slow is the
+// database round trip (cold start vs. distance to the cluster)?
+const ISOLATE_BOOT = Date.now();
+let servedRequests = 0;
+
 Deno.serve(async (req: Request) => {
+  servedRequests++;
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
   if (req.method === 'GET') {
@@ -1455,9 +1461,14 @@ Deno.serve(async (req: Request) => {
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
+          const t0 = Date.now();
           const d = await dbFor('books');
+          const t1 = Date.now();
           await d.command({ ping: 1 });
-          return ok({ ...base, db: d.databaseName, mongo: 'ready' });
+          const t2 = Date.now();
+          return ok({ ...base, db: d.databaseName, mongo: 'ready',
+            timing: { connectMs: t1 - t0, mongoPingMs: t2 - t1,
+              isolateAgeMs: t0 - ISOLATE_BOOT, served: servedRequests } });
         } catch (_) {
           return ok({ ...base, db: null, mongo: 'unreachable' });
         }

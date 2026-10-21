@@ -1,7 +1,9 @@
 name: Android Release APK
 
-# Builds the installable release APK and uploads it as a downloadable
-# artifact. Runs automatically on pushes, or manually from the Actions
+# Builds the installable release APK (direct download) and the Google Play
+# App Bundle (.aab), checks both against Play's rules (target SDK,
+# restricted permissions, 16 KB native-library alignment) and publishes
+# them on a GitHub Release. Runs on pushes, or manually from the Actions
 # tab ("Run workflow").
 
 on:
@@ -10,6 +12,7 @@ on:
   # Automatic: every push to a build branch produces a fresh APK
   push:
     branches:
+      - BookNest
       - main
       - arena/01a03a7f-booknest
       - arena/01a106c8-booknest
@@ -98,6 +101,18 @@ jobs:
           done < /tmp/ids.txt
           echo "cleared $n old artifacts"
 
+      # The hosted runner has ~14 GB free; Gradle + the NDK + an APK and an
+      # AAB build need more ("No space left on device" broke earlier runs).
+      # Drop toolchains this job never uses. The Android SDK stays.
+      - name: Free disk space
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/powershell /usr/share/swift \
+            /usr/local/julia* /opt/az /usr/local/share/chromium /opt/microsoft || true
+          sudo docker image prune -af > /dev/null 2>&1 || true
+          df -h / | tail -1
+
       - name: Java 21
         uses: actions/setup-java@v4
         with:
@@ -165,12 +180,37 @@ jobs:
             { echo "APK was not produced — real build failure"; tail -40 build.log; exit 1; }
           echo "APK built: $(du -h build/app/outputs/flutter-apk/app-release.apk | cut -f1)"
 
+      # Google Play takes an App Bundle. Same signing identity as the APK
+      # (with Play App Signing it is the upload key).
+      - name: Build Play App Bundle (.aab)
+        run: |
+          set -o pipefail
+          flutter build appbundle --release 2>&1 | tee build-aab.log || true
+          [ -f build/app/outputs/bundle/release/app-release.aab ] ||
+            { echo "AAB was not produced"; tail -40 build-aab.log; cp build-aab.log build.log; exit 1; }
+          echo "AAB built: $(du -h build/app/outputs/bundle/release/app-release.aab | cut -f1)"
+
+      - name: Google Play readiness check (report only)
+        continue-on-error: true
+        run: |
+          bash .github/scripts/play-check.sh build/app/outputs/flutter-apk/app-release.apk \
+            build/app/outputs/bundle/release/app-release.aab > play-check.md || true
+          cat play-check.md
+          cat play-check.md >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p ops && cp play-check.md ops/play-check.md
+          case "$GITHUB_REF_NAME" in
+            arena/*) bash .github/scripts/commit-library-output.sh "Play readiness report" ops/play-check.md ;;
+          esac
+
       - name: Upload APK artifact
         continue-on-error: true # quota accounting can lag; the Release below is the real channel
         uses: actions/upload-artifact@v4
         with:
           name: BookNest-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
+          retention-days: 1
           if-no-files-found: error
 
       - name: Publish APK to GitHub Releases
@@ -181,17 +221,18 @@ jobs:
           VER="$(grep '^version:' pubspec.yaml | sed 's/version: //;s/+.*//')"
           TAG="app-${VER}-${GITHUB_RUN_ID}"
           cp build/app/outputs/flutter-apk/app-release.apk booknest.apk
-          NOTES="BookNest ${VER} for Android. Download booknest.apk and install it (allow installs from this source when asked)."
+          cp build/app/outputs/bundle/release/app-release.aab booknest-play.aab
+          NOTES="BookNest ${VER} for Android. Download booknest.apk and install it (allow installs from this source when asked). booknest-play.aab is the Google Play upload (Play Console only — phones cannot install it)."
           TRY() {
             gh "$@" 2>&1 | tee -a release-apk.log
             return ${PIPESTATUS[0]}
           }
           : > release-apk.log
-          TRY release create "$TAG" booknest.apk \
+          TRY release create "$TAG" booknest.apk booknest-play.aab \
             --target "$GITHUB_SHA" --title "BookNest ${VER} for Android" --notes "$NOTES" \
-          || TRY release create "$TAG" booknest.apk \
+          || TRY release create "$TAG" booknest.apk booknest-play.aab \
             --title "BookNest ${VER} for Android" --notes "$NOTES" \
-          || TRY release upload "$TAG" build/app/outputs/flutter-apk/app-release.apk#booknest.apk --clobber
+          || TRY release upload "$TAG" booknest.apk booknest-play.aab --clobber
           COUNT="$(gh release view "$TAG" --json assets --jq '[.assets[].name] | length')"
           if [ "${COUNT:-0}" = "0" ]; then
             tail -c 1500 release-apk.log
@@ -245,4 +286,5 @@ jobs:
         with:
           name: ci-build-log
           path: diag/
+          retention-days: 1
           if-no-files-found: ignore

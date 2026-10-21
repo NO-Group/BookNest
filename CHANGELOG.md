@@ -1,5 +1,45 @@
 # Changelog
 
+## 2.33.0+59 — 2026-10-21 · Production readiness
+
+**Google Play + direct download**
+- Every Android release now ships **`booknest-play.aab`** (Google Play
+  upload) next to `booknest.apk` (direct install), signed with the same
+  identity.
+- **Android builds are reliable again.** Recent failures were the CI
+  runner running out of disk ("No space left on device") while Gradle
+  fetched the NDK. The build now frees space first.
+- **Play readiness report** on every build: target SDK, restricted
+  permissions, and 16 KB alignment of every native library.
+- **Play permission policy:**
+  - Removed `READ_MEDIA_IMAGES`; photos come through the system photo
+    picker, which needs no permission. The Permissions screen explains
+    this.
+  - Removed `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`; the background link
+    opens the system battery list instead.
+  - Restricted permissions that plugins could merge back in are stripped.
+- Public **privacy policy** and **account deletion** pages in
+  `docs/legal/`, for the Play Console URLs. The in-app privacy text no
+  longer says account deletion is "coming". It is in Settings.
+- Android and PC builds also run on pushes to the `BookNest` branch.
+
+**Server 2.27**
+- **Library texts move to Cloudflare R2.** MongoDB keeps only a small
+  pointer per chapter. Texts are copied and verified before any row
+  changes, and a manifest is kept in R2. Members' own manuscripts stay
+  where they are.
+- Remixes and sequels of library classics carry their chapter text again;
+  before, they opened empty in the editor.
+- Ping reports timing (database connect and round trip, warm instance),
+  so the slow first answers can be traced.
+- Removed the old "texts to Cloudinary" job; Cloudinary is for images
+  only.
+
+**Correction to 2.32.0:** the GitHub library import and the AI covers did
+not go live. The import stopped because the free database was full; the
+move to R2 above frees that space. Covers are postponed. The library is
+still the earlier ~1,587 books.
+
 ## 2.32.0+58 — 2026-10-07 · The big library
 
 **Library (server 2.26)**
