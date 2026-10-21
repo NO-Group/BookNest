@@ -145,6 +145,7 @@ jobs:
         with:
           name: BookNest-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 1
           if-no-files-found: error
 
       - name: Publish APK to GitHub Releases
