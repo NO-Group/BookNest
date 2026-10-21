@@ -1,0 +1,182 @@
+name: Production Health Check
+
+# Read-only health report for production (plus one safe repair: a paused
+# Supabase free project is restored). Writes ops/health-report.md with
+# statuses and yes/no secret presence only — never secret values.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a106c8-booknest
+    paths:
+      - '.github/workflows/prod-health.yml'
+      - 'ops/health-trigger.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Which secrets / variables exist (yes/no only)
+        env:
+          S_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+          V_CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID != '' }}
+          S_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          V_CLOUDFLARE_API_TOKEN: ${{ vars.CLOUDFLARE_API_TOKEN != '' }}
+          S_CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID != '' }}
+          V_CF_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID != '' }}
+          S_CF_API_TOKEN: ${{ secrets.CF_API_TOKEN != '' }}
+          V_CF_API_TOKEN: ${{ vars.CF_API_TOKEN != '' }}
+          S_CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN != '' }}
+          V_CLOUDFLARE_TOKEN: ${{ vars.CLOUDFLARE_TOKEN != '' }}
+          S_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID != '' }}
+          V_R2_ACCESS_KEY_ID: ${{ vars.R2_ACCESS_KEY_ID != '' }}
+          S_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY != '' }}
+          V_R2_SECRET_ACCESS_KEY: ${{ vars.R2_SECRET_ACCESS_KEY != '' }}
+          S_R2_BUCKET: ${{ secrets.R2_BUCKET != '' }}
+          V_R2_BUCKET: ${{ vars.R2_BUCKET != '' }}
+          S_R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME != '' }}
+          V_R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME != '' }}
+          S_R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID != '' }}
+          V_R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID != '' }}
+          S_R2_ENDPOINT: ${{ secrets.R2_ENDPOINT != '' }}
+          V_R2_ENDPOINT: ${{ vars.R2_ENDPOINT != '' }}
+          S_R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL != '' }}
+          V_R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL != '' }}
+          S_R2_TOKEN: ${{ secrets.R2_TOKEN != '' }}
+          V_R2_TOKEN: ${{ vars.R2_TOKEN != '' }}
+          S_CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID != '' }}
+          V_CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ vars.CLOUDFLARE_R2_ACCESS_KEY_ID != '' }}
+          S_CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY != '' }}
+          V_CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ vars.CLOUDFLARE_R2_SECRET_ACCESS_KEY != '' }}
+          S_CLOUDFLARE_R2_BUCKET: ${{ secrets.CLOUDFLARE_R2_BUCKET != '' }}
+          V_CLOUDFLARE_R2_BUCKET: ${{ vars.CLOUDFLARE_R2_BUCKET != '' }}
+          S_CLOUDFLARE_R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_ENDPOINT != '' }}
+          V_CLOUDFLARE_R2_ENDPOINT: ${{ vars.CLOUDFLARE_R2_ENDPOINT != '' }}
+          S_SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+          V_SUPABASE_ACCESS_TOKEN: ${{ vars.SUPABASE_ACCESS_TOKEN != '' }}
+          S_SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF != '' }}
+          V_SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF != '' }}
+          S_KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 != '' }}
+          V_KEYSTORE_BASE64: ${{ vars.KEYSTORE_BASE64 != '' }}
+          S_KEYSTORE_PROPERTIES_BASE64: ${{ secrets.KEYSTORE_PROPERTIES_BASE64 != '' }}
+          V_KEYSTORE_PROPERTIES_BASE64: ${{ vars.KEYSTORE_PROPERTIES_BASE64 != '' }}
+          S_POLLINATIONS_TOKEN: ${{ secrets.POLLINATIONS_TOKEN != '' }}
+          V_POLLINATIONS_TOKEN: ${{ vars.POLLINATIONS_TOKEN != '' }}
+        run: |
+          {
+            echo "## Secrets and variables present"
+            echo ""
+            for n in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN CF_ACCOUNT_ID CF_API_TOKEN CLOUDFLARE_TOKEN R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET R2_BUCKET_NAME R2_ACCOUNT_ID R2_ENDPOINT R2_PUBLIC_URL R2_TOKEN CLOUDFLARE_R2_ACCESS_KEY_ID CLOUDFLARE_R2_SECRET_ACCESS_KEY CLOUDFLARE_R2_BUCKET CLOUDFLARE_R2_ENDPOINT SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF KEYSTORE_BASE64 KEYSTORE_PROPERTIES_BASE64 POLLINATIONS_TOKEN; do
+              s="S_$n"; v="V_$n"
+              if [ "${!s}" = "true" ] || [ "${!v}" = "true" ]; then
+                echo "- $n: secret=${!s} variable=${!v}"
+              fi
+            done
+            echo ""
+          } > report.md
+
+      - name: Supabase project status (restore if paused)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          REF_SECRET: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          REF="$(printf '%s' "$REF_SECRET" | grep -oE '[a-z]{20}' | head -1)"; REF="${REF:-ekgbbbbjwgfixqarlnil}"
+          echo "REF=$REF" >> "$GITHUB_ENV"
+          API=https://api.supabase.com/v1
+          H="Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+          P="$(curl -s --max-time 30 -H "$H" "$API/projects/$REF")"
+          STATUS="$(printf '%s' "$P" | jq -r '.status // .message // "unknown"' 2>/dev/null)"
+          {
+            echo "## Supabase"
+            echo ""
+            echo "- project status: **$STATUS**"
+            echo "- region: $(printf '%s' "$P" | jq -r '.region // "?"' 2>/dev/null)"
+          } >> report.md
+          case "$STATUS" in
+            INACTIVE|PAUSED|PAUSING)
+              R="$(curl -s -o /tmp/restore.json -w '%{http_code}' --max-time 60 -X POST -H "$H" "$API/projects/$REF/restore")"
+              echo "- project was paused → restore requested (HTTP $R): $(head -c 200 /tmp/restore.json)" >> report.md
+              for i in $(seq 1 40); do
+                sleep 15
+                S2="$(curl -s --max-time 30 -H "$H" "$API/projects/$REF" | jq -r '.status // "?"')"
+                echo "  restore wait $i: $S2"
+                [ "$S2" = "ACTIVE_HEALTHY" ] && break
+              done
+              echo "- status after restore: **$S2**" >> report.md
+              ;;
+          esac
+          F="$(curl -s --max-time 30 -H "$H" "$API/projects/$REF/functions")"
+          echo "- edge functions: $(printf '%s' "$F" | jq -c '[.[]? | {slug, status, version, updated_at}]' 2>/dev/null | head -c 600)" >> report.md
+
+      - name: Live edge function
+        run: |
+          ANON="$(grep -A3 'supabaseAnonKey = ' lib/config/app_config.dart | grep -oE "eyJ[^']+")"
+          URL="https://$REF.supabase.co/functions/v1/booknest-api"
+          for a in ping books.list; do
+            OUT="$(curl -s -o /tmp/o.txt -w '%{http_code} %{time_total}s' --max-time 40 -X POST "$URL" \
+              -H "Authorization: Bearer $ANON" -H 'Content-Type: application/json' \
+              -d "{\"action\":\"$a\",\"limit\":1}")"; RC=$?
+            echo "- $a → curl=$RC http=$OUT body: $(head -c 260 /tmp/o.txt | tr '\n' ' ')" >> live.txt
+          done
+          REST="$(curl -s -o /tmp/r.txt -w '%{http_code}' --max-time 30 "https://$REF.supabase.co/rest/v1/" -H "apikey: $ANON")"
+          AUTH="$(curl -s -o /tmp/a.txt -w '%{http_code}' --max-time 30 "https://$REF.supabase.co/auth/v1/health" -H "apikey: $ANON")"
+          { echo ""; echo "## Live checks"; echo ""; cat live.txt; echo "- REST API → http $REST"; echo "- Auth health → http $AUTH $(head -c 160 /tmp/a.txt)"; } >> report.md
+
+      - name: Cloudflare + R2
+        env:
+          ACC1: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ACC2: ${{ secrets.CF_ACCOUNT_ID }}
+          ACC3: ${{ secrets.R2_ACCOUNT_ID }}
+          TOK1: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TOK2: ${{ secrets.CF_API_TOKEN }}
+          TOK3: ${{ secrets.CLOUDFLARE_TOKEN }}
+          KEY1: ${{ secrets.R2_ACCESS_KEY_ID }}
+          KEY2: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          SEC1: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          SEC2: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          BKT1: ${{ secrets.R2_BUCKET }}
+          BKT2: ${{ secrets.R2_BUCKET_NAME }}
+          BKT3: ${{ secrets.CLOUDFLARE_R2_BUCKET }}
+          BKTV: ${{ vars.R2_BUCKET }}
+        run: |
+          ACC="${ACC1:-${ACC2:-$ACC3}}"; TOK="${TOK1:-${TOK2:-$TOK3}}"
+          KEY="${KEY1:-$KEY2}"; SEC="${SEC1:-$SEC2}"; BKT="${BKT1:-${BKT2:-${BKT3:-$BKTV}}}"
+          {
+            echo ""; echo "## Cloudflare"; echo ""
+            echo "- account id set: $([ -n "$ACC" ] && echo yes || echo no) · api token set: $([ -n "$TOK" ] && echo yes || echo no) · r2 keys set: $([ -n "$KEY" ] && [ -n "$SEC" ] && echo yes || echo no) · bucket set: $([ -n "$BKT" ] && echo "yes ($BKT)" || echo no)"
+            if [ -n "$TOK" ]; then
+              V1="$(curl -s --max-time 30 -H "Authorization: Bearer $TOK" https://api.cloudflare.com/client/v4/user/tokens/verify | jq -c '{success, status: .result.status}' 2>/dev/null)"
+              echo "- user-token verify: $V1"
+              if [ -n "$ACC" ]; then
+                V2="$(curl -s --max-time 30 -H "Authorization: Bearer $TOK" "https://api.cloudflare.com/client/v4/accounts/$ACC/tokens/verify" | jq -c '{success, status: .result.status}' 2>/dev/null)"
+                echo "- account-token verify: $V2"
+                B="$(curl -s --max-time 30 -H "Authorization: Bearer $TOK" "https://api.cloudflare.com/client/v4/accounts/$ACC/r2/buckets" | jq -c '{success, buckets: [.result.buckets[]?.name], errors: [.errors[]?.message]}' 2>/dev/null)"
+                echo "- R2 buckets via API token: $B"
+                AI="$(curl -s --max-time 30 -H "Authorization: Bearer $TOK" "https://api.cloudflare.com/client/v4/accounts/$ACC/ai/models/search?per_page=1" | jq -c '{success, errors: [.errors[]?.message]}' 2>/dev/null)"
+                echo "- Workers AI access: $AI"
+              fi
+            fi
+            if [ -n "$KEY" ] && [ -n "$SEC" ] && [ -n "$ACC" ] && [ -n "$BKT" ]; then
+              export AWS_ACCESS_KEY_ID="$KEY" AWS_SECRET_ACCESS_KEY="$SEC" AWS_DEFAULT_REGION=auto
+              EP="https://$ACC.r2.cloudflarestorage.com"
+              echo "probe $(date -u +%FT%TZ)" > /tmp/probe.txt
+              PUT="$(aws s3api put-object --endpoint-url "$EP" --bucket "$BKT" --key health/probe.txt --body /tmp/probe.txt >/dev/null 2>/tmp/e1 && echo ok || head -c 200 /tmp/e1)"
+              GET="$(aws s3api get-object --endpoint-url "$EP" --bucket "$BKT" --key health/probe.txt /tmp/back.txt >/dev/null 2>/tmp/e2 && echo ok || head -c 200 /tmp/e2)"
+              echo "- R2 S3 keys: write=$PUT read=$GET"
+            fi
+          } >> report.md
+
+      - name: Publish the report
+        if: always()
+        run: |
+          mkdir -p ops
+          { echo "# Production health — $(date -u +%FT%TZ)"; echo ""; cat report.md 2>/dev/null; } > ops/health-report.md
+          cat ops/health-report.md >> "$GITHUB_STEP_SUMMARY"
+          bash .github/scripts/commit-library-output.sh "Production health report" ops/health-report.md
