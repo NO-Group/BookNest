@@ -14,9 +14,12 @@
 // the pointers; nothing else changes.
 // ============================================================================
 
+import { AwsClient } from 'npm:aws4fetch@1.0.20';
+
 export type ChapterSource = {
-  kind: 'se' | 'gt';
-  url: string;
+  kind: 'se' | 'gt' | 'r2';
+  url?: string; // se / gt
+  key?: string; // r2: object key inside the BookNest bucket
   more?: string[]; // se: up to 5 following files read as one chapter
   start?: number; // gt: first byte (inclusive)
   end?: number; // gt: last byte (exclusive)
@@ -26,9 +29,12 @@ export type ChapterSource = {
 // Only these public repos may ever be fetched (no SSRF through a pointer).
 const ALLOWED = /^https:\/\/raw\.githubusercontent\.com\/(standardebooks|GITenberg)\/[\w.-]+\/[0-9a-f]{40}\/[\w./%-]+$/;
 
+const R2_KEY = /^(?!.*\.\.)[A-Za-z0-9][\w./|%-]{0,299}$/;
+
 export function isLibrarySource(value: unknown): value is ChapterSource {
   if (!value || typeof value !== 'object') return false;
   const s = value as Record<string, unknown>;
+  if (s.kind === 'r2') return typeof s.key === 'string' && R2_KEY.test(s.key);
   if (s.kind !== 'se' && s.kind !== 'gt') return false;
   if (typeof s.url !== 'string' || !ALLOWED.test(s.url)) return false;
   if (s.more !== undefined) {
@@ -47,6 +53,7 @@ export function isLibrarySource(value: unknown): value is ChapterSource {
 export function cleanSource(value: unknown): ChapterSource | null {
   if (!isLibrarySource(value)) return null;
   const s = value as ChapterSource;
+  if (s.kind === 'r2') return { kind: 'r2', key: s.key };
   const out: ChapterSource = { kind: s.kind, url: s.url };
   if (s.kind === 'se' && Array.isArray(s.more) && s.more.length) out.more = [...s.more];
   if (s.kind === 'gt') {
@@ -121,23 +128,63 @@ async function fetchBytes(
   throw lastError instanceof Error ? lastError : new Error('Library source unreachable');
 }
 
+// ── Cloudflare R2 (private bucket, signed reads) ─────────────────────────────
+let r2Client: AwsClient | null = null;
+
+function r2(): { client: AwsClient; base: string } {
+  const account = Deno.env.get('R2_ACCOUNT_ID') ?? '';
+  const bucket = Deno.env.get('R2_BUCKET') ?? '';
+  const accessKeyId = Deno.env.get('R2_ACCESS_KEY_ID') ?? '';
+  const secretAccessKey = Deno.env.get('R2_SECRET_ACCESS_KEY') ?? '';
+  if (!account || !bucket || !accessKeyId || !secretAccessKey) {
+    throw new Error('R2 is not configured on the server');
+  }
+  r2Client ??= new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' });
+  return { client: r2Client, base: `https://${account}.r2.cloudflarestorage.com/${bucket}/` };
+}
+
+async function fetchR2(key: string): Promise<string> {
+  const { client, base } = r2();
+  const url = base + key.split('/').map(encodeURIComponent).join('/');
+  let last: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await client.fetch(url, { signal: AbortSignal.timeout(10_000) });
+      if (res.ok) return await res.text();
+      last = new Error(`R2 HTTP ${res.status}`);
+      if (res.status === 404) break;
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last instanceof Error ? last : new Error('R2 unreachable');
+}
+
 /** Resolves a chapter pointer to reader-ready text (cached). */
 export async function resolveSourceText(source: ChapterSource): Promise<string> {
+  if (source.kind === 'r2') {
+    const cacheKey = `r2:${source.key}`;
+    const hit = cacheGet(cacheKey);
+    if (hit !== undefined) return hit;
+    const text = await fetchR2(source.key ?? '');
+    cachePut(cacheKey, text);
+    return text;
+  }
   const key = source.kind === 'gt'
     ? `${source.url}#${source.start}-${source.end}`
-    : [source.url, ...(source.more ?? [])].join('|');
+    : [source.url ?? '', ...(source.more ?? [])].join('|');
   const cached = cacheGet(key);
   if (cached !== undefined) return cached;
   let text: string;
   if (source.kind === 'se') {
     const files = await Promise.all(
-      [source.url, ...(source.more ?? [])].map((u) => fetchBytes(u)));
+      [source.url ?? '', ...(source.more ?? [])].map((u) => fetchBytes(u)));
     text = files
       .map((bytes) => seXhtmlToText(new TextDecoder('utf-8').decode(bytes)))
       .filter((t) => t.length > 0)
       .join('\n\n');
   } else {
-    const bytes = await fetchBytes(source.url, {
+    const bytes = await fetchBytes(source.url ?? '', {
       start: source.start ?? 0,
       end: source.end ?? 0,
     });

@@ -757,6 +757,22 @@ async function migrateLegacy(req: Request): Promise<void> {
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
+// Text of a chapter row: inline, or resolved from its pointer (R2 /
+// Standard Ebooks / GITenberg source, or a legacy CDN text file).
+async function pointedChapterText(c: Record<string, unknown>): Promise<string> {
+  const inline = String(c.content ?? '');
+  if (inline) return inline;
+  try {
+    if (isLibrarySource(c.source)) return await resolveSourceText(c.source);
+    const url = typeof c.contentUrl === 'string' ? c.contentUrl : '';
+    if (url.startsWith('https://res.cloudinary.com/')) {
+      const r = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+      if (r.ok) return await r.text();
+    }
+  } catch (_) { /* shown as empty; the reader path retries */ }
+  return '';
+}
+
 function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -1435,7 +1451,7 @@ Deno.serve(async (req: Request) => {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.26.3',
+          server: '2.27.0',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -1775,6 +1791,137 @@ Deno.serve(async (req: Request) => {
           chapters = { error: String((e as Error)?.message ?? e).slice(0, 200) };
         }
         return ok({ collections: out, chapters });
+      }
+
+      // ── book texts → R2: read-only scan of every chapter row ───────────
+      case 'admin.chapterScan': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const d = await dbFor('books');
+        const limit = Math.min(Math.max(Number(p.limit ?? 1000) || 1000, 1), 2000);
+        const after = typeof p.after === 'string' && /^[0-9a-f]{24}$/.test(p.after)
+          ? { _id: { $gt: new ObjectId(p.after) } } : {};
+        const rows = await d.collection('chapters').aggregate([
+          { $match: after },
+          { $sort: { _id: 1 } },
+          { $limit: limit },
+          { $project: {
+              bookId: 1, chapterNumber: 1, title: 1, contentUrl: 1, contentBytes: 1, source: 1,
+              bytes: { $strLenBytes: { $ifNull: ['$content', ''] } },
+            } },
+        ]).toArray();
+        return ok({
+          chapters: rows.map((r) => ({
+            id: String(r._id),
+            bookId: String(r.bookId ?? ''),
+            chapterNumber: Number(r.chapterNumber ?? 0),
+            title: String(r.title ?? ''),
+            inlineBytes: Number(r.bytes ?? 0),
+            contentUrl: typeof r.contentUrl === 'string' ? r.contentUrl : null,
+            source: r.source ?? null,
+          })),
+          next: rows.length === limit ? String(rows[rows.length - 1]._id) : null,
+        });
+      }
+
+      // Batch read of chapter texts by row id (for the R2 copy job).
+      case 'admin.dumpChapters': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const ids = (Array.isArray(p.ids) ? p.ids : []).slice(0, 200)
+          .filter((x: unknown) => typeof x === 'string' && /^[0-9a-f]{24}$/.test(x as string))
+          .map((x: string) => new ObjectId(x));
+        if (ids.length === 0) return fail('No chapter ids');
+        const d = await dbFor('books');
+        const rows = await d.collection('chapters').find({ _id: { $in: ids } },
+          { projection: { content: 1 } }).toArray();
+        const out: { id: string; content: string }[] = [];
+        let total = 0;
+        for (const r of rows) {
+          const content = String(r.content ?? '');
+          if (total + content.length > 8_000_000 && out.length) break;
+          total += content.length;
+          out.push({ id: String(r._id), content });
+        }
+        return ok({ chapters: out });
+      }
+
+      // Points library chapters at their verified R2 copy. 'reinsert' deletes
+      // first (allowed even when the cluster is over quota) and then writes
+      // the tiny pointer rows; 'replace' updates in place. Library books only
+      // (no member author) — members' manuscripts are never moved.
+      case 'admin.repointChapters': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const items = (Array.isArray(p.items) ? p.items : []).slice(0, 500);
+        if (items.length === 0) return fail('No chapters in the batch');
+        const mode = p.mode === 'reinsert' ? 'reinsert' : 'replace';
+        const d = await dbFor('books');
+        const bookIds = [...new Set(items.map((i: Record<string, unknown>) => String(i?.bookId ?? '')))];
+        const library = new Set((await d.collection('books').find(
+          { _id: { $in: bookIds as never[] }, authorId: null }, { projection: { _id: 1 } }).toArray())
+          .map((b) => String(b._id)));
+        const clean = [];
+        for (const i of items) {
+          const bookId = String(i?.bookId ?? '');
+          const chapterNumber = Number(i?.chapterNumber ?? 0);
+          const source = cleanSource({ kind: 'r2', key: i?.key });
+          if (!library.has(bookId) || !Number.isInteger(chapterNumber) || chapterNumber < 1 || !source) continue;
+          clean.push({ bookId, chapterNumber, source,
+            title: String(i?.title ?? `Chapter ${chapterNumber}`).slice(0, 160),
+            contentBytes: Math.max(0, Number(i?.bytes ?? 0) || 0) });
+        }
+        const col = d.collection('chapters');
+        const errors: string[] = [];
+        let deleted = 0, written = 0;
+        const failed: { bookId: string; chapterNumber: number }[] = [];
+        if (mode === 'reinsert') {
+          for (const c of clean) {
+            const r = await col.deleteMany({ bookId: c.bookId, chapterNumber: c.chapterNumber });
+            deleted += r.deletedCount ?? 0;
+          }
+          for (const c of clean) {
+            try {
+              await col.insertOne({ bookId: c.bookId, chapterNumber: c.chapterNumber, title: c.title,
+                content: '', source: c.source, contentBytes: c.contentBytes });
+              written += 1;
+            } catch (e) {
+              failed.push({ bookId: c.bookId, chapterNumber: c.chapterNumber });
+              if (errors.length < 3) errors.push(String((e as Error)?.message ?? e).slice(0, 200));
+            }
+          }
+        } else {
+          for (const c of clean) {
+            try {
+              const r = await col.updateOne(
+                { bookId: c.bookId, chapterNumber: c.chapterNumber },
+                { $set: { title: c.title, content: '', source: c.source, contentBytes: c.contentBytes },
+                  $unset: { contentUrl: '' } },
+                { upsert: true });
+              written += (r.modifiedCount ?? 0) + (r.upsertedCount ?? 0);
+            } catch (e) {
+              failed.push({ bookId: c.bookId, chapterNumber: c.chapterNumber });
+              if (errors.length < 3) errors.push(String((e as Error)?.message ?? e).slice(0, 200));
+            }
+          }
+        }
+        return ok({ mode, accepted: clean.length, rejected: items.length - clean.length,
+          deleted, written, failed, errors });
       }
 
       case 'admin.libraryIndex': {
@@ -4271,7 +4418,9 @@ Deno.serve(async (req: Request) => {
         if (typeof p.content === 'string') set.content = p.content.slice(0, 500_000);
         const res = await d.collection('chapters').updateOne(
           { bookId, chapterNumber } as never,
-          { $set: set },
+          typeof p.content === 'string'
+            ? { $set: set, $unset: { source: '', contentUrl: '', contentBytes: '' } }
+            : { $set: set },
         );
         if (res.matchedCount === 0) return fail('Chapter not found', 404);
         return ok({ updated: true });
@@ -4286,11 +4435,21 @@ Deno.serve(async (req: Request) => {
           .sort({ chapterNumber: 1 })
           .limit(300)
           .toArray();
+        // Chapters carried over from a library classic (remix / sequel) only
+        // point at their text; resolve it so the editor shows real words.
+        const texts: string[] = new Array(rows.length).fill('');
+        let next = 0;
+        await Promise.all(Array.from({ length: Math.min(8, rows.length) }, async () => {
+          while (next < rows.length) {
+            const i = next++;
+            texts[i] = await pointedChapterText(rows[i]);
+          }
+        }));
         return ok({
-          chapters: rows.map((c) => ({
+          chapters: rows.map((c, i) => ({
             chapterNumber: c.chapterNumber,
             title: c.title ?? '',
-            content: c.content ?? '',
+            content: texts[i],
           })),
         });
       }
@@ -4354,6 +4513,10 @@ Deno.serve(async (req: Request) => {
             chapterNumber: c.chapterNumber,
             title: c.title ?? '',
             content: c.content ?? '',
+            // Library classics keep pointing at their stored text.
+            ...(isLibrarySource(c.source) ? { source: cleanSource(c.source) } : {}),
+            ...(typeof c.contentUrl === 'string' && c.contentUrl ? { contentUrl: c.contentUrl } : {}),
+            ...(c.contentBytes ? { contentBytes: c.contentBytes } : {}),
             createdAt: now,
           })));
         }
@@ -5843,7 +6006,8 @@ Deno.serve(async (req: Request) => {
         if (book.authorId !== uid) return fail('Only the author can edit chapters', 403);
         await d.collection('chapters').updateOne(
           { bookId, chapterNumber },
-          { $set: { title, content, updatedAt: new Date() }, $setOnInsert: { bookId, chapterNumber, createdAt: new Date() } },
+          { $set: { title, content, updatedAt: new Date() }, $setOnInsert: { bookId, chapterNumber, createdAt: new Date() },
+            $unset: { source: '', contentUrl: '', contentBytes: '' } },
           { upsert: true },
         );
         const total = await d.collection('chapters').countDocuments({ bookId });

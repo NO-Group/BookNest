@@ -2,7 +2,8 @@ name: Library Storage (MongoDB → R2)
 
 # Storage report and, later, the move of book texts out of MongoDB into
 # Cloudflare R2. Settings in ops/storage.env (pushing it starts a run).
-# Writes ops/db-stats.md (sizes only, no content).
+# Writes ops/db-stats.md (sizes only, no content) and, for MODE=plan|migrate,
+# ops/r2-migration.md/.json. LIMIT_BOOKS=N limits a trial migration.
 
 on:
   workflow_dispatch:
@@ -33,7 +34,24 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: bash .github/scripts/library-token.sh
+      - name: Settings
+        run: |
+          grep -E '^(MODE|LIMIT_BOOKS)=' ops/storage.env >> "$GITHUB_ENV" || true
+          grep -E '^(MODE|LIMIT_BOOKS)=' ops/storage.env || echo "MODE=stats (default)"
+      - name: Book texts → R2 (MODE=plan is read-only; MODE=migrate moves them)
+        if: env.MODE == 'plan' || env.MODE == 'migrate'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          REPORT_DIR: ops
+        run: |
+          pip install -q boto3
+          python3 tools/library/to_r2.py
+          cat ops/r2-migration.md >> "$GITHUB_STEP_SUMMARY"
       - name: Storage report
+        if: always()
         run: |
           curl -s --max-time 120 -X POST "$FN_URL" -H "Authorization: Bearer $ANON" \
             -H 'Content-Type: application/json' \
@@ -55,4 +73,4 @@ jobs:
           cat ops/db-stats.md >> "$GITHUB_STEP_SUMMARY"
       - name: Publish
         if: always()
-        run: bash .github/scripts/commit-library-output.sh "MongoDB storage report" ops/db-stats.md
+        run: bash .github/scripts/commit-library-output.sh "Storage report (${{ env.MODE || 'stats' }})" ops/db-stats.md ops/r2-migration.md ops/r2-migration.json
