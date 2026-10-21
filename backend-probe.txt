@@ -1,16 +1,16 @@
-Live probe of the deployed booknest-api — 2026-10-21T12:46:29Z
+Live probe of the deployed booknest-api — 2026-10-21T20:05:55Z
 ("Sign in required" = the action EXISTS on the server;
  "Unknown action" = the deployed file predates it;
  ping's  field shows the deployed file's version)
 
-ping               → <no answer>
-admin.users.list   → <no answer>
-moderation.list    → <no answer>
-moderation.report  → <no answer>
-dm.react           → <no answer>
-chat.react         → <no answer>
-dm.deleteMessage   → <no answer>
-chat.deleteMessage → <no answer>
-feed.like          → <no answer>
-books.list         → <no answer>
-dictionary.search  → <no answer>
+ping               → {"ok":true,"data":{"databases":{"books":"booknest_books","social":"booknest_social","reviews":"booknest_reviews","chats":"booknest_chats","notifications":"booknest_notifications","users":"booknest_users","dictionary":"booknest_dictionary","feed":"booknest_feed","moderation":"booknest_moderation","groups":"booknest_groups","genres":"booknest_genres","payments":"booknest_payments"},"time":"2026-10-21T20:05:55.887Z","server":"2.27.0","db":"booknest_books","mongo":"ready","timing":{"connectMs":1472,"mongoPingMs":413,"isolateAgeMs":30,"served":1,"fnRegion":"us-east-1","dbRegion":"GCP:WESTERN_EUROPE
+admin.users.list   → {"ok":false,"error":"Only the overall moderator can list readers"}
+moderation.list    → {"ok":false,"error":"Only the overall moderator can view reports"}
+moderation.report  → {"ok":false,"error":"Sign in required"}
+dm.react           → {"ok":false,"error":"Sign in required"}
+chat.react         → {"ok":false,"error":"Sign in required"}
+dm.deleteMessage   → {"ok":false,"error":"Sign in required"}
+chat.deleteMessage → {"ok":false,"error":"Sign in required"}
+feed.like          → {"ok":false,"error":"Sign in required"}
+books.list         → {"ok":true,"data":{"books":[{"id":"bulk-child-of-storm|h-rider-henry-rider-1856-1925-haggard","title":"Child of Storm","author":"H. Rider (Henry Rider), 1856-1925 Haggard","description":"A beloved history classic by H. Rider (Henry Rider), 1856-1925 Haggard, among the most-read public-domain books in the world — presented here in full.","genre":"History","cover_url":"https://res.cloudinary.com/deqdmwlt7/image/upload/v1790001877/booknest/covers/bulk-child-of-storm%7Ch-rider-henry-rider-1856-1925-haggard.jpg","banner_url":null,"content_format":"markdown","moderation_status":"approved","like_co
+dictionary.search  → {"ok":true,"data":{"entries":[]}}
