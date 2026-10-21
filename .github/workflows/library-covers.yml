@@ -42,7 +42,7 @@ jobs:
           echo "shards=$(python3 -c "import json;print(json.dumps(list(range(int('$SHARDS')))))")" >> "$GITHUB_OUTPUT"
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.121.0
       - name: Wait for the server, mint the import key
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -119,7 +119,7 @@ jobs:
           merge-multiple: true
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.121.0
       - name: Mint the import key
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
