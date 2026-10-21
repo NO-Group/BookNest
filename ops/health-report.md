@@ -1,4 +1,4 @@
-# Production health — 2026-10-21T20:02:04Z
+# Production health — 2026-10-21T20:04:28Z
 
 ## Secrets and variables present
 
@@ -14,22 +14,22 @@
 
 - project status: **ACTIVE_HEALTHY**
 - region: eu-west-1
-- edge functions: [{"slug":"booknest-api","status":"ACTIVE","version":74,"updated_at":1792611990801}]
+- edge functions: [{"slug":"booknest-api","status":"ACTIVE","version":78,"updated_at":1792612999729}]
 
 ## Live checks
 
-- ping → curl=0 http=200 2.708782s body: {"ok":true,"data":{"databases":{"books":"booknest_books","social":"booknest_social","reviews":"booknest_reviews","chats":"booknest_chats","notifications":"booknest_notifications","users":"booknest_users","dictionary":"booknest_dictionary","feed":"booknest_feed
-- books.list → curl=0 http=200 2.831498s body: {"ok":true,"data":{"books":[{"id":"bulk-child-of-storm|h-rider-henry-rider-1856-1925-haggard","title":"Child of Storm","author":"H. Rider (Henry Rider), 1856-1925 Haggard","description":"A beloved history classic by H. Rider (Henry Rider), 1856-1925 Haggard, a
+- ping → curl=0 http=200 4.407293s body: {"ok":true,"data":{"databases":{"books":"booknest_books","social":"booknest_social","reviews":"booknest_reviews","chats":"booknest_chats","notifications":"booknest_notifications","users":"booknest_users","dictionary":"booknest_dictionary","feed":"booknest_feed
+- books.list → curl=0 http=200 3.205496s body: {"ok":true,"data":{"books":[{"id":"bulk-child-of-storm|h-rider-henry-rider-1856-1925-haggard","title":"Child of Storm","author":"H. Rider (Henry Rider), 1856-1925 Haggard","description":"A beloved history classic by H. Rider (Henry Rider), 1856-1925 Haggard, a
 - latency series (tls+connect / first byte / total, server timing):
-  - ping #1: 0.045371s / 2.375274s / 2.376920s · 
-  - ping #2: 0.053519s / 2.528838s / 2.528924s · 
-  - ping #3: 0.032656s / 3.234642s / 3.234964s · 
-  - ping #4: 0.046033s / 2.550913s / 2.551231s · 
-  - ping #5: 0.028837s / 2.434728s / 2.434997s · {"connectMs":1642,"mongoPingMs":318,"isolateAgeMs":17,"served":1}
-  - ping #6: 0.051713s / 2.336137s / 2.336362s · {"connectMs":1661,"mongoPingMs":318,"isolateAgeMs":24,"served":1}
-  - books.list(20) #1: 2.520334s / 2.521205s
-  - books.list(20) #2: 2.556087s / 2.556275s
-  - books.list(20) #3: 2.740830s / 2.740929s
+  - ping #1: 0.049095s / 3.451084s / 3.451178s · {"connectMs":2447,"mongoPingMs":473,"isolateAgeMs":22,"served":1,"fnRegion":"us-west-1","dbRegion":"GCP:WESTERN_EUROPE"}
+  - ping #2: 0.048671s / 3.368865s / 3.368962s · {"connectMs":2426,"mongoPingMs":470,"isolateAgeMs":17,"served":1,"fnRegion":"us-west-1","dbRegion":"GCP:WESTERN_EUROPE"}
+  - ping #3: 0.033302s / 3.431225s / 3.431441s · {"connectMs":2439,"mongoPingMs":475,"isolateAgeMs":22,"served":1,"fnRegion":"us-west-1","dbRegion":"GCP:WESTERN_EUROPE"}
+  - ping #4: 0.047892s / 3.458885s / 3.459081s · {"connectMs":2440,"mongoPingMs":472,"isolateAgeMs":22,"served":1,"fnRegion":"us-west-1","dbRegion":"GCP:WESTERN_EUROPE"}
+  - ping #5: 0.049601s / 3.431020s / 3.431511s · {"connectMs":2450,"mongoPingMs":470,"isolateAgeMs":22,"served":1,"fnRegion":"us-west-1","dbRegion":"GCP:WESTERN_EUROPE"}
+  - ping #6: 0.044081s / 3.427930s / 3.428143s · {"connectMs":2430,"mongoPingMs":471,"isolateAgeMs":22,"served":1,"fnRegion":"us-west-1","dbRegion":"GCP:WESTERN_EUROPE"}
+  - books.list(20) #1: 3.462118s / 3.462176s
+  - books.list(20) #2: 3.451008s / 3.451222s
+  - books.list(20) #3: 3.610511s / 3.610701s
 - REST API → http 401
 - Auth health → http 200 {"version":"v2.197.0","name":"GoTrue","description":"GoTrue is a user registration and authentication API"}
 
