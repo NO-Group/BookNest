@@ -1,0 +1,58 @@
+name: Library Storage (MongoDB → R2)
+
+# Storage report and, later, the move of book texts out of MongoDB into
+# Cloudflare R2. Settings in ops/storage.env (pushing it starts a run).
+# Writes ops/db-stats.md (sizes only, no content).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a106c8-booknest
+    paths:
+      - 'ops/storage.env'
+      - '.github/workflows/library-storage.yml'
+
+concurrency:
+  group: library-import-token
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  storage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Wait for the server, mint the import key
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: bash .github/scripts/library-token.sh
+      - name: Storage report
+        run: |
+          curl -s --max-time 120 -X POST "$FN_URL" -H "Authorization: Bearer $ANON" \
+            -H 'Content-Type: application/json' \
+            -d "{\"action\":\"admin.dbStats\",\"importToken\":\"$IMPORT_TOKEN\"}" > stats.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open('stats.json')).get('data', {})
+          rows = sorted([c for c in d.get('collections', []) if 'storageMB' in c], key=lambda c: -(c['dataMB'] + c['indexMB']))
+          out = ['# MongoDB storage', '', '| db | collection | docs | data MB | storage MB | index MB |', '|---|---|---|---|---|---|']
+          for c in rows:
+              out.append(f"| {c['db']} | {c['collection']} | {c['count']} | {c['dataMB']} | {c['storageMB']} | {c['indexMB']} |")
+          tot = sum(c['dataMB'] + c['indexMB'] for c in rows)
+          out += ['', f'Total data+index: {tot:.1f} MB', '', '## Chapters', '', '```', json.dumps(d.get('chapters'), indent=1), '```']
+          errs = [c for c in d.get('collections', []) if 'error' in c]
+          if errs: out += ['', '## Errors', ''] + [f'- {e}' for e in errs]
+          open('ops/db-stats.md', 'w').write('\n'.join(out) + '\n')
+          print('\n'.join(out))
+          PY
+          cat ops/db-stats.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish
+        if: always()
+        run: bash .github/scripts/commit-library-output.sh "MongoDB storage report" ops/db-stats.md

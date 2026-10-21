@@ -1435,7 +1435,7 @@ Deno.serve(async (req: Request) => {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.26.1',
+          server: '2.26.2',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -1659,6 +1659,12 @@ Deno.serve(async (req: Request) => {
               skipped += 1;
               continue;
             }
+            // Replacing a book: drop its old chapters FIRST. Deletes still
+            // work when the free cluster is over quota, and a pointer-based
+            // book takes a tiny fraction of the space of the old full text.
+            if (existing) {
+              await chaptersCol.deleteMany({ bookId: id });
+            }
             const now = new Date();
             const cover = typeof row.coverUrl === 'string' &&
                     row.coverUrl.startsWith('http')
@@ -1694,9 +1700,6 @@ Deno.serve(async (req: Request) => {
                   createdAt: now,
                 } } as never,
               { upsert: true });
-            if (existing && existing.contentHash !== contentHash) {
-              await chaptersCol.deleteMany({ bookId: id });
-            }
             // One round trip per book (a 300-chapter book used to be 300).
             await chaptersCol.bulkWrite(chapters.map((c) => ({
               replaceOne: {
@@ -1720,6 +1723,61 @@ Deno.serve(async (req: Request) => {
       // The cover job reads the index, paints a cover per book, hosts it
       // on the media CDN and records it here. Author-owned books are
       // never touched (authorId set = a member's own book and cover).
+      // Storage report: what fills the free 512 MB cluster.
+      case 'admin.dbStats': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const out: Record<string, unknown>[] = [];
+        for (const domain of Object.keys(DB_NAMES) as Domain[]) {
+          try {
+            const d = await dbFor(domain);
+            const cols = await d.listCollections({}, { nameOnly: true }).toArray();
+            for (const c of cols) {
+              try {
+                const [st] = await d.collection(c.name).aggregate([
+                  { $collStats: { storageStats: {} } },
+                ]).toArray();
+                const ss = (st?.storageStats ?? {}) as Record<string, number>;
+                out.push({ db: domain, collection: c.name, count: ss.count ?? 0,
+                  dataMB: +((ss.size ?? 0) / 1048576).toFixed(2),
+                  storageMB: +((ss.storageSize ?? 0) / 1048576).toFixed(2),
+                  indexMB: +((ss.totalIndexSize ?? 0) / 1048576).toFixed(2) });
+              } catch (e) {
+                out.push({ db: domain, collection: c.name, error: String((e as Error)?.message ?? e).slice(0, 120) });
+              }
+            }
+          } catch (e) {
+            out.push({ db: domain, error: String((e as Error)?.message ?? e).slice(0, 120) });
+          }
+        }
+        let chapters: Record<string, unknown> = {};
+        try {
+          const d = await dbFor('books');
+          const [agg] = await d.collection('chapters').aggregate([
+            { $group: {
+                _id: null,
+                total: { $sum: 1 },
+                inline: { $sum: { $cond: [{ $gt: [{ $strLenBytes: { $ifNull: ['$content', ''] } }, 0] }, 1, 0] } },
+                inlineBytes: { $sum: { $strLenBytes: { $ifNull: ['$content', ''] } } },
+                cdn: { $sum: { $cond: [{ $gt: ['$contentUrl', null] }, 1, 0] } },
+                pointers: { $sum: { $cond: [{ $gt: ['$source', null] }, 1, 0] } },
+              } },
+          ]).toArray();
+          const inlineBooks = await d.collection('chapters').distinct('bookId', { content: { $type: 'string', $ne: '' } });
+          chapters = { ...(agg ?? {}), inlineMB: +(((agg?.inlineBytes as number) ?? 0) / 1048576).toFixed(1),
+            inlineBookCount: inlineBooks.length,
+            inlineLibraryBooks: inlineBooks.filter((b) => String(b).startsWith('bulk-')).length };
+        } catch (e) {
+          chapters = { error: String((e as Error)?.message ?? e).slice(0, 200) };
+        }
+        return ok({ collections: out, chapters });
+      }
+
       case 'admin.libraryIndex': {
         const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
         const given = String(p.importToken ?? '');
