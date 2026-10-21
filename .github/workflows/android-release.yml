@@ -228,10 +228,12 @@ jobs:
             return ${PIPESTATUS[0]}
           }
           : > release-apk.log
+          # Release notes = install note + the Google Play readiness report.
+          { echo "$NOTES"; echo; [ -f play-check.md ] && sed 's/^# /### /' play-check.md; } > notes.md
           TRY release create "$TAG" booknest.apk booknest-play.aab \
-            --target "$GITHUB_SHA" --title "BookNest ${VER} for Android" --notes "$NOTES" \
+            --target "$GITHUB_SHA" --title "BookNest ${VER} for Android" --notes-file notes.md \
           || TRY release create "$TAG" booknest.apk booknest-play.aab \
-            --title "BookNest ${VER} for Android" --notes "$NOTES" \
+            --title "BookNest ${VER} for Android" --notes-file notes.md \
           || TRY release upload "$TAG" booknest.apk booknest-play.aab --clobber
           COUNT="$(gh release view "$TAG" --json assets --jq '[.assets[].name] | length')"
           if [ "${COUNT:-0}" = "0" ]; then
