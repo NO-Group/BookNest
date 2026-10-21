@@ -1,16 +1,16 @@
 # Book texts → R2
 
-- mode: migrate · 2026-10-21T20:08:16.884676+00:00 → 2026-10-21T20:20:30.650204+00:00
-- plan: {"inline": 18722, "cdn": 0, "r2": 0, "github": 0, "empty": 0, "inline_MB": 507.9, "member_rows_untouched": 2, "manifest_entries": 0, "missing_rows_to_repair": 0}
-- copied: 618
+- mode: migrate · 2026-10-21T20:22:47.479184+00:00 → 2026-10-21T20:59:37.047102+00:00
+- plan: {"inline": 18104, "cdn": 0, "r2": 618, "github": 0, "empty": 0, "inline_MB": 500.7, "member_rows_untouched": 2, "manifest_entries": 618, "missing_rows_to_repair": 0}
+- copied: 18104
 - copy_failures: 0
-- manifest: "manifests/library-chapters-20261021T201325Z.jsonl"
-- repoint: {"written": 618, "deleted": 618, "rejected": 0, "still_pending": 0}
-- mongo_total_MB: 507.9
+- manifest: "manifests/library-chapters-20261021T205733Z.jsonl"
+- repoint: {"written": 18104, "deleted": 18104, "rejected": 0, "still_pending": 0}
+- mongo_total_MB: 13.1
 
 | db | collection | docs | data MB | index MB |
 |---|---|---|---|---|
-| books | chapters | 18724 | 503.77 | 1.02 |
+| books | chapters | 18724 | 5.54 | 4.34 |
 | books | books | 1589 | 1.24 | 0.45 |
 | social | book_bookmarks | 1 | 0 | 0.11 |
 | reviews | reviews | 1 | 0 | 0.11 |
@@ -20,16 +20,11 @@
 | social | user_stats | 2 | 0 | 0.07 |
 
 ## Live check
-- {"book": "bulk-don-quixote|miguel-de-1547-1616-ormsby-john-1829-1895-translator-cervantes-saavedra", "ch": 188, "match": true, "bytes": 19323}
-- {"book": "bulk-les-mis-rables|victor-1802-1885-hapgood-isabel-florence-1850-1928-translator-hugo", "ch": 265, "match": true, "bytes": 6203}
-- {"book": "bulk-don-quixote|miguel-de-1547-1616-ormsby-john-1829-1895-translator-cervantes-saavedra", "ch": 115, "match": true, "bytes": 25716}
-- {"book": "bulk-les-mis-rables|victor-1802-1885-hapgood-isabel-florence-1850-1928-translator-hugo", "ch": 112, "match": true, "bytes": 4043}
-- {"book": "bulk-don-quixote|miguel-de-1547-1616-ormsby-john-1829-1895-translator-cervantes-saavedra", "ch": 171, "match": true, "bytes": 14452}
-- {"book": "bulk-les-mis-rables|victor-1802-1885-hapgood-isabel-florence-1850-1928-translator-hugo", "ch": 190, "match": true, "bytes": 4033}
-- {"book": "bulk-don-quixote|miguel-de-1547-1616-ormsby-john-1829-1895-translator-cervantes-saavedra", "ch": 43, "match": true, "bytes": 46}
-- {"book": "bulk-les-mis-rables|victor-1802-1885-hapgood-isabel-florence-1850-1928-translator-hugo", "ch": 166, "match": true, "bytes": 17383}
-
-## Errors
-- repoint: you are over your space quota, using 513 MB of 512 MB. Writes are blocked on your cluster. Free up storage by deleting unnecessary data or add storage by updating cluster tier. Add a payment method an
-- repoint: you are over your space quota, using 513 MB of 512 MB. Writes are blocked on your cluster. Free up storage by deleting unnecessary data or add storage by updating cluster tier. Add a payment method an
-- repoint: you are over your space quota, using 513 MB of 512 MB. Writes are blocked on your cluster. Free up storage by deleting unnecessary data or add storage by updating cluster tier. Add a payment method an
+- {"book": "bulk-the-last-of-the-mohicans-a-narrative-of-1757|james-fenimore-1789-1851-cooper", "ch": 17, "match": true, "bytes": 32204}
+- {"book": "bulk-autobiography-of-andrew-dickson-white-volume-2|andrew-dickson-1832-1918-white", "ch": 26, "match": true, "bytes": 794}
+- {"book": "bulk-catriona|robert-louis-1850-1894-stevenson", "ch": 22, "match": true, "bytes": 15614}
+- {"book": "bulk-the-adventures-of-jimmie-dale|frank-l-frank-lucius-1877-1942-packard", "ch": 19, "match": true, "bytes": 12234}
+- {"book": "bulk-the-adventures-of-pinocchio|carlo-1826-1890-della-chiesa-carol-1887-1972-translator-collod", "ch": 10, "match": true, "bytes": 3634}
+- {"book": "bulk-the-princess-and-curdie|george-1824-1905-macdonald", "ch": 18, "match": true, "bytes": 6526}
+- {"book": "bulk-a-journey-from-this-world-to-the-next|henry-1707-1754-fielding", "ch": 15, "match": true, "bytes": 8594}
+- {"book": "bulk-robert-louis-stevenson-a-record-an-estimate-and-a-memorial|alexander-h-alexander-hay-1839-", "ch": 16, "match": true, "bytes": 10705}

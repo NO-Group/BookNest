@@ -2,7 +2,7 @@
 
 | db | collection | docs | data MB | storage MB | index MB |
 |---|---|---|---|---|---|
-| books | chapters | 18724 | 503.77 | 353.18 | 1.02 |
+| books | chapters | 18724 | 5.54 | 548.32 | 4.34 |
 | books | books | 1589 | 1.24 | 0.58 | 0.45 |
 | social | book_bookmarks | 1 | 0 | 0.04 | 0.11 |
 | reviews | reviews | 1 | 0 | 0.04 | 0.11 |
@@ -35,7 +35,7 @@
 | payments | orders | 0 | 0 | 0 | 0.01 |
 | payments | subscriptions | 0 | 0 | 0 | 0.01 |
 
-Total data+index: 508.0 MB
+Total data+index: 13.1 MB
 
 ## Chapters
 
@@ -43,12 +43,12 @@ Total data+index: 508.0 MB
 {
  "_id": null,
  "total": 18724,
- "inline": 18106,
- "inlineBytes": 525027187,
+ "inline": 2,
+ "inlineBytes": 2598,
  "cdn": 0,
- "pointers": 618,
- "inlineMB": 500.7,
- "inlineBookCount": 1586,
- "inlineLibraryBooks": 1584
+ "pointers": 18722,
+ "inlineMB": 0,
+ "inlineBookCount": 2,
+ "inlineLibraryBooks": 0
 }
 ```
