@@ -22,8 +22,31 @@ class BackendApi {
   BackendApi._();
   static final BackendApi instance = BackendApi._();
 
-  bool _checked = false;
   bool _available = false;
+
+  /// Set only when the server could not be reached AT ALL (no answer).
+  /// Calls then fail fast for a short cool-down — never for the rest of
+  /// the session. (Before 2.33 one refused or timed-out call, e.g. "Sign
+  /// in required" while the session was still restoring, switched the
+  /// backend off until restart, and screens showed "Something went
+  /// wrong".)
+  DateTime? _downSince;
+  static const Duration _downCooldown = Duration(seconds: 12);
+
+  /// Read-only actions are safe to retry once after a transient failure
+  /// (cold start, flaky network). Writes are never retried — a lost
+  /// response must not send a message twice.
+  static final RegExp _readOnly = RegExp(
+      r'^ping$|\.(list|get|chapter|chapters|search|mine|stats|status|queue|lookup|trending|feed|me|profile)$');
+
+  /// Edge-runtime "try again" statuses (boot error, gateway, worker limit).
+  static bool _transient(int status) =>
+      status == 502 || status == 503 || status == 504 || status == 546;
+
+  void _markUp() {
+    _available = true;
+    _downSince = null;
+  }
 
   // ── EphemCache: stale-while-revalidate for list reads. ─────────────
   // Fresh (60s) reads answer from memory outright. STALE reads (up to
@@ -145,8 +168,8 @@ class BackendApi {
   /// (ignores the cached fail-fast state). Used by the profile screen's
   /// "cloud status" chip so deployment success is visible in the app.
   Future<bool> probe() async {
-    _checked = false;
     _available = false;
+    _downSince = null;
     final res = await call('ping');
     return res != null;
   }
@@ -156,11 +179,28 @@ class BackendApi {
   /// an old deployment answers without it — which is exactly the "you
   /// pasted an older index.ts" tell the maintenance banner needs.
   Future<({bool reachable, bool upToDate})> serverStatus() async {
-    _checked = false;
     _available = false;
+    _downSince = null;
     final res = await call('ping');
     if (res == null) return (reachable: false, upToDate: false);
-    return (reachable: true, upToDate: res['server']?.toString() == '2.24');
+    // Any server at or above the contract this app needs is current
+    // (was an exact '2.24' match, so newer servers looked "outdated").
+    return (
+      reachable: true,
+      upToDate: _versionAtLeast(res['server']?.toString() ?? '', '2.24'),
+    );
+  }
+
+  static bool _versionAtLeast(String have, String need) {
+    List<int> parts(String v) =>
+        v.split('.').map((x) => int.tryParse(x) ?? 0).toList();
+    final a = parts(have), b = parts(need);
+    if (have.isEmpty) return false;
+    for (var i = 0; i < 3; i++) {
+      final x = i < a.length ? a[i] : 0, y = i < b.length ? b[i] : 0;
+      if (x != y) return x > y;
+    }
+    return true;
   }
 
   SupabaseClient get _client => SupabaseService().client;
@@ -171,8 +211,12 @@ class BackendApi {
     String action, [
     Map<String, dynamic> payload = const <String, dynamic>{},
   ]) async {
-    // Fail fast once we know the backend is not reachable yet.
-    if (_checked && !_available) return null;
+    // Fail fast only during the short cool-down after the server could
+    // not be reached at all.
+    final down = _downSince;
+    if (down != null && DateTime.now().difference(down) < _downCooldown) {
+      return null;
+    }
     final key = _cacheKey(action, payload);
     final cached = _cache[key];
     final age = cached == null ? null : DateTime.now().difference(cached.at);
@@ -184,39 +228,59 @@ class BackendApi {
       _revalidate(action, payload, key);
       return cached.data;
     }
-    try {
-      final response = await _client.functions.invoke(
-        AppConfig.edgeFunctionName,
-        body: <String, dynamic>{'action': action, 'payload': payload},
-      );
-      final data = response.data;
-      if (data is Map && data['ok'] == true) {
-        _available = true;
-        _checked = true;
-        final result = data['data'];
-        final value = result is Map
-            ? Map<String, dynamic>.from(result)
-            : <String, dynamic>{};
-        if (_cacheable.contains(action)) {
-          _cache[key] = (data: value, at: DateTime.now());
+    final retryable = _readOnly.hasMatch(action);
+    for (var attempt = 0;; attempt++) {
+      try {
+        final response = await _client.functions.invoke(
+          AppConfig.edgeFunctionName,
+          body: <String, dynamic>{'action': action, 'payload': payload},
+        );
+        final data = response.data;
+        _markUp();
+        if (data is Map && data['ok'] == true) {
+          final result = data['data'];
+          final value = result is Map
+              ? Map<String, dynamic>.from(result)
+              : <String, dynamic>{};
+          if (_cacheable.contains(action)) {
+            _cache[key] = (data: value, at: DateTime.now());
+          }
+          final domain = _cacheDomain[action];
+          if (domain != null && !_cacheable.contains(action)) {
+            _cache.removeWhere(
+                (k, _) => _cacheDomain[k.split('?')[0]] == domain);
+          }
+          return value;
         }
-        final domain = _cacheDomain[action];
-        if (domain != null && !_cacheable.contains(action)) {
-          _cache.removeWhere(
-              (k, _) => _cacheDomain[k.split('?')[0]] == domain);
+        if (kDebugMode) {
+          debugPrint('booknest-api($action) rejected: '
+              '${data is Map ? data['error'] : 'malformed response'}');
         }
-        return value;
+        return null;
+      } on FunctionException catch (error) {
+        // The server ANSWERED (4xx/5xx): it is reachable — only this
+        // request was refused. Never switch the backend off for that.
+        _markUp();
+        if (retryable && attempt == 0 && _transient(error.status)) {
+          await Future<void>.delayed(const Duration(milliseconds: 700));
+          continue;
+        }
+        if (kDebugMode) {
+          debugPrint('booknest-api($action) refused '
+              '(${error.status}): ${error.details}');
+        }
+        return null;
+      } catch (error) {
+        // No answer at all (offline, DNS, timeout).
+        if (retryable && attempt == 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 800));
+          continue;
+        }
+        _available = false;
+        _downSince = DateTime.now();
+        if (kDebugMode) debugPrint('booknest-api($action) unavailable: $error');
+        return null;
       }
-      _checked = true;
-      if (kDebugMode) {
-        debugPrint('booknest-api($action) rejected: '
-            '${data is Map ? data['error'] : 'malformed response'}');
-      }
-      return null;
-    } catch (error) {
-      _checked = true;
-      if (kDebugMode) debugPrint('booknest-api($action) unavailable: $error');
-      return null;
     }
   }
 

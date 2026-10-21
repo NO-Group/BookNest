@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.33.1+60 — 2026-10-21 · "Something went wrong" fix
+
+- **Screens no longer get stuck on "Something went wrong" or "could not
+  be reached".** The server answers refusals with an HTTP error (for
+  example "Sign in required" while the login session is still restoring),
+  and the app treated any such answer, or one timed-out cold start, as
+  "server offline" for the rest of the session. Every later call then
+  failed silently until a restart.
+  - Now a refusal never switches the server off.
+  - A real network failure pauses calls for 12 seconds only.
+  - Read-only calls (lists, pages, chapters) retry once after a transient
+    failure. Writes such as sending a message never retry.
+- The owner's "Server update needed" banner no longer appears for newer
+  servers. It only matched version 2.24 exactly.
+
 ## 2.33.0+59 — 2026-10-21 · Production readiness
 
 **Google Play + direct download**
