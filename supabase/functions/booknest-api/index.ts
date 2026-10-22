@@ -1491,7 +1491,7 @@ Deno.serve(async (req: Request) => {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.27.2',
+          server: '2.27.3',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -1987,6 +1987,87 @@ Deno.serve(async (req: Request) => {
         }
         return ok({ mode, accepted: clean.length, rejected: items.length - clean.length,
           deleted, written, failed, errors });
+      }
+
+      // Releases the disk space the old inline book texts still occupy
+      // (MongoDB keeps freed space inside a collection). Step 'copy' writes
+      // every chapter row into chapters_rebuild and verifies the count;
+      // step 'swap' replaces chapters with the copy. Re-running either
+      // step is safe: an interrupted swap resumes from the full copy.
+      case 'admin.rebuildChapters': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        if (!(importToken.length > 0 && importToken === given)) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const d = await dbFor('books');
+        const step = String(p.step ?? '');
+        const offset = Math.max(0, Number(p.offset ?? 0) || 0);
+        const pageSize = Math.min(Math.max(Number(p.limit ?? 2000) || 2000, 100), 5000);
+        // Copies one page (sorted by _id, so pages are stable) and tolerates
+        // rows that are already there — every page can be re-run.
+        const copyPage = async (from: string, to: string) => {
+          const rows = await d.collection(from).find({}).sort({ _id: 1 })
+            .skip(offset).limit(pageSize).toArray();
+          let written = 0;
+          if (rows.length) {
+            try {
+              const r = await d.collection(to).insertMany(rows as never[], { ordered: false });
+              written = r.insertedCount ?? rows.length;
+            } catch (e) {
+              const errs = (e as { writeErrors?: { code?: number }[] }).writeErrors;
+              const list = Array.isArray(errs) ? errs : [];
+              if (!list.length || list.some((w) => w?.code !== 11000)) throw e;
+              written = rows.length - list.length;
+            }
+          }
+          return { read: rows.length, written, nextOffset: rows.length < pageSize ? null : offset + rows.length };
+        };
+        const counts = async () => ({
+          chapters: await d.collection('chapters').countDocuments({}),
+          copy: await d.collection('chapters_rebuild').countDocuments({}),
+        });
+        switch (step) {
+          case 'reset': // start a fresh copy
+            try { await d.collection('chapters_rebuild').drop(); } catch (_) { /* none */ }
+            return ok({ step, ...(await counts()) });
+          case 'copy': // chapters → chapters_rebuild, one page
+            return ok({ step, offset, ...(await copyPage('chapters', 'chapters_rebuild')) });
+          case 'swap': { // atomic replace when the copy is complete
+            const c = await counts();
+            if (c.copy === 0 || c.copy !== c.chapters) {
+              return fail(`Copy incomplete (${c.copy} of ${c.chapters}) — nothing replaced`, 409);
+            }
+            try {
+              await d.collection('chapters_rebuild').rename('chapters', { dropTarget: true });
+              return ok({ step, mode: 'rename', ...(await counts()) });
+            } catch (e) {
+              return ok({ step, mode: 'rename-unavailable', reason: String(e).slice(0, 160), ...c });
+            }
+          }
+          case 'drop-original': { // fallback path when rename is not allowed
+            const c = await counts();
+            if (c.copy === 0 || c.copy < c.chapters) {
+              return fail(`Copy incomplete (${c.copy} of ${c.chapters}) — original kept`, 409);
+            }
+            await d.collection('chapters').drop();
+            return ok({ step, ...(await counts()) });
+          }
+          case 'copy-back': // chapters_rebuild → chapters, one page
+            return ok({ step, offset, ...(await copyPage('chapters_rebuild', 'chapters')) });
+          case 'finish': {
+            await d.collection('chapters').createIndex({ bookId: 1, chapterNumber: 1 }, { unique: true });
+            const c = await counts();
+            let dropped = false;
+            if (c.copy > 0 && c.chapters >= c.copy) {
+              await d.collection('chapters_rebuild').drop();
+              dropped = true;
+            }
+            return ok({ step, ...c, copyDropped: dropped, complete: c.copy === 0 || dropped });
+          }
+        }
+        return fail('step must be reset, copy, swap, drop-original, copy-back or finish');
       }
 
       case 'admin.libraryIndex': {

@@ -1,7 +1,7 @@
 name: booknest
 description: BookNest by N.O Group - The Digital Library Ecosystem for Bookworms
 publish_to: 'none'
-version: 2.33.2+61
+version: 2.34.0+62
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -67,3 +67,17 @@ flutter:
     - assets/emotes/
     - assets/sounds/call_ring.wav
     - supabase/functions/booknest-api/index.ts
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans_400Regular.ttf
+        - asset: assets/fonts/PlusJakartaSans_400Regular_Italic.ttf
+          style: italic
+        - asset: assets/fonts/PlusJakartaSans_500Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans_600SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans_700Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PlusJakartaSans_800ExtraBold.ttf
+          weight: 800

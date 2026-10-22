@@ -50,6 +50,44 @@ jobs:
           pip install -q boto3
           python3 tools/library/to_r2.py
           cat ops/r2-migration.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Free the disk held by old inline texts (MODE=rebuild)
+        if: env.MODE == 'rebuild'
+        run: |
+          set -euo pipefail
+          call() { # step [offset]
+            for t in 1 2 3 4; do
+              R="$(curl -s --max-time 150 -X POST "$FN_URL" -H "Authorization: Bearer $ANON" \
+                -H 'Content-Type: application/json' -H 'x-region: eu-west-1' \
+                -d "{\"action\":\"admin.rebuildChapters\",\"importToken\":\"$IMPORT_TOKEN\",\"step\":\"$1\",\"offset\":${2:-0}}" || true)"
+              case "$R" in *'"ok":true'*) echo "$R"; return 0;; esac
+              case "$R" in *'"ok":false'*) echo "$R"; return 1;; esac
+              sleep $((t * 5))
+            done
+            echo "no answer for step $1 (offset ${2:-0})"; return 1
+          }
+          pages() { # step → runs every page until nextOffset is null
+            OFF=0
+            while :; do
+              R="$(call "$1" "$OFF")"; echo "  $1 @$OFF: $R"
+              NEXT="$(echo "$R" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["nextOffset"] or "")')"
+              [ -z "$NEXT" ] && break; OFF="$NEXT"
+            done
+          }
+          {
+            echo '# books.chapters rebuild'; echo
+            echo "reset: $(call reset)"
+            pages copy
+            SWAP="$(call swap)"; echo "swap: $SWAP"
+            case "$SWAP" in
+              *'"mode":"rename"'*) ;;
+              *'rename-unavailable'*)
+                echo "drop-original: $(call drop-original)"
+                pages copy-back ;;
+              *) echo "swap refused — original untouched"; exit 1 ;;
+            esac
+            FIN="$(call finish)"; echo "finish: $FIN"
+            echo "$FIN" | grep -q '"complete":true'
+          } 2>&1 | tee ops/mongo-rebuild.md
       - name: Storage report
         if: always()
         run: |
@@ -73,4 +111,4 @@ jobs:
           cat ops/db-stats.md >> "$GITHUB_STEP_SUMMARY"
       - name: Publish
         if: always()
-        run: bash .github/scripts/commit-library-output.sh "Storage report (${{ env.MODE || 'stats' }})" ops/db-stats.md ops/r2-migration.md ops/r2-migration.json
+        run: bash .github/scripts/commit-library-output.sh "Storage report (${{ env.MODE || 'stats' }})" ops/db-stats.md ops/mongo-rebuild.md ops/r2-migration.md ops/r2-migration.json

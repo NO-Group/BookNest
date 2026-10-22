@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.34.0+62 — 2026-10-22 · Modern look
+
+- **New typeface.** The whole app now uses Plus Jakarta Sans (bundled, SIL
+  Open Font License): tighter, bolder headings and easier-to-read body text.
+  Scripts it doesn't cover (emoji, Arabic, CJK) fall back to the system font.
+- **One consistent design system (Material 3).** Pill-shaped buttons;
+  rounded cards with hairline borders; softer inputs with a cyan focus ring;
+  floating rounded snackbars; 28 px dialogs and sheets; and matching
+  switches, chips, segmented buttons, tabs, menus, tooltips, sliders and
+  progress bars. Navy and cyan stay the brand colours. In dark mode, cyan
+  becomes the action colour, since navy on black was hard to see.
+- **Dark mode** uses a near-black with a faint navy tint instead of flat
+  black, plus layered navy surfaces for sheets, dialogs and menus.
+- **New bottom bar.** Labelled tabs (Feed, Discover, Messages, Profile)
+  with filled icons on a cyan pill for the active tab. The Books button
+  lights up when selected. Honours "Reduce motion".
+- Section headers are larger and get a "See all ›" pill.
+- Server 2.27.3: an admin-only rebuild of the chapters collection,
+  which releases the disk space left by the book texts that moved to
+  Cloudflare R2. A production smoke test (two test accounts covering
+  chat, call relay, R2 book text and account deletion) now runs in CI.
+
 ## 2.33.2+61 — 2026-10-22 · Calls connect (NAT traversal fix)
 
 - **TURN relay for voice and video calls.** The server only handed out
