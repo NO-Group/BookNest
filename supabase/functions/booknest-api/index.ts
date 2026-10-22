@@ -1248,7 +1248,65 @@ async function cloudflareTurnServers(): Promise<Record<string, string>[]> {
 const ISOLATE_BOOT = Date.now();
 let servedRequests = 0;
 
+// ── Response finishing: "unchanged" answers + gzip ─────────────────────────
+// Egress is the scarce resource, so every successful JSON answer can be
+//  · fingerprinted: when the app sends {wantRev:true, ifRev} next to
+//    {action, payload} and the answer's fingerprint equals ifRev, only
+//    {"ok":true,"data":{"unchanged":true},"rev":…} goes back (a few bytes
+//    instead of a whole chat page, list or chapter);
+//  · gzip-compressed when the client accepts it (the app's HTTP client and
+//    browsers do; JSON and book text shrink 3–6×).
+async function fingerprint(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(text));
+  return btoa(String.fromCharCode(...new Uint8Array(digest).slice(0, 12)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function finishResponse(req: Request, res: Response, revWanted: boolean, ifRev: string): Promise<Response> {
+  try {
+    if (res.status !== 200) return res;
+    if (!(res.headers.get('Content-Type') ?? '').includes('application/json')) return res;
+    let text = await res.text();
+    if (revWanted && text.startsWith('{"ok":true') && text.endsWith('}')) {
+      const rev = await fingerprint(text);
+      text = ifRev && ifRev === rev
+        ? JSON.stringify({ ok: true, data: { unchanged: true }, rev })
+        : `${text.slice(0, -1)},"rev":"${rev}"}`;
+    }
+    const headers = new Headers(res.headers);
+    headers.set('Vary', 'Accept-Encoding');
+    const accepts = (req.headers.get('Accept-Encoding') ?? '').toLowerCase();
+    if (text.length >= 1400 && /\bgzip\b/.test(accepts)) {
+      const zipped = await new Response(
+        new Blob([text]).stream().pipeThrough(new CompressionStream('gzip')),
+      ).arrayBuffer();
+      headers.set('Content-Encoding', 'gzip');
+      headers.set('Content-Length', String(zipped.byteLength));
+      return new Response(zipped, { status: res.status, headers });
+    }
+    headers.delete('Content-Length');
+    return new Response(text, { status: res.status, headers });
+  } catch (_) {
+    return res; // never let finishing break an answer
+  }
+}
+
 Deno.serve(async (req: Request) => {
+  let revWanted = false;
+  let ifRev = '';
+  if (req.method === 'POST' && !req.headers.get('x-paystack-signature')) {
+    try {
+      const peek = JSON.parse(await req.clone().text());
+      revWanted = peek?.wantRev === true;
+      ifRev = typeof peek?.ifRev === 'string' ? peek.ifRev.slice(0, 64) : '';
+    } catch (_) { /* the handler reports bad JSON */ }
+  }
+  const res = await handleRequest(req);
+  if (req.method === 'OPTIONS' || req.headers.get('x-paystack-signature')) return res;
+  return finishResponse(req, res, revWanted, ifRev);
+});
+
+async function handleRequest(req: Request): Promise<Response> {
   servedRequests++;
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
@@ -1491,7 +1549,7 @@ Deno.serve(async (req: Request) => {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.27.3',
+          server: '2.28.0',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -6852,4 +6910,4 @@ Deno.serve(async (req: Request) => {
     console.error(`action ${action} failed:`, error);
     return fail(error instanceof Error ? error.message : 'Server error', 500);
   }
-});
+}

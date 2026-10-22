@@ -5,6 +5,7 @@ import 'backend_api.dart';
 import 'chat_store.dart';
 import 'cloudinary_service.dart';
 import 'dm_crypto.dart';
+import 'profile_cache.dart';
 import 'supabase_service.dart';
 
 /// ─────────────────────────────────────────────────────────────────────────────
@@ -115,11 +116,19 @@ class ChatPage {
   final bool offline;
   final int serverCount;
 
+  /// Fingerprint of the server page — sent back on the next poll.
+  final String? rev;
+
+  /// The server said nothing changed since [rev]: keep what is shown.
+  final bool unchanged;
+
   const ChatPage({
     required this.messages,
     this.people = const {},
     this.offline = false,
     this.serverCount = 0,
+    this.rev,
+    this.unchanged = false,
   });
 
   static const empty = ChatPage(messages: []);
@@ -142,11 +151,66 @@ class ChatRepository {
   /// on-device vault history merged above it, receipts marked, vault
   /// refreshed. Null means the cloud could not be reached — the caller
   /// keeps whatever it already shows.
-  Future<ChatPage?> load(ChatSource source, String? conversationId) async {
+  ///
+  /// [ifRev] is the fingerprint of the page already on screen: when the
+  /// server's page still matches, it answers in a few bytes and the
+  /// result has `unchanged: true` (no decrypting, no vault write).
+  Future<ChatPage?> load(ChatSource source, String? conversationId,
+      {String? ifRev}) async {
     if (source.flavor == ChatFlavor.dm) {
-      return _loadDm(source, conversationId);
+      return _loadDm(source, conversationId, ifRev);
     }
-    return _loadRoom(source, conversationId);
+    return _loadRoom(source, conversationId, ifRev);
+  }
+
+  /// The conversation as this device last saw it — instant, no network.
+  /// Shown while the first server answer is on its way.
+  Future<ChatPage?> cached(ChatSource source, String? conversationId) async {
+    if (source.flavor == ChatFlavor.room &&
+        (conversationId == null || conversationId.isEmpty)) {
+      return null;
+    }
+    try {
+      final stored =
+          await ChatStore.instance.load(_vaultKey(source, conversationId));
+      if (stored.isEmpty) return null;
+      final messages = [for (final m in stored) Map<String, dynamic>.from(m)];
+      final people = source.flavor == ChatFlavor.room
+          ? ProfileCache.instance.peek(
+              messages.map((m) => m['senderId']?.toString() ?? ''))
+          : const <String, Map<String, dynamic>>{};
+      return ChatPage(messages: messages, people: people);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Opened sealed envelopes, so a poll never decrypts the same message twice.
+  final Map<String, String?> _opened = {};
+
+  String? _openEnvelope(String id, String raw) {
+    final key = '$id:${raw.length}:${raw.hashCode}';
+    if (_opened.containsKey(key)) return _opened[key];
+    final opened = DmCrypto.instance.open(raw);
+    if (_opened.length > 4000) _opened.clear();
+    _opened[key] = opened;
+    return opened;
+  }
+
+  // Newest message from someone else that we already marked read, per
+  // conversation — receipts are sent only when something new arrived.
+  final Map<String, String> _markedRead = {};
+
+  bool _needsReadMark(String conversationId, List<Map<String, dynamic>> messages) {
+    final me = viewerId;
+    String newest = '';
+    for (final m in messages) {
+      final sender = m['senderId']?.toString() ?? '';
+      if (sender.isNotEmpty && sender != me) newest = m['id']?.toString() ?? newest;
+    }
+    if (newest.isEmpty || _markedRead[conversationId] == newest) return false;
+    _markedRead[conversationId] = newest;
+    return true;
   }
 
   /// Opens a room: creates or reuses the group conversation and returns
@@ -174,12 +238,19 @@ class ChatRepository {
       BackendApi.instance
           .call('chat.pin', {'messageId': messageId, 'pinned': pinned});
 
-  Future<ChatPage?> _loadDm(ChatSource source, String? conversationId) async {
+  Future<ChatPage?> _loadDm(
+      ChatSource source, String? conversationId, String? ifRev) async {
     if (conversationId == null || conversationId.isEmpty) {
       return ChatPage.empty;
     }
-    final res = await BackendApi.instance.listMessages(conversationId);
-    if (res == null) return null;
+    final answer = await BackendApi.instance.callIfChanged(
+        'dm.messages', <String, dynamic>{'conversationId': conversationId},
+        ifRev: ifRev);
+    if (answer == null) return null;
+    if (answer.unchanged) {
+      return ChatPage(messages: const [], unchanged: true, rev: answer.rev);
+    }
+    final res = answer.data ?? const <String, dynamic>{};
     var messages = (res['messages'] as List? ?? [])
         .map((row) => Map<String, dynamic>.from(row as Map))
         .toList();
@@ -187,7 +258,8 @@ class ChatRepository {
     for (var i = 0; i < messages.length; i++) {
       final raw = messages[i]['text']?.toString() ?? '';
       if (DmCrypto.isEnvelope(raw)) {
-        final opened = DmCrypto.instance.open(raw);
+        final opened =
+            _openEnvelope(messages[i]['id']?.toString() ?? '', raw);
         messages[i] = {
           ...messages[i],
           'text': opened ?? '🔒 Sealed message',
@@ -216,8 +288,10 @@ class ChatRepository {
       }
     } catch (_) {}
     // Real read receipts: everything from the peer is marked read while
-    // this chat is open.
-    BackendApi.instance.markDmRead(conversationId);
+    // this chat is open (sent once per new incoming message, not per poll).
+    if (_needsReadMark(conversationId, messages)) {
+      BackendApi.instance.markDmRead(conversationId);
+    }
     try {
       final key = _vaultKey(source, conversationId);
       await ChatStore.instance.setMeta(key, {
@@ -233,13 +307,23 @@ class ChatRepository {
       }
     } catch (_) {}
     return ChatPage(
-        messages: messages, offline: false, serverCount: serverCount);
+        messages: messages,
+        offline: false,
+        serverCount: serverCount,
+        rev: answer.rev);
   }
 
-  Future<ChatPage?> _loadRoom(ChatSource source, String? conversationId) async {
+  Future<ChatPage?> _loadRoom(
+      ChatSource source, String? conversationId, String? ifRev) async {
     if (conversationId == null || conversationId.isEmpty) return null;
-    final res = await BackendApi.instance.listClubMessages(conversationId);
-    if (res == null) return null;
+    final answer = await BackendApi.instance.callIfChanged(
+        'chat.messages', <String, dynamic>{'conversationId': conversationId},
+        ifRev: ifRev);
+    if (answer == null) return null;
+    if (answer.unchanged) {
+      return ChatPage(messages: const [], unchanged: true, rev: answer.rev);
+    }
+    final res = answer.data ?? const <String, dynamic>{};
     var messages = (res['messages'] as List? ?? [])
         .map((row) => Map<String, dynamic>.from(row as Map))
         .toList();
@@ -263,26 +347,15 @@ class ChatRepository {
       }
     } catch (_) {}
 
-    // Resolve sender names/avatars (cosmetic — never blocks the chat).
-    final people = <String, Map<String, dynamic>>{};
+    // Resolve sender names/avatars from the device cache (only unknown or
+    // old profiles are fetched — cosmetic, never blocks the chat).
     final senderIds = messages
         .map((m) => m['senderId']?.toString() ?? '')
         .where((id) => id.isNotEmpty)
-        .toSet()
-        .toList();
-    if (senderIds.isNotEmpty) {
-      try {
-        final rows = await SupabaseService()
-            .client
-            .from('profiles')
-            .select('id, username, display_name, avatar_url')
-            .inFilter('id', senderIds);
-        for (final row in rows as List) {
-          final person = Map<String, dynamic>.from(row as Map);
-          people[person['id']?.toString() ?? ''] = person;
-        }
-      } catch (_) {}
-    }
+        .toSet();
+    final people = senderIds.isEmpty
+        ? <String, Map<String, dynamic>>{}
+        : await ProfileCache.instance.lookup(senderIds);
 
     try {
       await ChatStore.instance.setMeta(vaultKey, {
@@ -293,13 +366,16 @@ class ChatRepository {
     } catch (_) {}
 
     // Real read receipts: everything from others is marked read while
-    // this chat is open.
-    BackendApi.instance.markClubRead(conversationId);
+    // this chat is open (once per new incoming message, not per poll).
+    if (_needsReadMark('club:$conversationId', messages)) {
+      BackendApi.instance.markClubRead(conversationId);
+    }
     return ChatPage(
       messages: messages,
       people: people,
       offline: false,
       serverCount: messages.length,
+      rev: answer.rev,
     );
   }
 

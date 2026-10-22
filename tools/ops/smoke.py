@@ -14,6 +14,7 @@ Nothing here prints tokens or passwords.
 """
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import random
@@ -65,6 +66,22 @@ def api(token: str | None, action: str, payload: dict | None = None):
     status, body, secs = http('POST', FN, {'action': action, 'payload': payload or {}}, {
         'Authorization': f'Bearer {token or ANON}', 'apikey': ANON, 'x-region': 'eu-west-1'})
     return status, body, secs
+
+
+def raw_api(token: str, body: dict):
+    """Like the app's HTTP client: asks for gzip, returns wire size too."""
+    req = urllib.request.Request(FN, data=json.dumps(body).encode(), method='POST', headers={
+        'Content-Type': 'application/json', 'Accept-Encoding': 'gzip',
+        'Authorization': f'Bearer {token}', 'apikey': ANON, 'x-region': 'eu-west-1'})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        wire = r.read()
+        enc = (r.headers.get('Content-Encoding') or '').lower()
+    plain = gzip.decompress(wire) if enc == 'gzip' else wire
+    return json.loads(plain), len(wire), len(plain), enc
+
+
+def kb(n: int) -> str:
+    return f'{n / 1024:.1f} KB' if n >= 1024 else f'{n} B'
 
 
 def make_user(tag: str):
@@ -176,6 +193,27 @@ def main():
               f'{len(convs)} conversation(s)')
         s, b, _ = api(b_tok, 'dm.send', {'conversationId': conv, 'text': 'Reply ✔', 'type': 'text'})
         check('Reply', s == 200, f'HTTP {s}')
+
+    # ── data saving (egress) ──
+    try:
+        body, wire, plain, enc = raw_api(a_tok, {'action': 'books.list', 'payload': {'limit': 50}})
+        check('Answers are compressed (gzip)', enc == 'gzip' and body.get('ok') is True and wire < plain,
+              f'books.list {kb(plain)} → {kb(wire)} on the wire ({enc or "no encoding"})')
+        if lib:
+            body, wire, plain, enc = raw_api(a_tok, {'action': 'books.chapter',
+                                                     'payload': {'bookId': book['id'], 'chapterNumber': 1}})
+            note(f"  - chapter text: {kb(plain)} → {kb(wire)} on the wire")
+        if conv:
+            payload = {'conversationId': conv}
+            first, w1, p1, _ = raw_api(a_tok, {'action': 'dm.messages', 'payload': payload, 'wantRev': True})
+            rev = first.get('rev')
+            again, w2, p2, _ = raw_api(a_tok, {'action': 'dm.messages', 'payload': payload,
+                                               'wantRev': True, 'ifRev': rev})
+            same = again.get('data', {}).get('unchanged') is True and again.get('rev') == rev
+            check('Unchanged chat costs a few bytes (rev check)', bool(rev) and same,
+                  f'full page {kb(w1)}, unchanged answer {kb(w2)}')
+    except Exception as e:
+        check('Data-saving checks', False, str(e)[:200])
 
     # ── calls ──
     s, b, _ = api(a_tok, 'calls.ice')

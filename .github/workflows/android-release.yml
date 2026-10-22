@@ -185,7 +185,9 @@ jobs:
       - name: Build Play App Bundle (.aab)
         run: |
           set -o pipefail
-          flutter build appbundle --release 2>&1 | tee build-aab.log || true
+          # BN_PLAY: the Play build leaves out the background-link foreground
+          # service (Play policy); the direct-download APK keeps it.
+          BN_PLAY=true flutter build appbundle --release --dart-define=BN_PLAY=true 2>&1 | tee build-aab.log || true
           [ -f build/app/outputs/bundle/release/app-release.aab ] ||
             { echo "AAB was not produced"; tail -40 build-aab.log; cp build-aab.log build.log; exit 1; }
           echo "AAB built: $(du -h build/app/outputs/bundle/release/app-release.aab | cut -f1)"

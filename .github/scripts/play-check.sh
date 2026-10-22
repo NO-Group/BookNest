@@ -89,5 +89,25 @@ if [ -n "$AAB" ]; then
   echo "## App Bundle"
   echo
   echo "- \`$(basename "$AAB")\` contains $(unzip -l "$AAB" | grep -c '\.so$') native library entries; upload it in Play Console → Test and release."
+  # The Play bundle is built without the background-link foreground
+  # service — verify from the bundle's own manifest.
+  BT_JAR="$TMP/bundletool.jar"
+  if curl -sfL --max-time 60 -o "$BT_JAR" \
+      https://github.com/google/bundletool/releases/download/1.17.2/bundletool-all-1.17.2.jar; then
+    java -jar "$BT_JAR" dump manifest --bundle "$AAB" > "$TMP/aab-manifest.xml" 2>/dev/null || true
+    echo
+    echo "### Play bundle permissions"
+    echo
+    grep -oE 'uses-permission[^>]*android:name="[^"]+"' "$TMP/aab-manifest.xml" | grep -oE '"[^"]+"$' | tr -d '"' | sort -u | sed 's/^/- `/; s/$/`/'
+    echo
+    if grep -q 'foregroundServiceType' "$TMP/aab-manifest.xml"; then
+      echo "⚠️ The bundle still declares a foreground service type:"
+      grep -oE 'foregroundServiceType="[^"]+"' "$TMP/aab-manifest.xml" | sort -u | sed 's/^/- /'
+    else
+      echo "✅ No foreground-service type in the Play bundle — no Play Console foreground-service declaration needed."
+    fi
+  else
+    echo "- (bundletool unavailable — bundle manifest not inspected)"
+  fi
 fi
 rm -rf "$TMP"

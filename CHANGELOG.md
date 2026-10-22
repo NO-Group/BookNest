@@ -1,5 +1,40 @@
 # Changelog
 
+## 2.35.0+63 — 2026-10-22 · Faster screens, far less data
+
+- **Screens open instantly.** Lists you have seen are now kept on the device
+  per account, so they still show right away after a restart: feed, books,
+  inbox, rooms, groups, brainstorm and others. The app shows them at once,
+  then refreshes quietly in the background and repaints if anything changed.
+  Signing out clears them.
+- **Chats open instantly.** A conversation first shows what this device
+  already has (from the encrypted chat vault), then the server's latest.
+- **Much less data (egress).**
+  - The server compresses every answer with gzip (JSON and book text shrink
+    3–6×).
+  - Refreshes send a fingerprint of what the app already has. When nothing
+    changed, the server answers in a few bytes instead of resending the list.
+  - An open chat used to download its last 50 messages every 4 seconds and
+    send a read receipt each time. Now it checks the fingerprint (3 s while
+    active, slowing to 15 s when quiet), pauses in the background, and sends
+    receipts only when a new message arrives.
+  - Sealed messages are decrypted once, not on every poll.
+  - Names and avatars are cached for 12 hours instead of being re-fetched on
+    every load, including every room poll.
+  - Book chapters are saved on the device (up to 120 MB, oldest dropped
+    first). Library classics reopen with no request at all; members' books
+    do a few-byte "unchanged?" check.
+- The feed shows posts first and fills in like counts afterwards, instead
+  of waiting for both.
+- **Google Play build:** the .aab no longer contains the background-link
+  foreground service, so no foreground-service declaration is needed in
+  Play Console. The direct-download APK keeps it. The CI readiness report
+  checks the bundle's manifest. `docs/PLAY_CONSOLE_FORMS.md` has the exact
+  Data safety answers. The privacy policy now covers the call relay and
+  what is stored on the device.
+- Server 2.28.0: gzip plus fingerprint ("rev") answers for every action.
+  The smoke test now checks both.
+
 ## 2.34.0+62 — 2026-10-22 · Modern look
 
 - **New typeface.** The whole app now uses Plus Jakarta Sans (bundled, SIL

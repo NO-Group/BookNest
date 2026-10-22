@@ -1,6 +1,6 @@
 // lib/presentation/screens/feed/feed_screen.dart
 
-import 'dart:async' show unawaited;
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 
@@ -64,14 +64,26 @@ class _FeedScreenState extends State<FeedScreen>
       CurvedAnimation(parent: _stylusController, curve: Curves.easeOutBack),
     );
     _loadPosts();
+    // A background refresh found new posts — repaint from the cache.
+    _cacheSub = BackendApi.instance.cacheUpdates
+        .where((action) => action == 'posts.list')
+        .listen((_) {
+      if (mounted) _loadPosts();
+    });
   }
 
-  Future<void> _loadPosts() async {
+  StreamSubscription<String>? _cacheSub;
+
+  Future<void> _loadPosts({bool fresh = false}) async {
     // Cutover: the feed lives on the app's own data store now; the legacy
     // SQL read remains as a graceful fallback while devices update.
+    // Normal opens answer from the device cache instantly (a rev-checked
+    // refresh follows in the background); pull-to-refresh asks the server.
     List<dynamic> response;
     try {
-      final res = await BackendApi.instance.callFresh('posts.list');
+      final res = fresh
+          ? await BackendApi.instance.callFresh('posts.list')
+          : await BackendApi.instance.call('posts.list');
       response = (res?['posts'] as List?) ?? const [];
     } catch (_) {
       response = const [];
@@ -85,12 +97,18 @@ class _FeedScreenState extends State<FeedScreen>
             .order('created_at', ascending: false);
       } catch (_) {}
     }
+    final ids = <String>[];
+    for (final p in response) {
+      if (p is Map && p['id'] != null) ids.add(p['id'].toString());
+    }
+    if (!mounted) return;
+    // Paint the posts first — like counts follow without holding the screen.
+    setState(() {
+      _posts = response;
+      _filteredPosts = response;
+      _isLoading = false;
+    });
     try {
-      // Attach cloud like stats (best-effort — the feed never blocks on it).
-      final ids = <String>[];
-      for (final p in response) {
-        if (p is Map && p['id'] != null) ids.add(p['id'].toString());
-      }
       final stats = ids.isNotEmpty
           ? await SupabaseService().feedStats(ids)
           : <String, Map<String, dynamic>>{};
@@ -102,20 +120,13 @@ class _FeedScreenState extends State<FeedScreen>
           p['liked_by_me'] = s['likedByMe'];
         }
       }
-
-      setState(() {
-        _posts = response;
-        _filteredPosts = response;
-        _isLoading = false;
-      });
-      // Count this visit's views (the cloud dedupes per reader per day).
-      if (ids.isNotEmpty) {
-        BackendApi.instance
-            .call('posts.view', {'postIds': ids})
-            .catchError((_) => null);
-      }
-    } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted && stats.isNotEmpty) setState(() {});
+    } catch (_) {}
+    // Count this visit's views (the cloud dedupes per reader per day).
+    if (ids.isNotEmpty) {
+      BackendApi.instance
+          .call('posts.view', {'postIds': ids})
+          .catchError((_) => null);
     }
   }
 
@@ -169,7 +180,7 @@ class _FeedScreenState extends State<FeedScreen>
         await context.push('/editor');
         break;
     }
-    _loadPosts();
+    _loadPosts(fresh: true);
   }
 
   @override
@@ -266,7 +277,7 @@ class _FeedScreenState extends State<FeedScreen>
                           ? _buildEmptyState()
                           : RefreshIndicator(
                               color: BookNestColors.cyan,
-                              onRefresh: _loadPosts,
+                              onRefresh: () => _loadPosts(fresh: true),
                               child: ListView.builder(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 16, vertical: 8),
@@ -425,6 +436,7 @@ class _FeedScreenState extends State<FeedScreen>
 
   @override
   void dispose() {
+    _cacheSub?.cancel();
     _stylusController.dispose();
     super.dispose();
   }

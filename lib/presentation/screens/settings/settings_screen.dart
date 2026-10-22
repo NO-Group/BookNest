@@ -453,9 +453,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 24),
 
-          const _SectionLabel('CONNECTION'),
-          const SizedBox(height: 10),
-          _SettingsGroup(children: [
+          if (LinkService.instance.supported) const _SectionLabel('CONNECTION'),
+          if (LinkService.instance.supported) const SizedBox(height: 10),
+          if (LinkService.instance.supported) _SettingsGroup(children: [
             SwitchListTile(
               secondary: const Icon(Icons.link_rounded,
                   size: 21, color: BookNestColors.cyan),

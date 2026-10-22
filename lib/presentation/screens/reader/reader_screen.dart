@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../services/backend_api.dart';
+import '../../../services/chapter_cache.dart';
 import '../../../services/home_widgets_service.dart';
 import '../../../services/supabase_service.dart';
 
@@ -186,10 +187,9 @@ class _ReaderScreenState extends State<ReaderScreen>
       _restoredScroll = false;
       _scrollFraction = 0;
     });
-    final res = await BackendApi.instance.call('books.chapter', {
-      'bookId': widget.bookId,
-      'chapterNumber': chapterNumber,
-    });
+    // Saved chapters open from the device (classics with no request at
+    // all; members' books with a few-byte "unchanged?" check).
+    final res = await ChapterCache.instance.load(widget.bookId, chapterNumber);
     if (!mounted) return;
     if (res == null) {
       setState(() => _cloudOffline = true);

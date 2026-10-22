@@ -2,14 +2,15 @@ import 'dart:async';
 import 'dart:io' show File;
 import 'dart:typed_data' show Uint8List;
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/backend_api.dart';
 import '../services/chat_repository.dart';
 import '../services/inbox_watcher.dart';
+import '../services/profile_cache.dart';
 import '../services/typing_broadcaster.dart';
 import '../services/chat_store.dart';
-import '../services/supabase_service.dart';
 import '../presentation/screens/chat/voice_recorder_sheet.dart'
     show VoiceNoteResult;
 
@@ -92,6 +93,16 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
   String? _conversationId;
   int _lastCount = -1;
   String? _watching;
+  bool _disposed = false;
+
+  /// Fingerprint of the page on screen; polls send it so an unchanged
+  /// conversation costs a few bytes instead of the whole page.
+  String? _rev;
+
+  /// Polls in a row that found nothing new — the poll slows down while a
+  /// chat is quiet and snaps back to 3 s on any activity.
+  int _quietPolls = 0;
+  bool _polling = false;
 
   String? get conversationId => _conversationId;
 
@@ -99,7 +110,11 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
   ChatState build(ChatSource arg) {
     _conversationId = arg.conversationId;
     _lastCount = -1;
+    _rev = null;
+    _quietPolls = 0;
+    _disposed = false;
     ref.onDispose(() {
+      _disposed = true;
       _poll?.cancel();
       _poll = null;
       final watching = _watching;
@@ -108,13 +123,39 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
         TypingBroadcaster.instance.leave();
       }
     });
-    // The heartbeat: every 4 seconds the conversation quietly re-reads.
-    // It lives HERE, not in a widget, so the screen tree never has to
-    // rebuild itself to stay current.
-    _poll = Timer.periodic(
-        const Duration(seconds: 4), (_) => refresh(quiet: true));
+    // The heartbeat lives HERE, not in a widget, so the screen tree never
+    // has to rebuild itself to stay current. It is rev-checked (unchanged
+    // = a few bytes), adaptive (3 s while active, up to 15 s when quiet)
+    // and paused while the app is in the background.
+    _schedulePoll();
     Future.microtask(() => _open());
     return const ChatState();
+  }
+
+  Duration get _pollDelay {
+    if (_quietPolls < 10) return const Duration(seconds: 3); // ~30 s
+    if (_quietPolls < 30) return const Duration(seconds: 6); // ~2 min
+    return const Duration(seconds: 15);
+  }
+
+  void _schedulePoll() {
+    _poll?.cancel();
+    if (_disposed) return;
+    _poll = Timer(_pollDelay, () async {
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      final foreground =
+          lifecycle == null || lifecycle == AppLifecycleState.resumed;
+      if (foreground && !_polling) {
+        _polling = true;
+        try {
+          await _pull(fromTimer: true);
+        } catch (_) {
+        } finally {
+          _polling = false;
+        }
+      }
+      _schedulePoll();
+    });
   }
 
   ChatSource get _source => arg;
@@ -143,6 +184,18 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
         canPin: open.canPin,
       );
     }
+    // Paint the conversation as this device last saw it — instantly —
+    // then let the first server answer replace it.
+    final cached = await ChatRepository.instance.cached(_source, _conversationId);
+    if (cached != null && state.messages.isEmpty && !_disposed) {
+      state = state.copyWith(
+        loading: false,
+        messages: cached.messages,
+        people: cached.people,
+        conversationId: _conversationId,
+        revision: state.revision + 1,
+      );
+    }
     await refresh();
   }
 
@@ -159,17 +212,33 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
   }
 
   /// Pulls the conversation through the repository and publishes it.
-  Future<void> refresh({bool quiet = false}) async {
+  Future<void> refresh({bool quiet = false}) => _pull(fromTimer: false);
+
+  Future<void> _pull({required bool fromTimer}) async {
     if (_source.flavor == ChatFlavor.room &&
         (_conversationId ?? '').isEmpty) {
       return; // the room is still opening — the open flow will load it
     }
-    final page = await ChatRepository.instance.load(_source, _conversationId);
+    // Anything but the timer (a send, a reaction, pull-to-refresh) is
+    // activity: the poll goes back to its fastest pace.
+    if (!fromTimer) _quietPolls = 0;
+    final page = await ChatRepository.instance
+        .load(_source, _conversationId, ifRev: _rev);
+    if (_disposed) return;
     if (page == null) {
       // Cloud unreachable — keep whatever we already show.
       state = state.copyWith(loading: false, cloudOffline: true);
       return;
     }
+    if (page.unchanged) {
+      _quietPolls++;
+      if (state.loading || state.cloudOffline) {
+        state = state.copyWith(loading: false, cloudOffline: false);
+      }
+      return;
+    }
+    _rev = page.rev;
+    _quietPolls = fromTimer ? 0 : _quietPolls;
     final grew = page.serverCount > _lastCount && _lastCount >= 0;
     _lastCount = page.serverCount;
     state = state.copyWith(
@@ -600,12 +669,22 @@ class ConversationsState {
 class ConversationsController extends AutoDisposeNotifier<ConversationsState> {
   @override
   ConversationsState build() {
-    Future.microtask(() => refresh());
+    Future.microtask(() => refresh(fresh: false));
+    // The inbox sweep (every 30 s) or a background refresh found a change
+    // — repaint from the cache, no extra request.
+    final sub = BackendApi.instance.cacheUpdates
+        .where((action) => action == 'dm.list')
+        .listen((_) => refresh(fresh: false));
+    ref.onDispose(sub.cancel);
     return const ConversationsState();
   }
 
-  Future<void> refresh() async {
-    final res = await BackendApi.instance.listConversations();
+  /// [fresh] (pull-to-refresh) asks the server; otherwise the device cache
+  /// answers instantly and a rev-checked refresh follows behind it.
+  Future<void> refresh({bool fresh = true}) async {
+    final res = fresh
+        ? await BackendApi.instance.callFresh('dm.list')
+        : await BackendApi.instance.listConversations();
     if (res == null) {
       state = state.copyWith(loading: false, cloudReady: false);
       return;
@@ -613,25 +692,10 @@ class ConversationsController extends AutoDisposeNotifier<ConversationsState> {
     final conversations = (res['conversations'] as List? ?? [])
         .map((row) => Map<String, dynamic>.from(row as Map))
         .toList();
-    final people = <String, Map<String, dynamic>>{};
     final peerIds = conversations
         .map((c) => c['peerId']?.toString() ?? '')
         .where((id) => id.isNotEmpty)
-        .toSet()
-        .toList();
-    if (peerIds.isNotEmpty) {
-      try {
-        final rows = await SupabaseService()
-            .client
-            .from('profiles')
-            .select('id, username, display_name, avatar_url')
-            .inFilter('id', peerIds);
-        for (final row in rows as List) {
-          final person = Map<String, dynamic>.from(row as Map);
-          people[person['id']?.toString() ?? ''] = person;
-        }
-      } catch (_) {}
-    }
+        .toSet();
     // Fold in conversations that live only in this device's vault (they
     // are older than the server's sync window — restored from backup).
     final serverIds = conversations
@@ -639,7 +703,6 @@ class ConversationsController extends AutoDisposeNotifier<ConversationsState> {
         .where((id) => id.isNotEmpty)
         .toSet();
     final restoredOnly = <Map<String, dynamic>>[];
-    final extraPeers = <String>{};
     for (final key in ChatStore.instance.conversationIds) {
       if (!key.startsWith('dm:')) continue;
       final id = key.substring(3);
@@ -660,20 +723,7 @@ class ConversationsController extends AutoDisposeNotifier<ConversationsState> {
         },
         'updatedAt': last['createdAt']?.toString() ?? '',
       });
-      if (peerId.isNotEmpty) extraPeers.add(peerId);
-    }
-    if (extraPeers.isNotEmpty) {
-      try {
-        final rows = await SupabaseService()
-            .client
-            .from('profiles')
-            .select('id, username, display_name, avatar_url')
-            .inFilter('id', extraPeers.toList());
-        for (final row in rows as List) {
-          final person = Map<String, dynamic>.from(row as Map);
-          people[person['id']?.toString() ?? ''] = person;
-        }
-      } catch (_) {}
+      if (peerId.isNotEmpty) peerIds.add(peerId);
     }
     restoredOnly.sort((a, b) {
       final at = DateTime.tryParse(a['updatedAt'] ?? '');
@@ -681,13 +731,19 @@ class ConversationsController extends AutoDisposeNotifier<ConversationsState> {
       if (at == null || bt == null) return 0;
       return bt.compareTo(at);
     });
+    // Paint now with the names we already know; fill in the rest after.
+    final known = ProfileCache.instance.peek(peerIds);
     state = state.copyWith(
       loading: false,
       cloudReady: true,
       conversations: conversations,
-      people: people,
+      people: known,
       restored: restoredOnly,
     );
+    if (known.length < peerIds.length || fresh) {
+      final people = await ProfileCache.instance.lookup(peerIds);
+      state = state.copyWith(people: people);
+    }
   }
 }
 

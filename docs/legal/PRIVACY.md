@@ -1,6 +1,6 @@
 # BookNest Privacy Policy
 
-_Last updated: 21 October 2026 · BookNest by N.O Group · Contact: n.ogroup@yahoo.com_
+_Last updated: 22 October 2026 · BookNest by N.O Group · Contact: n.ogroup@yahoo.com_
 
 BookNest is a reading and writing community. This policy explains what we
 collect, why, who processes it for us, and how you can delete it. It
@@ -37,9 +37,23 @@ These services store or process data only to run BookNest:
 - **MongoDB Atlas:** books, social activity and messages.
 - **Cloudinary:** images.
 - **Cloudflare R2:** the texts of the public-domain library.
+- **Cloudflare (call relay):** when two phones cannot connect directly, voice
+  and video call traffic passes through Cloudflare's relay. Calls are
+  encrypted end to end, so the relay cannot listen, and nothing is recorded.
 - **Paystack:** payments.
 - **Google Drive:** only if you turn on chat backup, and it goes to *your*
   Drive, sealed with your own passphrase.
+
+## Stored on your device
+
+To open quickly and use less mobile data, the app keeps copies on your
+phone or PC:
+- recently seen lists and screens;
+- other readers' names and avatars;
+- chapters you have read;
+- your chat history (encrypted).
+
+Signing out clears the saved lists, profiles and chapters.
 
 ## Public content
 

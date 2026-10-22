@@ -55,6 +55,12 @@ android {
         }
     }
 
+    // Google Play build (BN_PLAY=true, used for the .aab): drops the
+    // background-link foreground service (see src/play/AndroidManifest.xml).
+    if (System.getenv("BN_PLAY") == "true") {
+        sourceSets.getByName("release").manifest.srcFile("src/play/AndroidManifest.xml")
+    }
+
     buildTypes {
         release {
             signingConfig = if (keystoreProps.isNotEmpty())
