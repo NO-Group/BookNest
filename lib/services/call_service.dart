@@ -61,6 +61,63 @@ class CallService {
   bool _muted = false;
   bool _cameraOff = false;
   bool _speakerOn = false;
+
+  // ── connection plumbing ──
+  // Remote ICE candidates can arrive before our peer exists or before the
+  // remote description is applied (the other phone trickles them right
+  // after its offer/answer). Adding them then fails, and dropping them
+  // was a main cause of calls that never connected — queue and flush.
+  final List<RTCIceCandidate> _pendingIce = [];
+  bool _remoteSet = false;
+  bool _isOfferer = false;
+  bool _restarting = false;
+  Timer? _connectWatchdog;
+  static const String _blockedText =
+      'Could not connect — the network blocked the call. '
+      'Try switching between Wi-Fi and mobile data.';
+
+  Future<void> _flushIce() async {
+    if (_pc == null || !_remoteSet) return;
+    final queued = List<RTCIceCandidate>.from(_pendingIce);
+    _pendingIce.clear();
+    for (final c in queued) {
+      try {
+        await _pc!.addCandidate(c);
+      } catch (_) {}
+    }
+  }
+
+  /// A call that never gets media flowing ends with a clear message
+  /// instead of hanging on "Connecting…".
+  void _startConnectWatchdog() {
+    _connectWatchdog?.cancel();
+    _connectWatchdog = Timer(const Duration(seconds: 40), () {
+      if (status == CallStatus.connecting) {
+        statusText.value = _blockedText;
+        Future.delayed(const Duration(seconds: 3), endCall);
+      }
+    });
+  }
+
+  /// Network changed or the path broke mid-call: the caller sends a fresh
+  /// ICE-restart offer (just calling restartIce() never renegotiated).
+  Future<void> _iceRestart() async {
+    if (!_isOfferer || _restarting || _pc == null) return;
+    _restarting = true;
+    try {
+      // restartIce() makes the next offer an ICE restart (new candidates
+      // over whatever network the phone is on now).
+      await _pc!.restartIce();
+      final offer = await _pc!.createOffer();
+      final sdp = _applyOpusQuality(offer.sdp ?? '');
+      await _pc!.setLocalDescription(RTCSessionDescription(sdp, offer.type));
+      await _pair?.send('reoffer', {'from': _me, 'sdp': sdp, 'type': offer.type});
+    } catch (_) {
+    } finally {
+      // Allow another attempt later if this one does not take.
+      Future.delayed(const Duration(seconds: 8), () => _restarting = false);
+    }
+  }
   bool get muted => _muted;
   bool get cameraOff => _cameraOff;
   bool get speakerOn => _speakerOn;
@@ -172,6 +229,8 @@ class CallService {
     status = CallStatus.connecting;
     statusText.value = 'Connecting…';
     statusNotifier.value = status;
+    _isOfferer = false;
+    _startConnectWatchdog();
     unawaited(_stopRinger());
     try {
       _pair = RealtimeChannelPair(
@@ -280,16 +339,21 @@ class CallService {
         final servers = <Map<String, dynamic>>[];
         for (final entry in list) {
           if (entry is! Map) continue;
-          final server = <String, dynamic>{
-            'urls': entry['urls']?.toString() ?? '',
-          };
-          if (entry['username'] != null) {
-            server['username'] = entry['username'].toString();
+          // `urls` may be one string or a list (Cloudflare TURN sends lists).
+          final raw = entry['urls'];
+          final urls = raw is List
+              ? raw.map((u) => u.toString()).where((u) => u.isNotEmpty)
+              : [raw?.toString() ?? ''].where((u) => u.isNotEmpty);
+          for (final url in urls) {
+            final server = <String, dynamic>{'urls': url};
+            if (entry['username'] != null) {
+              server['username'] = entry['username'].toString();
+            }
+            if (entry['credential'] != null) {
+              server['credential'] = entry['credential'].toString();
+            }
+            servers.add(server);
           }
-          if (entry['credential'] != null) {
-            server['credential'] = entry['credential'].toString();
-          }
-          if ((server['urls'] as String).isNotEmpty) servers.add(server);
         }
         if (servers.isNotEmpty) return servers;
       }
@@ -333,13 +397,16 @@ class CallService {
         }
       } else if (state ==
           RTCIceConnectionState.RTCIceConnectionStateFailed) {
-        if (status == CallStatus.active ||
-            status == CallStatus.connecting) {
+        if (status == CallStatus.active) {
           statusText.value = 'Reconnecting…';
           statusNotifier.value = status;
-          try {
-            _pc?.restartIce();
-          } catch (_) {}
+          unawaited(_iceRestart());
+        } else if (status == CallStatus.connecting) {
+          // Every path (direct and relay) failed — the watchdog would end
+          // it anyway; say why now.
+          statusText.value = _blockedText;
+          statusNotifier.value = status;
+          Future.delayed(const Duration(seconds: 3), endCall);
         }
       }
     };
@@ -359,6 +426,8 @@ class CallService {
         status = CallStatus.connecting;
         statusText.value = 'Connecting…';
         statusNotifier.value = status;
+        _isOfferer = true;
+        _startConnectWatchdog();
         try {
           await _prepareMedia();
           await _createPeer();
@@ -383,6 +452,8 @@ class CallService {
           await _createPeer();
           await _pc!.setRemoteDescription(
               RTCSessionDescription(payload['sdp']?.toString() ?? '', 'offer'));
+          _remoteSet = true;
+          await _flushIce();
           final answer = await _pc!.createAnswer();
           final answerSdp = _applyOpusQuality(answer.sdp ?? '');
           await _pc!.setLocalDescription(
@@ -402,19 +473,51 @@ class CallService {
         try {
           await _pc!.setRemoteDescription(
               RTCSessionDescription(payload['sdp']?.toString() ?? '', 'answer'));
+          _remoteSet = true;
+          await _flushIce();
+        } catch (_) {}
+        break;
+      case 'reoffer':
+        // Mid-call ICE restart from the caller (network change).
+        if (_pc == null || status != CallStatus.active) return;
+        try {
+          await _pc!.setRemoteDescription(
+              RTCSessionDescription(payload['sdp']?.toString() ?? '', 'offer'));
+          final answer = await _pc!.createAnswer();
+          final answerSdp = _applyOpusQuality(answer.sdp ?? '');
+          await _pc!.setLocalDescription(
+              RTCSessionDescription(answerSdp, answer.type));
+          await _pair!.send('reanswer', {
+            'from': _me,
+            'sdp': answerSdp,
+            'type': answer.type,
+          });
+        } catch (_) {}
+        break;
+      case 'reanswer':
+        if (_pc == null) return;
+        try {
+          await _pc!.setRemoteDescription(
+              RTCSessionDescription(payload['sdp']?.toString() ?? '', 'answer'));
         } catch (_) {}
         break;
       case 'ice':
-        try {
-          await _pc?.addCandidate(RTCIceCandidate(
-            payload['candidate']?.toString() ?? '',
-            payload['sdpMid']?.toString(),
-            (payload['sdpMLineIndex'] as num?)?.toInt(),
-          ));
-        } catch (_) {}
+        final candidate = RTCIceCandidate(
+          payload['candidate']?.toString() ?? '',
+          payload['sdpMid']?.toString(),
+          (payload['sdpMLineIndex'] as num?)?.toInt(),
+        );
+        if (_pc == null || !_remoteSet) {
+          _pendingIce.add(candidate);
+        } else {
+          try {
+            await _pc!.addCandidate(candidate);
+          } catch (_) {}
+        }
         break;
       case 'connected':
         _stopRinger();
+        _connectWatchdog?.cancel();
         if (status == CallStatus.connecting) {
           status = CallStatus.active;
           session?.connectedAt ??= DateTime.now();
@@ -435,6 +538,12 @@ class CallService {
 
   /// The connecting side flips to active once media actually flows.
   void markActiveIfConnecting() {
+    _connectWatchdog?.cancel();
+    if (status == CallStatus.active) {
+      // Back after a reconnect.
+      if (statusText.value == 'Reconnecting…') statusText.value = null;
+      return;
+    }
     if (status == CallStatus.connecting) {
       status = CallStatus.active;
       session?.connectedAt = DateTime.now();
@@ -499,6 +608,12 @@ class CallService {
     _local = null;
     _remote = null;
     _pair = null;
+    _connectWatchdog?.cancel();
+    _connectWatchdog = null;
+    _pendingIce.clear();
+    _remoteSet = false;
+    _isOfferer = false;
+    _restarting = false;
     _muted = false;
     _cameraOff = false;
     await _stopRinger();

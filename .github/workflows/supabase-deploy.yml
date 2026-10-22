@@ -26,7 +26,7 @@ on:
       - '.github/workflows/supabase-deploy.yml'
 
 permissions:
-  contents: read
+  contents: write # commits ops/turn-setup.md (names and statuses only, never secrets)
 
 env:
   # Public by design (it is in the app's Supabase URL).
@@ -107,6 +107,58 @@ jobs:
             R2_ACCOUNT_ID="$R2_ACCOUNT_ID" R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
             R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" R2_BUCKET="$R2_BUCKET" >/dev/null
           echo "R2 secrets set on the server."
+
+      # Voice/video calls need a TURN relay: on mobile data (carrier NAT) and
+      # behind most routers, phones cannot reach each other directly. Uses
+      # Cloudflare's TURN service on the same Cloudflare account. The key is
+      # created once and stored as server secrets; later runs only re-check.
+      - name: TURN relay for calls (Cloudflare)
+        continue-on-error: true
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GH_TURN_ID: ${{ secrets.CF_TURN_KEY_ID }}
+          GH_TURN_TOKEN: ${{ secrets.CF_TURN_KEY_API_TOKEN }}
+        run: |
+          set -uo pipefail
+          mkdir -p ops
+          R=ops/turn-setup.md
+          echo "# TURN relay setup — $(date -u +%F' '%H:%M) UTC" > $R
+          NAMES="$(supabase secrets list --project-ref "$PROJECT_REF" -o json 2>/dev/null | jq -r '.[].name' 2>/dev/null)"
+          [ -n "$NAMES" ] || NAMES="$(supabase secrets list --project-ref "$PROJECT_REF" 2>/dev/null | awk -F'|' 'NR>2{gsub(/ /,"",$1); print $1}')"
+          echo "- server secrets readable: $(printf '%s\n' "$NAMES" | grep -c .) names" >> $R
+          echo "- server secrets present: $(printf '%s' "$NAMES" | grep -E '^(CF_TURN_KEY_ID|CF_TURN_KEY_API_TOKEN|TURN_URL|TURN_SECRET)$' | tr '\n' ' ')" >> $R
+          if [ -n "$GH_TURN_ID" ] && [ -n "$GH_TURN_TOKEN" ]; then
+            # Owner-provided key (GitHub secrets) always wins.
+            KEY_ID="$GH_TURN_ID"; KEY_TOKEN="$GH_TURN_TOKEN"; echo "- source: GitHub secrets CF_TURN_KEY_ID / CF_TURN_KEY_API_TOKEN" >> $R
+          elif printf '%s' "$NAMES" | grep -qx CF_TURN_KEY_ID && printf '%s' "$NAMES" | grep -qx CF_TURN_KEY_API_TOKEN; then
+            echo "- TURN key already on the server ✅ (nothing to do)" >> $R
+            KEY_ID=""; KEY_TOKEN=""
+          else
+            OUT="$(curl -s --max-time 30 -X POST "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/calls/turn_keys" \
+              -H "Authorization: Bearer $CF_TOKEN" -H 'Content-Type: application/json' -d '{"name":"booknest-calls"}')"
+            if [ "$(printf '%s' "$OUT" | jq -r '.success')" = "true" ]; then
+              KEY_ID="$(printf '%s' "$OUT" | jq -r '.result.uid')"; KEY_TOKEN="$(printf '%s' "$OUT" | jq -r '.result.key')"
+              echo "::add-mask::$KEY_TOKEN"
+              echo "- created Cloudflare TURN key \`booknest-calls\` ✅" >> $R
+            else
+              echo "- ❌ could not create a TURN key: \`$(printf '%s' "$OUT" | jq -c '.errors' | head -c 400)\`" >> $R
+              echo "  The Cloudflare API token needs the **Calls: Edit** (Realtime) permission, or create a TURN key in the dashboard (Realtime → TURN) and add GitHub secrets CF_TURN_KEY_ID + CF_TURN_KEY_API_TOKEN." >> $R
+              KEY_ID=""; KEY_TOKEN=""
+            fi
+          fi
+          if [ -n "$KEY_ID" ] && [ -n "$KEY_TOKEN" ]; then
+            supabase secrets set --project-ref "$PROJECT_REF" CF_TURN_KEY_ID="$KEY_ID" CF_TURN_KEY_API_TOKEN="$KEY_TOKEN" >/dev/null \
+              && echo "- stored as server secrets ✅" >> $R
+            T="$(curl -s --max-time 30 -X POST "https://rtc.live.cloudflare.com/v1/turn/keys/$KEY_ID/credentials/generate-ice-servers" \
+              -H "Authorization: Bearer $KEY_TOKEN" -H 'Content-Type: application/json' -d '{"ttl":600}')"
+            echo "- credential test: $(printf '%s' "$T" | jq -c '[.iceServers] | flatten | map(.urls) | flatten' 2>/dev/null | head -c 600 || printf '%s' "$T" | head -c 300)" >> $R
+          fi
+          cat $R; cat $R >> "$GITHUB_STEP_SUMMARY"
+          git config user.email "booknest-ci@users.noreply.github.com"; git config user.name "booknest-ci"
+          git add -f $R && git commit -q -m "TURN relay setup report [skip ci]" && \
+            for i in 1 2 3; do git pull -q --rebase --autostash origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break; sleep 5; done || true
 
       - name: Deploy booknest-api
         env:

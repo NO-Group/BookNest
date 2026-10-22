@@ -1209,6 +1209,40 @@ async function hitLimit(
 // ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
+// ── Calls: Cloudflare TURN credentials (short-lived, cached per isolate).
+// Returns one entry per URL (older apps read `urls` as a single string).
+let cfTurnCache: { at: number; servers: Record<string, string>[] } | null = null;
+async function cloudflareTurnServers(): Promise<Record<string, string>[]> {
+  const keyId = Deno.env.get('CF_TURN_KEY_ID') ?? '';
+  const keyToken = Deno.env.get('CF_TURN_KEY_API_TOKEN') ?? '';
+  if (!keyId || !keyToken) return [];
+  if (cfTurnCache && Date.now() - cfTurnCache.at < 6 * 3600_000) return cfTurnCache.servers;
+  try {
+    const res = await fetch(
+      `https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`,
+      { method: 'POST', signal: AbortSignal.timeout(6000),
+        headers: { Authorization: `Bearer ${keyToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ttl: 86400 }) });
+    if (!res.ok) return cfTurnCache?.servers ?? [];
+    const body = await res.json() as { iceServers?: unknown };
+    const list = (Array.isArray(body.iceServers) ? body.iceServers : [body.iceServers])
+      .filter(Boolean) as { urls?: string | string[]; username?: string; credential?: string }[];
+    const servers: Record<string, string>[] = [];
+    for (const entry of list) {
+      const urls = Array.isArray(entry.urls) ? entry.urls : entry.urls ? [entry.urls] : [];
+      for (const url of urls) {
+        // STUN is already in the list; keep the relays (UDP, TCP, TLS/443).
+        if (!/^turns?:/.test(url)) continue;
+        servers.push({ urls: url, username: String(entry.username ?? ''), credential: String(entry.credential ?? '') });
+      }
+    }
+    if (servers.length) cfTurnCache = { at: Date.now(), servers };
+    return servers;
+  } catch (_) {
+    return cfTurnCache?.servers ?? [];
+  }
+}
+
 // Latency diagnostics for ping: is this isolate warm, and how slow is the
 // database round trip (cold start vs. distance to the cluster)?
 const ISOLATE_BOOT = Date.now();
@@ -1457,7 +1491,7 @@ Deno.serve(async (req: Request) => {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.27.1',
+          server: '2.27.2',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -2115,6 +2149,10 @@ Deno.serve(async (req: Request) => {
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
         ];
+        // Preferred relay: Cloudflare TURN (anycast, incl. TURN over TLS on
+        // 443, which gets through strict mobile/office networks).
+        const cfTurn = await cloudflareTurnServers();
+        if (cfTurn.length) return ok({ iceServers: [...stun, ...cfTurn], turn: true, relay: 'cloudflare' });
         const turnUrl = Deno.env.get('TURN_URL');
         const turnSecret = Deno.env.get('TURN_SECRET');
         if (!turnUrl || !turnSecret) return ok({ iceServers: stun, turn: false });

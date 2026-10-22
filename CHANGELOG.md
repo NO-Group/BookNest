@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.33.2+61 — 2026-10-22 · Calls connect (NAT traversal fix)
+
+- **TURN relay for voice and video calls.** The server only handed out
+  STUN, which works only when two phones can reach each other directly.
+  On mobile data (carrier NAT) and behind most routers that fails: the
+  "NAT traversal" error. The server (2.27.2) now issues short-lived
+  Cloudflare TURN credentials, including TURN over TLS on port 443 for
+  strict networks. The deploy job creates the Cloudflare TURN key once.
+- **No more lost connection candidates.** Candidates that arrived before
+  the call was set up on the other phone were silently dropped. They are
+  now queued and applied once the call is ready.
+- **Real reconnect.** When the network changes mid-call, the caller sends
+  an ICE-restart offer (before, `restartIce()` was called without
+  renegotiating, so nothing happened).
+- **Clear failure.** A call that cannot connect within 40 seconds ends
+  with "Could not connect — the network blocked the call" instead of
+  hanging on "Connecting…".
+- The app accepts relay lists in either format (Cloudflare sends lists).
+
 ## 2.33.1+60 — 2026-10-21 · "Something went wrong" fix
 
 - **Screens no longer get stuck on "Something went wrong" or "could not
