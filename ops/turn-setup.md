@@ -1,5 +1,6 @@
-# TURN relay setup — 2026-10-22 07:21 UTC
+# TURN relay setup — 2026-10-22 09:23 UTC
 - server secrets readable: 18 names
 - server secrets present: 
-- ❌ could not create a TURN key: `[{"code":10000,"message":"Authentication error","documentation_url":"https://developers.cloudflare.com/api/resources/calls/subresources/turn/methods/create"}]`
-  The Cloudflare API token needs the **Calls: Edit** (Realtime) permission, or create a TURN key in the dashboard (Realtime → TURN) and add GitHub secrets CF_TURN_KEY_ID + CF_TURN_KEY_API_TOKEN.
+- source: GitHub secrets CF_TURN_KEY_ID / CF_TURN_KEY_API_TOKEN
+- stored as server secrets ✅
+- credential test: ["stun:stun.cloudflare.com:3478","stun:stun.cloudflare.com:443","turn:turn.cloudflare.com:3478?transport=udp","turn:turn.cloudflare.com:3478?transport=tcp","turns:turn.cloudflare.com:5349?transport=tcp","turn:turn.cloudflare.com:443?transport=udp","turn:turn.cloudflare.com:80?transport=tcp","turns:turn.cloudflare.com:443?transport=tcp"]
