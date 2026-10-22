@@ -1,13 +1,13 @@
-# Google Play readiness — 2026-10-22 07:25 UTC
+# Google Play readiness — 2026-10-22 09:31 UTC
 
-Build tools: `37.0.0` · APK 114M · AAB 95M
+Build tools: `37.0.0` · APK 115M · AAB 95M
 
 ## App
 
 | item | value | Play |
 |---|---|---|
 | package | `com.nogroup.booknest` | |
-| version | 2.33.2 (61) | |
+| version | 2.34.0 (62) | |
 | minSdk | 24 | |
 | targetSdk | 36 | ✅ needs ≥ 35 |
 
