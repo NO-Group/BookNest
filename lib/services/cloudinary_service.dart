@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
+import 'doc_extract.dart' show isAudioExtension, isVideoExtension;
 
 /// Unsigned Cloudinary uploads for all BookNest images:
 /// book covers, profile avatars, profile covers, feed & chat images.
@@ -66,14 +67,24 @@ class CloudinaryService {
   }
 
   /// Helper for on-the-fly resized thumbnails (Cloudinary transformation):
-  /// Uploads any file (documents, audio, PDFs…) via Cloudinary's auto
-  /// endpoint and returns the hosted URL, or null on failure.
+  /// Uploads any file (documents, audio, PDFs…) and returns the hosted URL,
+  /// or null on failure. Videos, audio and ordinary photos go through the
+  /// auto endpoint (streamable video/audio, image thumbnails); everything
+  /// else — PDFs, ZIPs, Office files, SVG… — is stored *raw*: Cloudinary
+  /// free accounts refuse to deliver PDF/ZIP stored as images (HTTP 401,
+  /// proven by the production smoke test), raw files are served as-is.
   static Future<String?> uploadRaw({
     required Uint8List bytes,
     required String filename,
   }) async {
     final safeName = filename.trim().isEmpty ? 'attachment' : filename.trim();
-    final uri = Uri.parse('$_base/${AppConfig.cloudinaryCloudName}/auto/upload');
+    final dot = safeName.lastIndexOf('.');
+    final ext = dot < 0 ? '' : safeName.substring(dot + 1).toLowerCase();
+    const photos = {'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'bmp'};
+    final media =
+        photos.contains(ext) || isVideoExtension(ext) || isAudioExtension(ext);
+    final uri = Uri.parse(
+        '$_base/${AppConfig.cloudinaryCloudName}/${media ? 'auto' : 'raw'}/upload');
     final request = http.MultipartRequest('POST', uri)
       ..fields['upload_preset'] = AppConfig.cloudinaryUploadPreset
       ..fields['folder'] = '${AppConfig.cloudinaryBaseFolder}/files';

@@ -138,7 +138,7 @@ def turn_probe(servers: list[dict]):
 
 
 def cloudinary_roundtrip(name: str, data: bytes, mime: str):
-    """Uploads like the app's chat 'Send a file' (unsigned, auto) and downloads
+    """Uploads like the app's chat 'Send a file' (unsigned, raw) and downloads
     it back the way the in-app document viewer does. Free Cloudinary accounts
     can block PDF/ZIP delivery (HTTP 401) — this proves they open."""
     cloud = os.environ.get('CLOUDINARY_CLOUD_NAME') or 'deqdmwlt7'
@@ -150,7 +150,8 @@ def cloudinary_roundtrip(name: str, data: bytes, mime: str):
     parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\n'
                  f'Content-Type: {mime}\r\n\r\n'.encode() + data + b'\r\n')
     parts.append(f'--{boundary}--\r\n'.encode())
-    req = urllib.request.Request(f'https://api.cloudinary.com/v1_1/{cloud}/auto/upload', data=b''.join(parts),
+    # Same rule as CloudinaryService.uploadRaw: documents are stored raw.
+    req = urllib.request.Request(f'https://api.cloudinary.com/v1_1/{cloud}/raw/upload', data=b''.join(parts),
                                  method='POST', headers={'Content-Type': f'multipart/form-data; boundary={boundary}'})
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
