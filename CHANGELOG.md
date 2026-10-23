@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.39.1+73 — 2026-10-23 · PC: studio desk, group pages
+
+- **Manuscript studio on PC:** a three-pane writing desk. Chapters are on
+  the left (titles update as you type; add or remove in place), the page is
+  in the middle, and Book details stay open on the right. No flipping
+  between tabs. Phones keep the Book details / Write tabs.
+- **Clubs, communities, organizations and schools on PC:** two columns.
+  The group itself (header, Join / Group chat, members, club read,
+  moderation) is on the left; announcements, channels, events, reading
+  list, classes and the shelf are on the right. Each column scrolls on
+  its own.
+
 ## 2.39.0+72 — 2026-10-23 · PC layout, profile redesign, groups and UI fixes
 
 Server 2.32.1.
