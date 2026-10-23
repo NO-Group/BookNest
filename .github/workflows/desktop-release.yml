@@ -162,7 +162,9 @@ jobs:
         run: bash .github/scripts/desktop-diag.sh macos
 
   linux:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is moving to Ubuntu 26 (Oct 2026) and its apt step
+    # hung for 15 min. 24.04 also keeps the glibc floor low for users' PCs.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -170,6 +172,8 @@ jobs:
         # A stuck Ubuntu mirror once hung this step for the whole job; give up
         # after 15 min (and retry once) instead of blocking the PC release.
         timeout-minutes: 15
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 ||
             { sleep 20; sudo apt-get update -o Acquire::Retries=3; }
