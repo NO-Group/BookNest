@@ -1,15 +1,16 @@
-# Google Play readiness — 2026-10-22 10:19 UTC
+# Google Play readiness — 2026-10-23 07:49 UTC
 
-Build tools: `37.0.0` · APK 115M · AAB 95M
+Build tools: `37.0.0` · APK 115M · AAB 96M
 
 ## App
 
 | item | value | Play |
 |---|---|---|
-| package | `com.nogroup.booknest` | |
-| version | 2.35.0 (63) | |
+| package | `com.n_o_group.booknest` | |
+| version | 2.36.0 (64) | |
 | minSdk | 24 | |
 | targetSdk | 36 | ✅ needs ≥ 35 |
+| push (Firebase config) | built in | ✅ |
 
 ## Permissions
 
@@ -27,7 +28,8 @@ Build tools: `37.0.0` · APK 115M · AAB 95M
 - `android.permission.VIBRATE`
 - `android.permission.WAKE_LOCK`
 - `android.permission.WRITE_EXTERNAL_STORAGE`
-- `com.nogroup.booknest.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`
+- `com.google.android.c2dm.permission.RECEIVE`
+- `com.n_o_group.booknest.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`
 
 ## 16 KB page size (native libraries)
 
@@ -54,6 +56,11 @@ Build tools: `37.0.0` · APK 115M · AAB 95M
 - `android.permission.VIBRATE`
 - `android.permission.WAKE_LOCK`
 - `android.permission.WRITE_EXTERNAL_STORAGE`
-- `com.nogroup.booknest.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`
+- `com.google.android.c2dm.permission.RECEIVE`
+- `com.n_o_group.booknest.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`
 
 ✅ No foreground-service type in the Play bundle — no Play Console foreground-service declaration needed.
+
+## Push
+
+- push: google-services.json for `com.n_o_group.booknest` (project `booknest-12-33-oct22-2026`) ✅
