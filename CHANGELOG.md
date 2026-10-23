@@ -1,15 +1,16 @@
 # Changelog
 
-## 2.37.1+66 — 2026-10-23 · PDFs and ZIPs sent in chat always open
+## 2.37.1+66 — 2026-10-23 · Chat documents stored raw; PDF delivery check
 
-- The production smoke test found that Cloudinary refuses to deliver PDFs
-  uploaded through its "auto" endpoint (HTTP 401 — free accounts block
-  PDF/ZIP delivery for image-type files). Documents (PDF, ZIP, Office, SVG,
-  everything that isn't a photo, video or audio) are now stored as raw files,
-  which Cloudinary always serves. Smoke test: PDF and DOCX round-trip.
-- PDFs sent with older versions: the viewer explains the 401 clearly. To make
-  those open too, tick **Allow delivery of PDF and ZIP files** in Cloudinary
-  → Settings → Security.
+- Documents sent in chat (PDF, ZIP, Office, SVG — everything that isn't a
+  photo, video or audio) are stored on Cloudinary as raw files, served
+  byte-for-byte to the BookNest document viewer.
+- The production smoke test found that this Cloudinary account refuses to
+  deliver **PDF** files (HTTP 401), whichever way they're uploaded — a
+  free-account security default. DOCX and other documents download fine.
+  **Owner action:** Cloudinary → Settings → Security → tick
+  **Allow delivery of PDF and ZIP files** → Save. That also fixes PDFs sent
+  earlier. Until then the viewer explains the 401 instead of failing silently.
 
 ## 2.37.0+65 — 2026-10-23 · Chat media plays and opens inside BookNest
 
