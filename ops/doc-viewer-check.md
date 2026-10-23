@@ -1,4 +1,4 @@
-# Document viewer check — 2026-10-23 08:50 UTC · Dart SDK version: 3.13.7 (stable) (Thu Oct 22 14:28:57 2026 -0700) on "linux_x64"
+# Document viewer check — 2026-10-23 08:54 UTC · Dart SDK version: 3.13.7 (stable) (Thu Oct 22 14:28:57 2026 -0700) on "linux_x64"
 
 ## archive ^3.6.1 ()
 ```text
@@ -44,7 +44,7 @@ warning - doc_extract.dart:2403:25 - The '!' will have no effect because the rec
 ```
 # Document viewer check — 24/24 files OK
 
-### ✅ book.epub — kind `document`, 20 ms
+### ✅ book.epub — kind `document`, 13 ms
 ```text
 E-book (EPUB)
 title: Tiny Epub
@@ -60,7 +60,7 @@ It was a **bright** cold day & the clocks were striking thirteen.
 | 1 | 2
 
 ```
-### ✅ bundle.tar.gz — kind `document`, 10 ms
+### ✅ bundle.tar.gz — kind `document`, 8 ms
 ```text
 Archive (.tar.gz)
 entry: inner.txt (14)
@@ -82,7 +82,7 @@ Spreadsheet (CSV)
 | Chidi | Abuja | ok
 
 ```
-### ✅ data.json — kind `document`, 5 ms
+### ✅ data.json — kind `document`, 3 ms
 ```text
 JSON
 --- page: 
@@ -107,7 +107,7 @@ title: FB Book
 Once upon a _time_.
 
 ```
-### ✅ legacy-table.doc — kind `document`, 5 ms
+### ✅ legacy-table.doc — kind `document`, 4 ms
 ```text
 Word document (97-2003)
 --- page: 
@@ -144,7 +144,7 @@ Slides (97-2003)
 [bullet] None of them have formatting
 
 ```
-### ✅ legacy.xls — kind `document`, 5 ms
+### ✅ legacy.xls — kind `document`, 4 ms
 ```text
 Spreadsheet (97-2003)
 --- page: First Sheet (sheet)
@@ -169,7 +169,7 @@ This is bold RTF with an accent: café and unicode € euro.
 Second paragraph.
 
 ```
-### ✅ modern.docx — kind `document`, 50 ms
+### ✅ modern.docx — kind `document`, 40 ms
 ```text
 Word document
 --- page: 
@@ -210,7 +210,7 @@ Open document with **bold span**
 | x | 1
 
 ```
-### ✅ modern.pptx — kind `document`, 4 ms
+### ✅ modern.pptx — kind `document`, 3 ms
 ```text
 Slides
 --- page: Slide 1
@@ -223,7 +223,7 @@ Point B
 [image] 72 bytes
 
 ```
-### ✅ modern.xlsx — kind `document`, 5 ms
+### ✅ modern.xlsx — kind `document`, 4 ms
 ```text
 Spreadsheet
 --- page: Readers (sheet)
@@ -234,7 +234,7 @@ Spreadsheet
 | hello from sheet two
 
 ```
-### ✅ mystery.bin — kind `document`, 2 ms
+### ✅ mystery.bin — kind `document`, 1 ms
 ```text
 BIN file
 note: No page layout for .BIN — here is the readable text found inside.
@@ -343,7 +343,7 @@ warning - doc_extract.dart:2403:25 - The '!' will have no effect because the rec
 ```
 # Document viewer check — 24/24 files OK
 
-### ✅ book.epub — kind `document`, 20 ms
+### ✅ book.epub — kind `document`, 13 ms
 ```text
 E-book (EPUB)
 title: Tiny Epub
@@ -359,7 +359,7 @@ It was a **bright** cold day & the clocks were striking thirteen.
 | 1 | 2
 
 ```
-### ✅ bundle.tar.gz — kind `document`, 6 ms
+### ✅ bundle.tar.gz — kind `document`, 4 ms
 ```text
 Archive (.tar.gz)
 entry: inner.txt (14)
@@ -372,7 +372,7 @@ entry: folder/data.csv (8)
 entry: readme.txt (25)
 
 ```
-### ✅ data.csv — kind `document`, 1 ms
+### ✅ data.csv — kind `document`, 0 ms
 ```text
 Spreadsheet (CSV)
 --- page:  (sheet)
@@ -381,7 +381,7 @@ Spreadsheet (CSV)
 | Chidi | Abuja | ok
 
 ```
-### ✅ data.json — kind `document`, 5 ms
+### ✅ data.json — kind `document`, 3 ms
 ```text
 JSON
 --- page: 
@@ -406,7 +406,7 @@ title: FB Book
 Once upon a _time_.
 
 ```
-### ✅ legacy-table.doc — kind `document`, 6 ms
+### ✅ legacy-table.doc — kind `document`, 4 ms
 ```text
 Word document (97-2003)
 --- page: 
@@ -429,7 +429,7 @@ It’s Arial Black in 16 point
 It’s also in blue
 
 ```
-### ✅ legacy.ppt — kind `document`, 3 ms
+### ✅ legacy.ppt — kind `document`, 2 ms
 ```text
 Slides (97-2003)
 --- page: Slide 1
@@ -443,7 +443,7 @@ Slides (97-2003)
 [bullet] None of them have formatting
 
 ```
-### ✅ legacy.xls — kind `document`, 6 ms
+### ✅ legacy.xls — kind `document`, 4 ms
 ```text
 Spreadsheet (97-2003)
 --- page: First Sheet (sheet)
@@ -459,7 +459,7 @@ Spreadsheet (97-2003)
 --- page: Sheet3 (sheet)
 
 ```
-### ✅ letter.rtf — kind `document`, 3 ms
+### ✅ letter.rtf — kind `document`, 1 ms
 ```text
 Rich text (RTF)
 --- page: 
@@ -468,7 +468,7 @@ This is bold RTF with an accent: café and unicode € euro.
 Second paragraph.
 
 ```
-### ✅ modern.docx — kind `document`, 53 ms
+### ✅ modern.docx — kind `document`, 34 ms
 ```text
 Word document
 --- page: 
@@ -483,7 +483,7 @@ Plain start, **bold words** and _italic words_.
 After the table — naïve café “quotes” & <tags>.
 
 ```
-### ✅ modern.odp — kind `document`, 4 ms
+### ✅ modern.odp — kind `document`, 2 ms
 ```text
 Slides
 --- page: Intro
@@ -498,7 +498,7 @@ Spreadsheet
 | Books | 2500
 
 ```
-### ✅ modern.odt — kind `document`, 1 ms
+### ✅ modern.odt — kind `document`, 0 ms
 ```text
 Document
 --- page: 
@@ -509,7 +509,7 @@ Open document with **bold span**
 | x | 1
 
 ```
-### ✅ modern.pptx — kind `document`, 5 ms
+### ✅ modern.pptx — kind `document`, 3 ms
 ```text
 Slides
 --- page: Slide 1
@@ -522,7 +522,7 @@ Point B
 [image] 72 bytes
 
 ```
-### ✅ modern.xlsx — kind `document`, 7 ms
+### ✅ modern.xlsx — kind `document`, 5 ms
 ```text
 Spreadsheet
 --- page: Readers (sheet)
@@ -533,7 +533,7 @@ Spreadsheet
 | hello from sheet two
 
 ```
-### ✅ mystery.bin — kind `document`, 2 ms
+### ✅ mystery.bin — kind `document`, 1 ms
 ```text
 BIN file
 note: No page layout for .BIN — here is the readable text found inside.
