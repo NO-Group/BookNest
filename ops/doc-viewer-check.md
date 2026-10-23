@@ -1,39 +1,36 @@
-# Document viewer check — 2026-10-23 08:48 UTC · Dart SDK version: 3.13.7 (stable) (Thu Oct 22 14:28:57 2026 -0700) on "linux_x64"
+# Document viewer check — 2026-10-23 08:50 UTC · Dart SDK version: 3.13.7 (stable) (Thu Oct 22 14:28:57 2026 -0700) on "linux_x64"
 
 ## archive ^3.6.1 ()
 ```text
-warning - doc_extract.dart:574:38 - Unnecessary cast. Try removing the cast. - unnecessary_cast
-warning - doc_extract.dart:689:36 - Unnecessary cast. Try removing the cast. - unnecessary_cast
-warning - doc_extract.dart:746:17 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:746:35 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:747:13 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:784:21 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:784:85 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:798:26 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1144:37 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1144:101 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1152:26 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1169:27 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1174:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1174:43 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1175:21 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1247:20 - The value of the local variable 'gridCol' isn't used. Try removing the variable or using it. - unused_local_variable
-warning - doc_extract.dart:1256:15 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1256:33 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1257:11 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1283:71 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1284:74 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1286:65 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1377:44 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1378:65 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1395:32 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1401:44 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1402:32 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1406:38 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1426:76 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1427:20 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1434:45 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1435:18 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:748:17 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:748:35 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:749:13 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:786:21 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:786:85 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:800:26 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1146:37 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1146:101 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1154:26 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1171:27 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1176:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1176:43 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1177:21 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1258:15 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1258:33 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1259:11 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1285:71 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1286:74 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1288:65 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1379:44 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1380:65 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1396:32 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1402:44 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1403:32 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1407:38 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1427:76 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1428:20 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1435:45 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1436:18 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
 warning - doc_extract.dart:1553:17 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
 warning - doc_extract.dart:1553:35 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
 warning - doc_extract.dart:1554:13 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
@@ -42,10 +39,12 @@ warning - doc_extract.dart:1660:65 - The '!' will have no effect because the rec
 warning - doc_extract.dart:1672:20 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
 warning - doc_extract.dart:1672:47 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
 warning - doc_extract.dart:2331:9 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:2359:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:2403:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
 ```
 # Document viewer check — 24/24 files OK
 
-### ✅ book.epub — kind `document`, 13 ms
+### ✅ book.epub — kind `document`, 20 ms
 ```text
 E-book (EPUB)
 title: Tiny Epub
@@ -61,13 +60,13 @@ It was a **bright** cold day & the clocks were striking thirteen.
 | 1 | 2
 
 ```
-### ✅ bundle.tar.gz — kind `document`, 6 ms
+### ✅ bundle.tar.gz — kind `document`, 10 ms
 ```text
 Archive (.tar.gz)
 entry: inner.txt (14)
 
 ```
-### ✅ bundle.zip — kind `document`, 0 ms
+### ✅ bundle.zip — kind `document`, 1 ms
 ```text
 Archive (.zip)
 entry: folder/data.csv (8)
@@ -83,7 +82,7 @@ Spreadsheet (CSV)
 | Chidi | Abuja | ok
 
 ```
-### ✅ data.json — kind `document`, 3 ms
+### ✅ data.json — kind `document`, 5 ms
 ```text
 JSON
 --- page: 
@@ -108,7 +107,7 @@ title: FB Book
 Once upon a _time_.
 
 ```
-### ✅ legacy-table.doc — kind `document`, 3 ms
+### ✅ legacy-table.doc — kind `document`, 5 ms
 ```text
 Word document (97-2003)
 --- page: 
@@ -131,7 +130,7 @@ It’s Arial Black in 16 point
 It’s also in blue
 
 ```
-### ✅ legacy.ppt — kind `document`, 1 ms
+### ✅ legacy.ppt — kind `document`, 2 ms
 ```text
 Slides (97-2003)
 --- page: Slide 1
@@ -139,26 +138,13 @@ Slides (97-2003)
 [bullet] This is a test subtitle
 [bullet] This is on page 1
 --- page: Slide 2
-[h2] This is a test title
-[bullet] This is a test subtitle
-[bullet] This is on page 1
---- page: Slide 3
-[h2] This is the title on page 2
-[bullet] This is page two
-[bullet] It has several blocks of text
-[bullet] None of them have formattingT
---- page: Slide 4
-[h2] This is a test title
-[bullet] This is a test subtitle
-[bullet] This is on page 1
---- page: Slide 5
 [h2] This is the title on page 2
 [bullet] This is page two
 [bullet] It has several blocks of text
 [bullet] None of them have formatting
 
 ```
-### ✅ legacy.xls — kind `document`, 3 ms
+### ✅ legacy.xls — kind `document`, 5 ms
 ```text
 Spreadsheet (97-2003)
 --- page: First Sheet (sheet)
@@ -174,7 +160,7 @@ Spreadsheet (97-2003)
 --- page: Sheet3 (sheet)
 
 ```
-### ✅ letter.rtf — kind `document`, 1 ms
+### ✅ letter.rtf — kind `document`, 2 ms
 ```text
 Rich text (RTF)
 --- page: 
@@ -183,7 +169,7 @@ This is bold RTF with an accent: café and unicode € euro.
 Second paragraph.
 
 ```
-### ✅ modern.docx — kind `document`, 29 ms
+### ✅ modern.docx — kind `document`, 50 ms
 ```text
 Word document
 --- page: 
@@ -224,7 +210,7 @@ Open document with **bold span**
 | x | 1
 
 ```
-### ✅ modern.pptx — kind `document`, 2 ms
+### ✅ modern.pptx — kind `document`, 4 ms
 ```text
 Slides
 --- page: Slide 1
@@ -237,7 +223,7 @@ Point B
 [image] 72 bytes
 
 ```
-### ✅ modern.xlsx — kind `document`, 4 ms
+### ✅ modern.xlsx — kind `document`, 5 ms
 ```text
 Spreadsheet
 --- page: Readers (sheet)
@@ -248,7 +234,7 @@ Spreadsheet
 | hello from sheet two
 
 ```
-### ✅ mystery.bin — kind `document`, 1 ms
+### ✅ mystery.bin — kind `document`, 2 ms
 ```text
 BIN file
 note: No page layout for .BIN — here is the readable text found inside.
@@ -315,36 +301,35 @@ UTF-16 text ✓
 
 ## archive ^4.0.0 ()
 ```text
-warning - doc_extract.dart:746:17 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:746:35 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:747:13 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:784:21 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:784:85 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:798:26 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1144:37 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1144:101 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1152:26 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1169:27 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1174:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1174:43 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1175:21 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1247:20 - The value of the local variable 'gridCol' isn't used. Try removing the variable or using it. - unused_local_variable
-warning - doc_extract.dart:1256:15 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1256:33 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1257:11 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1283:71 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1284:74 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1286:65 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1377:44 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1378:65 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1395:32 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1401:44 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1402:32 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1406:38 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1426:76 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1427:20 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1434:45 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
-warning - doc_extract.dart:1435:18 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:748:17 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:748:35 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:749:13 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:786:21 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:786:85 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:800:26 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1146:37 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1146:101 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1154:26 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1171:27 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1176:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1176:43 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1177:21 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1258:15 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1258:33 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1259:11 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1285:71 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1286:74 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1288:65 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1379:44 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1380:65 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1396:32 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1402:44 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1403:32 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1407:38 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1427:76 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1428:20 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1435:45 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - doc_extract.dart:1436:18 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
 warning - doc_extract.dart:1553:17 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
 warning - doc_extract.dart:1553:35 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
 warning - doc_extract.dart:1554:13 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
@@ -358,7 +343,7 @@ warning - doc_extract.dart:2403:25 - The '!' will have no effect because the rec
 ```
 # Document viewer check — 24/24 files OK
 
-### ✅ book.epub — kind `document`, 13 ms
+### ✅ book.epub — kind `document`, 20 ms
 ```text
 E-book (EPUB)
 title: Tiny Epub
@@ -374,7 +359,7 @@ It was a **bright** cold day & the clocks were striking thirteen.
 | 1 | 2
 
 ```
-### ✅ bundle.tar.gz — kind `document`, 4 ms
+### ✅ bundle.tar.gz — kind `document`, 6 ms
 ```text
 Archive (.tar.gz)
 entry: inner.txt (14)
@@ -387,7 +372,7 @@ entry: folder/data.csv (8)
 entry: readme.txt (25)
 
 ```
-### ✅ data.csv — kind `document`, 0 ms
+### ✅ data.csv — kind `document`, 1 ms
 ```text
 Spreadsheet (CSV)
 --- page:  (sheet)
@@ -396,7 +381,7 @@ Spreadsheet (CSV)
 | Chidi | Abuja | ok
 
 ```
-### ✅ data.json — kind `document`, 3 ms
+### ✅ data.json — kind `document`, 5 ms
 ```text
 JSON
 --- page: 
@@ -421,7 +406,7 @@ title: FB Book
 Once upon a _time_.
 
 ```
-### ✅ legacy-table.doc — kind `document`, 3 ms
+### ✅ legacy-table.doc — kind `document`, 6 ms
 ```text
 Word document (97-2003)
 --- page: 
@@ -444,7 +429,7 @@ It’s Arial Black in 16 point
 It’s also in blue
 
 ```
-### ✅ legacy.ppt — kind `document`, 1 ms
+### ✅ legacy.ppt — kind `document`, 3 ms
 ```text
 Slides (97-2003)
 --- page: Slide 1
@@ -452,26 +437,13 @@ Slides (97-2003)
 [bullet] This is a test subtitle
 [bullet] This is on page 1
 --- page: Slide 2
-[h2] This is a test title
-[bullet] This is a test subtitle
-[bullet] This is on page 1
---- page: Slide 3
-[h2] This is the title on page 2
-[bullet] This is page two
-[bullet] It has several blocks of text
-[bullet] None of them have formattingT
---- page: Slide 4
-[h2] This is a test title
-[bullet] This is a test subtitle
-[bullet] This is on page 1
---- page: Slide 5
 [h2] This is the title on page 2
 [bullet] This is page two
 [bullet] It has several blocks of text
 [bullet] None of them have formatting
 
 ```
-### ✅ legacy.xls — kind `document`, 4 ms
+### ✅ legacy.xls — kind `document`, 6 ms
 ```text
 Spreadsheet (97-2003)
 --- page: First Sheet (sheet)
@@ -487,7 +459,7 @@ Spreadsheet (97-2003)
 --- page: Sheet3 (sheet)
 
 ```
-### ✅ letter.rtf — kind `document`, 1 ms
+### ✅ letter.rtf — kind `document`, 3 ms
 ```text
 Rich text (RTF)
 --- page: 
@@ -496,7 +468,7 @@ This is bold RTF with an accent: café and unicode € euro.
 Second paragraph.
 
 ```
-### ✅ modern.docx — kind `document`, 30 ms
+### ✅ modern.docx — kind `document`, 53 ms
 ```text
 Word document
 --- page: 
@@ -511,7 +483,7 @@ Plain start, **bold words** and _italic words_.
 After the table — naïve café “quotes” & <tags>.
 
 ```
-### ✅ modern.odp — kind `document`, 2 ms
+### ✅ modern.odp — kind `document`, 4 ms
 ```text
 Slides
 --- page: Intro
@@ -526,7 +498,7 @@ Spreadsheet
 | Books | 2500
 
 ```
-### ✅ modern.odt — kind `document`, 0 ms
+### ✅ modern.odt — kind `document`, 1 ms
 ```text
 Document
 --- page: 
@@ -537,7 +509,7 @@ Open document with **bold span**
 | x | 1
 
 ```
-### ✅ modern.pptx — kind `document`, 2 ms
+### ✅ modern.pptx — kind `document`, 5 ms
 ```text
 Slides
 --- page: Slide 1
@@ -550,7 +522,7 @@ Point B
 [image] 72 bytes
 
 ```
-### ✅ modern.xlsx — kind `document`, 4 ms
+### ✅ modern.xlsx — kind `document`, 7 ms
 ```text
 Spreadsheet
 --- page: Readers (sheet)
@@ -561,7 +533,7 @@ Spreadsheet
 | hello from sheet two
 
 ```
-### ✅ mystery.bin — kind `document`, 1 ms
+### ✅ mystery.bin — kind `document`, 2 ms
 ```text
 BIN file
 note: No page layout for .BIN — here is the readable text found inside.
