@@ -32,8 +32,57 @@ class DesktopFrame extends StatelessWidget {
               ? _Sidebar(location: location)
               : _Rail(location: location),
           VerticalDivider(width: 1, thickness: 1, color: theme.dividerColor),
-          Expanded(child: ClipRect(child: child)),
+          Expanded(child: ClipRect(child: _readable(theme))),
         ],
+      ),
+    );
+  }
+}
+
+/// Pages that read like lists or forms get a centred column on big
+/// screens instead of stretching edge to edge. Media-rich pages (feed,
+/// messages, profile, books, discover, editor, reader) lay themselves out.
+double? readableWidthFor(String path) {
+  bool at(String p) => path == p || path.startsWith('$p/');
+  const forms = [
+    '/settings', '/status', '/permissions', '/wallet', '/store',
+    '/dictionary', '/events', '/streaks', '/library', '/notifications',
+    '/my-reviews', '/search', '/privacy', '/terms', '/about', '/create',
+    '/publish-details', '/moderator',
+  ];
+  if (forms.any(at)) return 880;
+  if (path.endsWith('/follows') || path.endsWith('/reviews') ||
+      path.endsWith('/discussion')) {
+    return 880;
+  }
+  const wide = [
+    '/chat', '/jenny', '/brainstorm', '/random-chat', '/club-chat',
+    '/shared', '/dashboard', '/analytics', '/manage',
+  ];
+  if (wide.any(at)) return 1080;
+  return null;
+}
+
+extension on DesktopFrame {
+  Widget _readable(ThemeData theme) {
+    final maxWidth = readableWidthFor(location);
+    if (maxWidth == null) return child;
+    return ColoredBox(
+      color: theme.brightness == Brightness.dark
+          ? const Color(0xFF050B18)
+          : const Color(0xFFEFF3F8),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.symmetric(
+                  vertical: BorderSide(color: theme.dividerColor)),
+            ),
+            child: child,
+          ),
+        ),
       ),
     );
   }
