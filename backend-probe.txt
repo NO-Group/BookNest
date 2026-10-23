@@ -1,9 +1,9 @@
-Live probe of the deployed booknest-api — 2026-10-23T13:24:09Z
+Live probe of the deployed booknest-api — 2026-10-23T13:28:54Z
 ("Sign in required" = the action EXISTS on the server;
  "Unknown action" = the deployed file predates it;
  ping's  field shows the deployed file's version)
 
-ping               → {"ok":true,"data":{"databases":{"books":"booknest_books","social":"booknest_social","reviews":"booknest_reviews","chats":"booknest_chats","notifications":"booknest_notifications","users":"booknest_users","dictionary":"booknest_dictionary","feed":"booknest_feed","moderation":"booknest_moderation","groups":"booknest_groups","genres":"booknest_genres","payments":"booknest_payments"},"time":"2026-10-23T13:24:09.703Z","server":"2.31.0","db":"booknest_books","mongo":"ready","timing":{"connectMs":1771,"mongoPingMs":351,"isolateAgeMs":25,"served":1,"fnRegion":"us-east-2","dbRegion":"GCP:WESTERN_EUROPE
+ping               → {"ok":true,"data":{"databases":{"books":"booknest_books","social":"booknest_social","reviews":"booknest_reviews","chats":"booknest_chats","notifications":"booknest_notifications","users":"booknest_users","dictionary":"booknest_dictionary","feed":"booknest_feed","moderation":"booknest_moderation","groups":"booknest_groups","genres":"booknest_genres","payments":"booknest_payments"},"time":"2026-10-23T13:28:54.505Z","server":"2.32.0","db":"booknest_books","mongo":"ready","timing":{"connectMs":1680,"mongoPingMs":350,"isolateAgeMs":25,"served":1,"fnRegion":"us-east-2","dbRegion":"GCP:WESTERN_EUROPE
 admin.users.list   → {"ok":false,"error":"Only the overall moderator can list readers"}
 moderation.list    → {"ok":false,"error":"Only the overall moderator can view reports"}
 moderation.report  → {"ok":false,"error":"Sign in required"}
