@@ -1,4 +1,4 @@
-# Push (FCM) setup — 2026-10-23 13:24 UTC
+# Push (FCM) setup — 2026-10-23 13:33 UTC
 - project: `booknest-12-33-oct22-2026`
 - service account: `…@booknest-12-33-oct22-2026.iam.gserviceaccount.com`
 - Google sign-in with the key ✅
