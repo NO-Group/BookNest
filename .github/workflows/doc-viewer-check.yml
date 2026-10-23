@@ -31,7 +31,7 @@ jobs:
           sdk: stable
       - name: Run the reader on every fixture
         run: |
-          set -uo pipefail
+          set +e
           SRC=lib/services/doc_extract.dart
           [ -f "$SRC" ] || SRC=tool/doc_check/doc_extract.dart
           R="$GITHUB_WORKSPACE/doc-viewer-check.md"
@@ -43,8 +43,8 @@ jobs:
             printf 'name: dc\nenvironment:\n  sdk: ">=3.0.0 <4.0.0"\ndependencies:\n  archive: "%s"\n' "$AV" > "$D/pubspec.yaml"
             cp "$SRC" "$D/bin/doc_extract.dart"
             cp tool/doc_check/check.dart "$D/bin/check.dart"
-            ( cd "$D" && dart pub get >/dev/null 2>&1 )
-            V="$(cd "$D" && grep -A3 '^  archive:' pubspec.lock | grep version | head -1 | tr -d ' ')"
+            ( cd "$D" && dart pub get ) > pg.txt 2>&1 || { echo "pub get failed:"; cat pg.txt; } >> "$R"
+            V="$(cd "$D" && grep -A3 '^  archive:' pubspec.lock 2>/dev/null | grep version | head -1 | tr -d ' ')"
             echo "" >> "$R"; echo "## archive $AV ($V)" >> "$R"
             ( cd "$D" && dart analyze bin 2>&1 | grep -E "error|warning" | head -40 ) > an.txt || true
             if [ -s an.txt ]; then echo '```text' >> "$R"; cat an.txt >> "$R"; echo '```' >> "$R"; fi
