@@ -118,9 +118,13 @@ class CloudinaryService {
   /// unchanged — callers show their own placeholder if the poster
   /// cannot load.
   static String videoThumb(String url, {int width = 640}) {
+    // Only Cloudinary can make a poster frame. Anything else (chat videos
+    // on the R2 relay) returns '' — callers show a placeholder instead of
+    // downloading the whole video as an "image".
+    if (!url.startsWith('https://res.cloudinary.com/')) return '';
     final marker = '/video/upload/';
     final index = url.indexOf(marker);
-    if (index == -1) return url;
+    if (index == -1) return '';
     return url.replaceFirst(
         marker, '${marker}so_1,w_$width,c_fill,f_jpg/');
   }

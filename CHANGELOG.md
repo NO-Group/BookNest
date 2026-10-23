@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.38.1+69 — 2026-10-23 · Chat files off Cloudinary, Drive backup on PC
+
+- **Chat files no longer go to Cloudinary.** Documents, PDFs, voice notes
+  and videos travel through a **private Cloudflare R2 relay** and are
+  **deleted after 3 days**: a bucket lifecycle rule plus a daily server
+  sweep. Messages carry signed links that expire with the file. Receivers'
+  apps download voice notes and documents up to 40 MB, and videos up to
+  25 MB, when the chat opens. Then the files live on the device and in the
+  reader's own Google Drive backup. Limit: 150 MB per file. Cloudinary now
+  holds images only, and chat photos are kept 30 days.
+- **The daily sweep runs on the server** with the Supabase secrets
+  `CLOUDINARY_API_KEY`/`CLOUDINARY_API_SECRET`, which were there all along.
+  No GitHub Cloudinary secrets are needed.
+- **Google Drive media backup on PC** (Windows, macOS, Linux): Google
+  sign-in opens in the browser, and the token is kept in the OS keychain.
+  Needs a Desktop OAuth client (secrets `GOOGLE_DESKTOP_CLIENT_ID` /
+  `GOOGLE_DESKTOP_CLIENT_SECRET`).
+- Players use the copy already on the device first (no data spent, and it
+  works after the relay copy is gone). Chat videos outside Cloudinary show
+  a placeholder instead of being downloaded whole as a "poster".
+- **macOS app fix:** the release build was sandboxed with no network access.
+  Network, camera, microphone and file-picker entitlements were added, plus
+  usage texts.
+- Smoke test: chat files are checked end to end through the R2 relay.
+- Server 2.31.0: `relay.sign`, `ops.mediaSweep`.
+- `ops/google-setup.md` check: Firebase has **no Android OAuth client**
+  yet, so Google sign-in (Drive backup) can't work on Android until the
+  SHA-1 is added.
+
 ## 2.38.0+68 — 2026-10-23 · Chat backup split (text → BookNest, media → Google), iPhone app, profile cover photos
 
 - **Chat backup, split by storage cost.**

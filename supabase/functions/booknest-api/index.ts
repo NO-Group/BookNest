@@ -24,6 +24,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { Binary, MongoClient, ObjectId } from 'npm:mongodb@6.7.0';
 import { cleanSource, isLibrarySource, resolveSourceText } from './library_text.ts';
+import { AwsClient } from 'npm:aws4fetch@1.0.20';
+import { createHash } from 'node:crypto';
 
 const MONGO_URI = Deno.env.get('MONGO_URI') ?? '';
 const MONGO_DB_NAME = Deno.env.get('MONGO_DB_NAME') ?? 'booknest';
@@ -1560,7 +1562,7 @@ async function handleRequest(req: Request): Promise<Response> {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.30.0',
+          server: '2.31.0',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -6372,6 +6374,76 @@ async function handleRequest(req: Request): Promise<Response> {
       // with the reader's backup passphrase (PBKDF2 → AES-256-GCM) and
       // uploads the envelope. We cannot read it. One document per reader,
       // replaced on every backup.
+      // ── Chat file relay: documents, PDFs, videos and voice notes travel
+      // through a PRIVATE Cloudflare R2 folder and are deleted after 3 days
+      // (bucket lifecycle + the daily ops.mediaSweep). Readers keep them on
+      // their devices and in their own Google Drive. Cloudinary keeps images
+      // only. The message stores a signed download link that expires with
+      // the file — the bucket itself is never public.
+      case 'relay.sign': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const r = relayR2();
+        if (!r) return fail('File sharing is not configured on the server', 503);
+        const size = Math.floor(Number(p.size ?? 0));
+        if (!(size > 0)) return fail('The file is empty');
+        if (size > RELAY_MAX_BYTES) {
+          return fail(`Files up to ${Math.round(RELAY_MAX_BYTES / 1048576)} MB can be sent`, 413);
+        }
+        const day = new Date().toISOString().slice(0, 10);
+        try {
+          const q = (await dbFor('chats')).collection<{ _id: string; n: number; bytes: number; at: Date }>('relay_quota');
+          if (!relayQuotaIndexed) {
+            relayQuotaIndexed = true;
+            q.createIndex({ at: 1 }, { expireAfterSeconds: 3 * 86400 }).catch(() => { relayQuotaIndexed = false; });
+          }
+          const doc = await q.findOneAndUpdate(
+            { _id: `${uid}:${day}` },
+            { $inc: { n: 1, bytes: size }, $setOnInsert: { at: new Date() } },
+            { upsert: true, returnDocument: 'after' },
+          );
+          if (doc && (doc.n > RELAY_DAILY_FILES || doc.bytes > RELAY_DAILY_BYTES)) {
+            return fail('Daily file sharing limit reached — try again tomorrow.', 429);
+          }
+        } catch (_) { /* quota bookkeeping must never block sending */ }
+        const raw = String(p.name ?? 'file').split(/[\\/]/).pop() ?? 'file';
+        const dot = raw.lastIndexOf('.');
+        const ext = dot > 0 ? raw.slice(dot + 1).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) : '';
+        const stem = (dot > 0 ? raw.slice(0, dot) : raw).replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+/, '').slice(0, 60) || 'file';
+        const rand = crypto.randomUUID().replace(/-/g, '');
+        const key = `relay/${day}/${rand}/${stem}${ext ? '.' + ext : ''}`;
+        const url = r.base + key.split('/').map(encodeURIComponent).join('/');
+        const putUrl = await relayPresign(r.client, url, 'PUT', 15 * 60);
+        // Valid a little longer than the file lives (lifecycle runs daily).
+        const getUrl = await relayPresign(r.client, url, 'GET', (RELAY_DAYS + 1) * 86400);
+        return ok({
+          putUrl, getUrl, key, maxBytes: RELAY_MAX_BYTES,
+          expiresAt: new Date(Date.now() + RELAY_DAYS * 86400_000).toISOString(),
+        });
+      }
+
+      // Daily housekeeping (GitHub cron → service key, or an admin):
+      //  • Cloudinary: chat photos (and pre-2.38 chat files) older than 30
+      //    days — uses the server's CLOUDINARY_API_KEY/SECRET.
+      //  • R2 relay: files older than 3 days (backs up the lifecycle rule).
+      case 'ops.mediaSweep': {
+        const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+        const svc = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+        let allowed = svc.length > 20 && bearer.length === svc.length;
+        if (allowed) {
+          let diff = 0;
+          for (let i = 0; i < svc.length; i++) diff |= svc.charCodeAt(i) ^ bearer.charCodeAt(i);
+          allowed = diff === 0;
+        }
+        if (!allowed) allowed = !!(await adminUserId(req));
+        if (!allowed) return fail('Not allowed', 403);
+        const dryRun = p.dryRun === true;
+        const deadline = Date.now() + 110_000;
+        const relay = await sweepRelay(dryRun, deadline);
+        const cloudinary = await sweepCloudinary(dryRun, deadline);
+        return ok({ dryRun, relay, cloudinary, at: new Date().toISOString() });
+      }
+
       case 'backup.status': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
@@ -7011,4 +7083,168 @@ async function handleRequest(req: Request): Promise<Response> {
     console.error(`action ${action} failed:`, error);
     return fail(error instanceof Error ? error.message : 'Server error', 500);
   }
+}
+
+
+// ── Chat file relay (Cloudflare R2, private) ─────────────────────────────────
+const RELAY_DAYS = 3;
+const RELAY_MAX_BYTES = 150 * 1024 * 1024;
+const RELAY_DAILY_FILES = 400;
+const RELAY_DAILY_BYTES = 3 * 1024 * 1024 * 1024;
+let relayQuotaIndexed = false;
+let relayAws: AwsClient | null = null;
+
+function relayR2(): { client: AwsClient; base: string; bucketUrl: string } | null {
+  const account = Deno.env.get('R2_ACCOUNT_ID') ?? '';
+  const bucket = Deno.env.get('R2_BUCKET') || Deno.env.get('R2_BUCKET_NAME') || '';
+  const accessKeyId = Deno.env.get('R2_ACCESS_KEY_ID') ?? '';
+  const secretAccessKey = Deno.env.get('R2_SECRET_ACCESS_KEY') ?? '';
+  if (!account || !bucket || !accessKeyId || !secretAccessKey) return null;
+  relayAws ??= new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' });
+  const bucketUrl = `https://${account}.r2.cloudflarestorage.com/${bucket}`;
+  return { client: relayAws, base: bucketUrl + '/', bucketUrl };
+}
+
+async function relayPresign(client: AwsClient, url: string, method: string, seconds: number): Promise<string> {
+  const u = new URL(url);
+  u.searchParams.set('X-Amz-Expires', String(Math.min(seconds, 604800)));
+  const signed = await client.sign(u.toString(), { method, aws: { signQuery: true } });
+  return signed.url;
+}
+
+function xmlUnescape(t: string): string {
+  return t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+}
+
+/** Makes sure the bucket deletes relay/ objects after RELAY_DAYS. */
+async function ensureRelayLifecycle(r: { client: AwsClient; bucketUrl: string }): Promise<string> {
+  const ruleId = `booknest-chat-relay-${RELAY_DAYS}d`;
+  const rule = `<Rule><ID>${ruleId}</ID><Filter><Prefix>relay/</Prefix></Filter><Status>Enabled</Status>` +
+    `<Expiration><Days>${RELAY_DAYS}</Days></Expiration></Rule>`;
+  const cur = await r.client.fetch(`${r.bucketUrl}?lifecycle`, { signal: AbortSignal.timeout(15_000) });
+  const curXml = cur.ok ? await cur.text() : '';
+  if (!cur.ok) await cur.body?.cancel();
+  if (curXml.includes(`<ID>${ruleId}</ID>`)) return 'already set';
+  let body: string;
+  if (curXml.includes('</LifecycleConfiguration>')) {
+    // Keep the owner's rules; replace an older relay rule if present.
+    const kept = curXml.replace(/<Rule>(?:(?!<\/Rule>)[\s\S])*?<ID>booknest-chat-relay-[^<]*<\/ID>[\s\S]*?<\/Rule>/g, '');
+    body = kept.replace('</LifecycleConfiguration>', rule + '</LifecycleConfiguration>');
+  } else {
+    body = `<?xml version="1.0" encoding="UTF-8"?><LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">${rule}</LifecycleConfiguration>`;
+  }
+  const md5 = createHash('md5').update(body).digest('base64');
+  const put = await r.client.fetch(`${r.bucketUrl}?lifecycle`, {
+    method: 'PUT', body,
+    headers: { 'Content-Type': 'application/xml', 'Content-MD5': md5 },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const txt = await put.text();
+  return put.ok ? 'set now' : `could not set (HTTP ${put.status}: ${txt.replace(/\s+/g, ' ').slice(0, 160)})`;
+}
+
+async function sweepRelay(dryRun: boolean, deadline: number) {
+  const r = relayR2();
+  if (!r) return { configured: false };
+  const out: Record<string, unknown> = { configured: true, scanned: 0, expired: 0, deleted: 0, bytesLive: 0 };
+  try { out.lifecycle = await ensureRelayLifecycle(r); } catch (e) { out.lifecycle = `error: ${String(e).slice(0, 120)}`; }
+  const cutoff = Date.now() - RELAY_DAYS * 86400_000;
+  const expired: string[] = [];
+  let token = '';
+  try {
+    do {
+      if (Date.now() > deadline) { out.partial = true; break; }
+      const u = new URL(r.bucketUrl);
+      u.searchParams.set('list-type', '2');
+      u.searchParams.set('prefix', 'relay/');
+      u.searchParams.set('max-keys', '1000');
+      if (token) u.searchParams.set('continuation-token', token);
+      const res = await r.client.fetch(u.toString(), { signal: AbortSignal.timeout(20_000) });
+      const xml = await res.text();
+      if (!res.ok) { out.error = `list HTTP ${res.status}`; break; }
+      for (const m of xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
+        const key = xmlUnescape(/<Key>([\s\S]*?)<\/Key>/.exec(m[1])?.[1] ?? '');
+        const at = Date.parse(/<LastModified>([^<]+)<\/LastModified>/.exec(m[1])?.[1] ?? '');
+        const size = Number(/<Size>(\d+)<\/Size>/.exec(m[1])?.[1] ?? 0);
+        (out.scanned as number)++;
+        if (!key.startsWith('relay/')) continue;
+        if ((Number.isFinite(at) && at < cutoff) || size > RELAY_MAX_BYTES) expired.push(key);
+        else out.bytesLive = (out.bytesLive as number) + size;
+      }
+      token = /<IsTruncated>true<\/IsTruncated>/.test(xml)
+        ? xmlUnescape(/<NextContinuationToken>([\s\S]*?)<\/NextContinuationToken>/.exec(xml)?.[1] ?? '')
+        : '';
+    } while (token);
+  } catch (e) { out.error = String(e).slice(0, 160); }
+  out.expired = expired.length;
+  if (!dryRun) {
+    for (let i = 0; i < expired.length; i += 8) {
+      if (Date.now() > deadline) { out.partial = true; break; }
+      const results = await Promise.all(expired.slice(i, i + 8).map(async (key) => {
+        try {
+          const res = await r.client.fetch(r.base + key.split('/').map(encodeURIComponent).join('/'),
+            { method: 'DELETE', signal: AbortSignal.timeout(15_000) });
+          await res.body?.cancel();
+          return res.ok || res.status === 404;
+        } catch (_) { return false; }
+      }));
+      out.deleted = (out.deleted as number) + results.filter(Boolean).length;
+    }
+  }
+  return out;
+}
+
+/** Chat photos (and pre-2.38 chat files) older than 30 days leave Cloudinary. */
+async function sweepCloudinary(dryRun: boolean, deadline: number) {
+  const key = Deno.env.get('CLOUDINARY_API_KEY') ?? '';
+  const secret = Deno.env.get('CLOUDINARY_API_SECRET') ?? '';
+  const cloud = Deno.env.get('CLOUDINARY_CLOUD_NAME') || 'deqdmwlt7';
+  if (!key || !secret) return { configured: false };
+  const auth = 'Basic ' + btoa(`${key}:${secret}`);
+  const cutoff = Date.now() - 30 * 86400_000;
+  // Chat folders ONLY — avatars, covers, profile covers and book images
+  // live in other folders and are never touched.
+  const targets: [string, string][] = [
+    ['image', 'booknest/chat/'],
+    ['image', 'booknest/files/'], ['video', 'booknest/files/'], ['raw', 'booknest/files/'],
+  ];
+  const folders: Record<string, Record<string, unknown>> = {};
+  for (const [type, prefix] of targets) {
+    const s: Record<string, unknown> = { scanned: 0, old: 0, deleted: 0 };
+    folders[`${type} ${prefix}`] = s;
+    const old: string[] = [];
+    let cursor = '';
+    try {
+      do {
+        if (Date.now() > deadline) { s.partial = true; break; }
+        const u = new URL(`https://api.cloudinary.com/v1_1/${cloud}/resources/${type}/upload`);
+        u.searchParams.set('prefix', prefix);
+        u.searchParams.set('max_results', '500');
+        if (cursor) u.searchParams.set('next_cursor', cursor);
+        const res = await fetch(u, { headers: { Authorization: auth }, signal: AbortSignal.timeout(20_000) });
+        if (!res.ok) { s.error = `list HTTP ${res.status}: ${(await res.text()).slice(0, 120)}`; break; }
+        const j = await res.json() as { resources?: { public_id: string; created_at: string }[]; next_cursor?: string };
+        for (const it of j.resources ?? []) {
+          s.scanned = (s.scanned as number) + 1;
+          if (Date.parse(it.created_at) < cutoff) old.push(it.public_id);
+        }
+        cursor = j.next_cursor ?? '';
+      } while (cursor);
+    } catch (e) { s.error = String(e).slice(0, 160); }
+    s.old = old.length;
+    if (dryRun) continue;
+    for (let i = 0; i < old.length; i += 100) {
+      if (Date.now() > deadline) { s.partial = true; break; }
+      const u = new URL(`https://api.cloudinary.com/v1_1/${cloud}/resources/${type}/upload`);
+      for (const id of old.slice(i, i + 100)) u.searchParams.append('public_ids[]', id);
+      try {
+        const res = await fetch(u, { method: 'DELETE', headers: { Authorization: auth }, signal: AbortSignal.timeout(30_000) });
+        if (!res.ok) { s.error = `delete HTTP ${res.status}`; await res.body?.cancel(); continue; }
+        const j = await res.json() as { deleted?: Record<string, string> };
+        s.deleted = (s.deleted as number) + Object.values(j.deleted ?? {}).filter((v) => v === 'deleted').length;
+      } catch (e) { s.error = String(e).slice(0, 160); }
+    }
+  }
+  return { configured: true, cloud, folders };
 }

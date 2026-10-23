@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -237,8 +238,11 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
     final n = await _media.backupNow(interactive: true);
     if (!mounted) return;
     if (n < 0) {
-      _notice('Could not connect to your Google account — sign in to Google '
-          'on this device and try again.');
+      _notice(Platform.isAndroid || Platform.isIOS
+          ? 'Could not connect to your Google account — sign in to Google '
+              'on this device and try again.'
+          : 'Could not connect to your Google account — finish the Google '
+              'sign-in in your browser and try again.');
     } else {
       _notice(n == 0
           ? 'Your media backup is up to date.'
@@ -512,17 +516,17 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
             const SizedBox(height: 8),
             if (!drive)
               Text(
-                  'Media backup uses your Google account and works in the '
-                  'Android app (and on iPhone once Google sign-in is set up). '
-                  'BookNest keeps chat media for 30 days only, so open and '
+                  'Media backup uses your Google account and is not available '
+                  'in this build yet. BookNest keeps chat photos for 30 days '
+                  'and files, voice notes and videos for 3 days — open and '
                   'save anything you want to keep.',
                   style: hint)
             else ...[
               Text(
                   'Saved in a hidden BookNest folder in your own Google Drive '
                   '(uses your Google storage, not BookNest\'s). BookNest keeps '
-                  'chat media for 30 days only — after that it comes back '
-                  'from here.',
+                  'chat photos for 30 days and files, voice notes and videos '
+                  'for 3 days — after that they come back from here.',
                   style: hint),
               const SizedBox(height: 6),
               SwitchListTile.adaptive(

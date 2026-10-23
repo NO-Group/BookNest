@@ -36,16 +36,18 @@ These services store or process data only to run BookNest:
 
 - **Supabase:** sign-in and account records.
 - **MongoDB Atlas:** books, social activity and messages.
-- **Cloudinary:** images, and photos, videos, voice notes and files sent in
-  chats. Chat media is deleted from Cloudinary after 30 days.
-- **Cloudflare R2:** the texts of the public-domain library.
+- **Cloudinary:** images only. Photos sent in chats are deleted from
+  Cloudinary after 30 days.
+- **Cloudflare R2:** the texts of the public-domain library, and files, voice
+  notes and videos sent in chats. Chat files sit in a private folder, reachable
+  only through links shared in the chat, and are deleted after 3 days.
 - **Cloudflare (call relay):** when two phones cannot connect directly, voice
   and video call traffic passes through Cloudflare's relay. Calls are
   encrypted end to end, so the relay cannot listen, and nothing is recorded.
 - **Paystack:** payments.
-- **Google Drive:** only if you turn on media backup. Your chat photos,
-  videos, voice notes and files are copied to a hidden BookNest folder in
-  *your own* Google Drive. We have no access to your Drive.
+- **Google Drive:** only if you turn on media backup (Android, iPhone and
+  PC). Your chat photos, videos, voice notes and files are copied to a hidden
+  BookNest folder in *your own* Google Drive. We have no access to your Drive.
 
 ## Stored on your device
 

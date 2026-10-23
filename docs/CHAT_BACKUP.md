@@ -1,6 +1,7 @@
 # Chat Storage & Backup
 
-> **Updated in 2.38.0.** Text and media are now backed up to different places.
+> **Updated in 2.38.1.** Text → BookNest (sealed). Media → the reader's Google Drive.
+> Chat files travel through a private R2 relay for 3 days; Cloudinary holds images only.
 
 ## The model (2.38+)
 
@@ -32,11 +33,21 @@
 - **Media → the reader's Google Drive.** Settings → Chat backup → "Back up
   media to my Google account" (+ "Include videos"). Uploads only new files,
   streamed from disk (resumable uploads, up to 200 MB per file).
-- **Cloudinary keeps chat media for 30 days only.** The daily workflow
-  `chat-media-sweep.yml` deletes `booknest/chat/` and `booknest/files/`
-  assets older than 30 days (never avatars, covers or book images). Needs
-  GitHub secrets `CLOUDINARY_API_KEY` + `CLOUDINARY_API_SECRET`. Report:
-  `ops/chat-media-sweep.md`.
+- **How chat media travels (2.38.1+):**
+  - **Photos → Cloudinary** (images only), deleted after **30 days**.
+  - **Files, PDFs, documents, voice notes, videos → private Cloudflare R2
+    relay** (`relay/` folder), deleted after **3 days** by a bucket
+    lifecycle rule plus the daily sweep. The server signs a 15-minute
+    upload link (`relay.sign`). The message carries a signed download link
+    that expires with the file, and the bucket is never public. Limits:
+    150 MB per file; 400 files or 3 GB per reader per day.
+  - Receivers' apps download voice notes and documents up to 40 MB, and
+    videos up to 25 MB, as soon as the chat opens. Then the files live on the
+    device and, with media backup on, in the reader's Drive.
+  - The daily sweep (`chat-media-sweep.yml` → server action
+    `ops.mediaSweep`) runs **on the server with its own Supabase secrets**
+    `CLOUDINARY_API_KEY`/`CLOUDINARY_API_SECRET` and `R2_*`. No Cloudinary
+    keys are in GitHub. Report: `ops/chat-media-sweep.md`.
 - **Older media comes back from Drive.** When a chat photo, video, voice note
   or file is gone from Cloudinary, the app fetches the reader's Drive copy
   silently (bubbles and the viewer).
@@ -50,18 +61,32 @@
 
 | | Text backup (BookNest) | Media backup (Google Drive) |
 |---|---|---|
-| Android | ✅ | ✅ |
+| Android | ✅ | ✅ once the Android OAuth client exists (SHA-1 below) |
 | iPhone | ✅ | ✅ once secret `GOOGLE_IOS_CLIENT_ID` exists |
-| PC | ✅ | — (no Google sign-in on desktop) |
+| PC (Windows/macOS/Linux) | ✅ | ✅ once secrets `GOOGLE_DESKTOP_CLIENT_ID` + `GOOGLE_DESKTOP_CLIENT_SECRET` exist (sign-in opens in the browser) |
 
-## Google console (media backup)
+## Google console (media backup), project `booknest-12-33-oct22-2026`
 
-1. Google Cloud Console → enable **Google Drive API**.
-2. OAuth consent screen → scope `https://www.googleapis.com/auth/drive.appdata`.
-3. Credentials → OAuth client ID → **Android**: package `com.n_o_group.booknest`
-   plus the SHA-1 of the signing key.
-4. iPhone: OAuth client ID → **iOS**: bundle id `com.n-o-group.booknest` →
-   copy the client id into GitHub secret **`GOOGLE_IOS_CLIENT_ID`**.
+1. **APIs & Services → Library → Google Drive API → Enable.**
+2. **OAuth consent screen:** app name BookNest, support email, scope
+   `.../auth/drive.appdata`. Set publishing status to **In production**;
+   in "Testing", only listed test users can sign in.
+3. **Android:** Firebase → Project settings → Your apps →
+   `com.n_o_group.booknest` → **Add fingerprint**:
+   - SHA-1 `5F:64:B4:39:E7:F5:9C:78:0C:CA:16:28:5A:D6:F8:7E:57:F9:51:EB`
+   - SHA-256 `67:E0:00:83:FB:28:0F:2A:30:77:9D:D0:A3:14:CE:74:44:B7:6F:0D:02:66:E6:EC:08:B7:39:45:25:A8:B2:93`
+
+   This is the committed signing key, used for the direct-download APK.
+   For Google Play, also add the **App signing key** SHA-1 from Play Console
+   → Setup → App signing. Re-download `google-services.json` into secret
+   `GOOGLE_SERVICES_JSON`.
+4. **iPhone:** Credentials → OAuth client ID → iOS, bundle
+   `com.n-o-group.booknest`. Put the client ID in secret `GOOGLE_IOS_CLIENT_ID`.
+5. **PC:** Credentials → OAuth client ID → **Desktop app**. Put the client ID
+   and secret in `GOOGLE_DESKTOP_CLIENT_ID` and `GOOGLE_DESKTOP_CLIENT_SECRET`.
+
+`ops/google-setup.md` (re-run with `ops/google-check.trigger`) shows what
+Google currently has.
 
 ## Files
 
@@ -70,6 +95,9 @@
 - `lib/services/dm_crypto.dart` — identity keys (restored keys kept as "previous").
 - `lib/presentation/screens/settings/chat_backup_screen.dart` — the screen.
 - Server: `backup.status / put / get / delete` in `supabase/functions/booknest-api/index.ts`.
+- `lib/services/chat_relay_service.dart` — R2 relay upload + auto-download.
+- `lib/services/google_desktop_auth.dart` — PC Google sign-in (browser, PKCE).
+- Server: `relay.sign`, `ops.mediaSweep`.
 - `tools/ops/chat_media_sweep.py`, `.github/workflows/chat-media-sweep.yml`.
 
 ---

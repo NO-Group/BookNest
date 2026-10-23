@@ -11,6 +11,7 @@ import '../services/inbox_watcher.dart';
 import '../services/profile_cache.dart';
 import '../services/typing_broadcaster.dart';
 import '../services/chat_store.dart';
+import '../services/chat_relay_service.dart';
 import '../presentation/screens/chat/voice_recorder_sheet.dart'
     show VoiceNoteResult;
 
@@ -249,6 +250,9 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
       conversationId: _conversationId,
       revision: (grew || state.revision == 0) ? state.revision + 1 : state.revision,
     );
+    // Relay files (documents, voice notes, short videos) are deleted from
+    // the server after 3 days — keep them on this device.
+    ChatRelay.prefetch(page.messages);
     _syncWatchers();
   }
 
@@ -375,7 +379,8 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
     final url = await ChatRepository.instance.uploadFile(filename, bytes);
     if (url == null) {
       _patchLocal(draft['id'].toString(), failed: true);
-      return 'The file could not be uploaded — please try again.';
+      return ChatRelay.lastError ??
+          'The file could not be uploaded — please try again.';
     }
     final res = await ChatRepository.instance.send(
       _source,
@@ -404,7 +409,8 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
     try {
       final url = await ChatRepository.instance.uploadFile(filename, bytes);
       if (url == null) {
-        return 'The file could not be uploaded — please try again.';
+        return ChatRelay.lastError ??
+          'The file could not be uploaded — please try again.';
       }
       final res = await ChatRepository.instance.send(
         _source,
@@ -443,7 +449,7 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
         'clip-${DateTime.now().millisecondsSinceEpoch}.mp4', bytes);
     if (url == null) {
       _patchLocal(draft['id'].toString(), failed: true);
-      return 'The video could not be uploaded — press the message to retry '
+      return ChatRelay.lastError ?? 'The video could not be uploaded — press the message to retry '
           'once your connection is back.';
     }
     final res = await ChatRepository.instance.send(
@@ -478,7 +484,8 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
       final url = await ChatRepository.instance.uploadFile(
           'clip-${DateTime.now().millisecondsSinceEpoch}.mp4', bytes);
       if (url == null) {
-        return 'The video could not be uploaded — please try again.';
+        return ChatRelay.lastError ??
+            'The video could not be uploaded — please try again.';
       }
       final res = await ChatRepository.instance.send(
         _source,

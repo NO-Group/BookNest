@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 import 'chat_store.dart';
 import 'doc_extract.dart' show isVideoExtension;
+import 'google_desktop_auth.dart';
 
 /// Where a chat media file lives on this device once downloaded. The media
 /// viewer, the bubbles and the Google Drive backup all share this cache, so
@@ -38,14 +39,22 @@ class DriveClient {
         : null,
   );
 
-  /// Google Drive works on Android, and on iPhone once the iOS OAuth client
-  /// id is built in. The PC app has no Google sign-in.
+  /// Google Drive works on Android; on iPhone once the iOS OAuth client id
+  /// is built in; on PC (Windows/macOS/Linux) once the desktop OAuth client
+  /// is built in (browser sign-in, see DesktopGoogleAuth).
   bool get supported =>
       Platform.isAndroid ||
-      (Platform.isIOS && AppConfig.googleIosClientId.isNotEmpty);
+      (Platform.isIOS && AppConfig.googleIosClientId.isNotEmpty) ||
+      DesktopGoogleAuth.instance.configured;
+
+  /// The connected Google account's email (silent), or null.
+  Future<String?> email() async {
+    if (DesktopGoogleAuth.isDesktop) return DesktopGoogleAuth.instance.email();
+    return (await account())?.email;
+  }
 
   Future<GoogleSignInAccount?> account({bool interactive = false}) async {
-    if (!supported) return null;
+    if (!supported || DesktopGoogleAuth.isDesktop) return null;
     try {
       var account = await google.signInSilently();
       if (account == null && interactive) account = await google.signIn();
@@ -56,6 +65,11 @@ class DriveClient {
   }
 
   Future<Map<String, String>?> headers({bool interactive = false}) async {
+    if (DesktopGoogleAuth.isDesktop) {
+      final token = await DesktopGoogleAuth.instance
+          .accessToken(interactive: interactive);
+      return token == null ? null : {'Authorization': 'Bearer $token'};
+    }
     final acc = await account(interactive: interactive);
     if (acc == null) return null;
     try {

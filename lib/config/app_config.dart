@@ -24,7 +24,7 @@
 ///  With no --dart-define flags, the defaults below are used.
 class AppConfig {
   /// Display version — keep in sync with pubspec.yaml on every release.
-  static const String appVersion = '2.38.0+68';
+  static const String appVersion = '2.38.1+69';
 
   /// Jenny is PARKED: the feature stays built, but every entrance is
   /// hidden. Flip to true to bring her back everywhere at once.
@@ -50,6 +50,15 @@ class AppConfig {
   // Info.plist). Empty = Drive backup hidden on iPhone, everything else works.
   static const String googleIosClientId =
       String.fromEnvironment('GOOGLE_IOS_CLIENT_ID', defaultValue: '');
+
+  // PC (Windows/macOS/Linux): a Google Cloud "Desktop app" OAuth client —
+  // browser sign-in for the Drive media backup. From GitHub secrets
+  // GOOGLE_DESKTOP_CLIENT_ID / GOOGLE_DESKTOP_CLIENT_SECRET (desktop client
+  // secrets are public by Google's design). Empty = hidden on PC.
+  static const String googleDesktopClientId =
+      String.fromEnvironment('GOOGLE_DESKTOP_CLIENT_ID', defaultValue: '');
+  static const String googleDesktopClientSecret =
+      String.fromEnvironment('GOOGLE_DESKTOP_CLIENT_SECRET', defaultValue: '');
 
   // ── Cloudinary · covers, avatars, feed & chat images ─────────────────────
   static const String cloudinaryCloudName = String.fromEnvironment(

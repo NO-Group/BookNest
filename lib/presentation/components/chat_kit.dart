@@ -28,6 +28,7 @@ import '../screens/chat/video_preview_screen.dart';
 import '../../services/backend_api.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/media_backup_service.dart';
+import '../../services/chat_relay_service.dart';
 import '../../services/supabase_service.dart';
 import 'booknest_ui.dart';
 import 'booknest_emojis.dart';
@@ -1107,8 +1108,13 @@ class _VideoContentState extends State<_VideoContent> {
       _loading = true;
       _failed = false;
     });
-    var controller =
-        VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    // Already on this device (sent from here, or downloaded): no data spent,
+    // and it still plays after the 3-day relay copy is gone.
+    final cached = File(mediaCachePath(widget.url));
+    final local = cached.existsSync() && cached.lengthSync() > 0;
+    var controller = local
+        ? VideoPlayerController.file(cached)
+        : VideoPlayerController.networkUrl(Uri.parse(widget.url));
     try {
       try {
         await controller.initialize();
@@ -1193,7 +1199,15 @@ class _VideoContentState extends State<_VideoContent> {
               alignment: Alignment.center,
               children: [
                 if (_ready) VideoPlayer(c!),
-                if (!_ready)
+                if (!_ready && CloudinaryService.videoThumb(widget.url).isEmpty)
+                  Positioned.fill(
+                    child: Container(
+                      color: BookNestColors.navyDeep,
+                      child: const Icon(Icons.movie_rounded,
+                          color: Colors.white24, size: 40),
+                    ),
+                  ),
+                if (!_ready && CloudinaryService.videoThumb(widget.url).isNotEmpty)
                   Positioned.fill(
                     child: CachedNetworkImage(
                       imageUrl: CloudinaryService.videoThumb(widget.url),
@@ -1672,7 +1686,10 @@ class _VoiceContentState extends State<_VoiceContent> {
     });
     try {
       if (!_ready) {
-        await _player.play(UrlSource(widget.url));
+        final cached = File(mediaCachePath(widget.url));
+        await _player.play(cached.existsSync() && cached.lengthSync() > 0
+            ? DeviceFileSource(cached.path)
+            : UrlSource(widget.url));
         await _player.setPlaybackRate(_speeds[_speedIndex]);
       } else {
         await _player.resume();
@@ -3171,10 +3188,10 @@ class ChatAvatar extends StatelessWidget {
   }
 }
 
-/// Uploads any chat attachment (documents, audio, PDFs…) and returns the
-/// hosted URL, or null when the upload could not complete.
+/// Uploads any chat attachment (documents, audio, PDFs, videos) through the
+/// private 3-day R2 relay and returns its link, or null on failure.
 Future<String?> uploadChatFile(String filename, Uint8List bytes) {
-  return CloudinaryService.uploadRaw(bytes: bytes, filename: filename);
+  return ChatRelay.upload(bytes, filename);
 }
 
 /// Uploads chat photos to Cloudinary under the chat folder and returns the

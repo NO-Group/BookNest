@@ -380,7 +380,7 @@ class ChatBackupService {
 
   /// The connected Google account's email (media backup), silently.
   Future<String?> connectedAccountEmail() async =>
-      (await DriveClient.instance.account())?.email;
+      DriveClient.instance.email();
 
   /// Scheduled backups — daily/weekly/monthly, WhatsApp-style, silent:
   /// text to BookNest (only with the passphrase key already on this phone)

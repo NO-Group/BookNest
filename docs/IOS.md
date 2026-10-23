@@ -35,6 +35,9 @@ backup, the dictionary and dictation.
 - **Google Drive media backup** until secret `GOOGLE_IOS_CLIENT_ID` exists
   (see docs/CHAT_BACKUP.md).
 
+Chat files, voice notes and videos travel through the private R2 relay for
+3 days, the same as on Android and PC.
+
 ## Permissions (Info.plist)
 - Camera, microphone, photos, save-to-photos and speech recognition, each
   with its own explanation.

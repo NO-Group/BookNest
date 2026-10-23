@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data' show Uint8List;
 
 import 'backend_api.dart';
+import 'chat_relay_service.dart';
 import 'chat_store.dart';
 import 'cloudinary_service.dart';
 import 'dm_crypto.dart';
@@ -455,9 +456,11 @@ class ChatRepository {
       CloudinaryService.uploadImage(
           bytes: bytes, folder: 'chat', extension: extension);
 
-  /// Uploads any chat attachment and returns the hosted URL.
+  /// Uploads any chat attachment (documents, PDFs, videos, voice notes)
+  /// through the private 3-day R2 relay — never Cloudinary — and returns
+  /// its download link. [ChatRelay.lastError] explains a null.
   Future<String?> uploadFile(String filename, Uint8List bytes) =>
-      CloudinaryService.uploadRaw(bytes: bytes, filename: filename);
+      ChatRelay.upload(bytes, filename);
 
   /// Reads a video file for upload. Kept here so screens never touch
   /// the filesystem.

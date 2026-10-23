@@ -49,6 +49,8 @@ jobs:
       - name: Build Windows
         shell: bash
         env:
+          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
           # Older plugin CMake files pre-date CMake 4's compatibility
           # cutoff — this restores it (recommended by the error itself).
           CMAKE_POLICY_VERSION_MINIMUM: '3.5'
@@ -61,7 +63,7 @@ jobs:
           MSYS2_ARG_CONV_EXCL: '*'
         run: |
           set -o pipefail
-          flutter build windows --release 2>&1 | tee build.log
+          flutter build windows --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="$GOOGLE_DESKTOP_CLIENT_ID" --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$GOOGLE_DESKTOP_CLIENT_SECRET" 2>&1 | tee build.log
           test -f build/windows/x64/runner/Release/booknest.exe ||
             { echo "booknest.exe was not produced"; exit 1; }
 
@@ -126,9 +128,11 @@ jobs:
       - name: Build macOS (unsigned for CI)
         env:
           CODE_SIGNING_ALLOWED: 'NO'
+          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: |
           set -o pipefail
-          flutter build macos --release 2>&1 | tee build.log
+          flutter build macos --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="$GOOGLE_DESKTOP_CLIENT_ID" --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$GOOGLE_DESKTOP_CLIENT_SECRET" 2>&1 | tee build.log
       - name: Package
         id: pkg
         run: |
@@ -176,9 +180,12 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Build Linux
+        env:
+          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: |
           set -o pipefail
-          flutter build linux --release 2>&1 | tee build.log
+          flutter build linux --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="$GOOGLE_DESKTOP_CLIENT_ID" --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$GOOGLE_DESKTOP_CLIENT_SECRET" 2>&1 | tee build.log
       - name: Package
         id: pkg
         run: |

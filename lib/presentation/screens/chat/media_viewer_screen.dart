@@ -1067,6 +1067,13 @@ class _VideoPoster extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
+          if (CloudinaryService.videoThumb(url).isEmpty)
+            Container(
+              color: BookNestColors.navyDeep,
+              child: const Icon(Icons.movie_rounded,
+                  color: Colors.white24, size: 42),
+            )
+          else
           CachedNetworkImage(
             imageUrl: CloudinaryService.videoThumb(url),
             fit: BoxFit.cover,

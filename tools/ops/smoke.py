@@ -138,38 +138,30 @@ def turn_probe(servers: list[dict]):
         check(f'TURN relay carries traffic ({label})', good, str(detail)[:220])
 
 
-def cloudinary_roundtrip(name: str, data: bytes, mime: str):
-    """Uploads like the app's chat 'Send a file' (unsigned, raw) and downloads
-    it back the way the in-app document viewer does. Free Cloudinary accounts
-    can block PDF/ZIP delivery (HTTP 401) — this proves they open."""
-    cloud = os.environ.get('CLOUDINARY_CLOUD_NAME') or 'deqdmwlt7'
-    preset = os.environ.get('CLOUDINARY_UPLOAD_PRESET') or 'BookNest'
-    boundary = '----bn' + secrets.token_hex(8)
-    parts = []
-    for k, v in (('upload_preset', preset), ('folder', 'booknest/files/smoke')):
-        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
-    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\n'
-                 f'Content-Type: {mime}\r\n\r\n'.encode() + data + b'\r\n')
-    parts.append(f'--{boundary}--\r\n'.encode())
-    # Same rule as CloudinaryService.uploadRaw: documents are stored raw.
-    req = urllib.request.Request(f'https://api.cloudinary.com/v1_1/{cloud}/raw/upload', data=b''.join(parts),
-                                 method='POST', headers={'Content-Type': f'multipart/form-data; boundary={boundary}'})
+def relay_roundtrip(token: str, name: str, data: bytes, mime: str):
+    """Sends a chat file exactly like the app (2.38+): the server signs an
+    upload to the private R2 relay (relay.sign), the file goes straight to
+    R2, and the signed download link — what the message carries — must give
+    the same bytes back. Chat files never touch Cloudinary."""
+    s, b, _ = api(token, 'relay.sign', {'name': name, 'size': len(data)})
+    d = b.get('data') or {}
+    if s != 200 or not d.get('putUrl'):
+        return False, f"relay.sign HTTP {s} {b.get('error') or ''}"[:200]
     try:
+        req = urllib.request.Request(d['putUrl'], data=data, method='PUT', headers={'Content-Type': mime})
         with urllib.request.urlopen(req, timeout=60) as r:
-            url = json.loads(r.read().decode()).get('secure_url', '')
+            put = r.status
     except urllib.error.HTTPError as e:
         return False, f"upload HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:160]}"
-    except Exception as e:  # noqa: BLE001
-        return False, f'upload failed: {e}'[:200]
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'BookNest'}), timeout=60) as r:
+        with urllib.request.urlopen(d['getUrl'], timeout=60) as r:
             got = r.read()
-        return got == data, f'{url.split("/upload/")[-1][:70]} → {len(got)} bytes' + ('' if got == data else ' (content differs)')
+            ctype = r.headers.get('Content-Type')
     except urllib.error.HTTPError as e:
-        return False, (f'download HTTP {e.code} — enable "Allow delivery of PDF and ZIP files" in Cloudinary '
-                       'Settings → Security' if e.code in (401, 403) else f'download HTTP {e.code}')
-    except Exception as e:  # noqa: BLE001
-        return False, f'download failed: {e}'[:200]
+        return False, f'download HTTP {e.code}'
+    host = d['getUrl'].split('/')[2].split('.')[1:3]
+    return got == data, (f"upload HTTP {put}, download {len(got)} bytes ({ctype}), {'.'.join(host)}, "
+                         f"expires {d.get('expiresAt', '?')[:10]}") + ('' if got == data else ' (content differs)')
 
 
 def tiny_files():
@@ -304,12 +296,12 @@ def main():
               f'save HTTP {s}, visible to another reader={seen} {str(b)[:120] if s >= 300 else ""}')
     except Exception as e:
         check('Profile cover photo saves and others see it', False, str(e)[:200])
-    # ── chat files open in the in-app viewer (Cloudinary delivers PDFs/documents) ──
+    # ── chat files travel through the private R2 relay (never Cloudinary) ──
     pdf, docx = tiny_files()
     for fname, blob, mime in (('smoke.pdf', pdf, 'application/pdf'),
                               ('smoke.docx', docx, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')):
-        ok, detail = cloudinary_roundtrip(fname, blob, mime)
-        check(f'Chat file opens: {fname}', ok, detail)
+        ok, detail = relay_roundtrip(a_tok, fname, blob, mime)
+        check(f'Chat file sends and opens (R2 relay, 3 days): {fname}', ok, detail)
     finish(users)
 
 

@@ -1,147 +1,80 @@
 #!/usr/bin/env python3
-"""Deletes chat media older than 30 days from Cloudinary (WhatsApp model).
+"""Daily chat media housekeeping — runs ON THE SERVER (ops.mediaSweep).
 
-Chat photos, videos, voice notes and files are only *relayed* through
-Cloudinary: after 30 days they live on readers' phones and in each reader's
-own Google Drive backup (Settings → Chat backup → media), not on BookNest's
-storage. Text messages are backed up separately (sealed) in MongoDB.
-
-ONLY these folders are touched — never avatars, profile covers, book covers,
-club images or manuscripts:
-    booknest/chat/    (chat photos)
-    booknest/files/   (files, videos, voice notes, smoke-test files)
-
-Env: CLOUDINARY_CLOUD_NAME (default deqdmwlt7), CLOUDINARY_API_KEY,
-CLOUDINARY_API_SECRET. Optional: RETENTION_DAYS (default 30), DRY_RUN=1.
-Writes ops/chat-media-sweep.md (counts only, no secrets, no file names).
+The edge function uses its own Supabase secrets (CLOUDINARY_API_KEY /
+CLOUDINARY_API_SECRET, R2_*), so no Cloudinary keys live in GitHub:
+  • Cloudinary: chat photos (booknest/chat) and pre-2.38 chat files
+    (booknest/files) older than 30 days. Avatars, covers, profile covers and
+    book images are in other folders and never touched.
+  • Cloudflare R2: chat files in relay/ older than 3 days (documents, PDFs,
+    videos, voice notes), and makes sure the bucket's 3-day lifecycle rule
+    exists.
+Readers keep their media on their devices and in their own Google Drive.
+Writes ops/chat-media-sweep.md (counts only).
 """
 from __future__ import annotations
 
-import base64
-import datetime as dt
 import json
 import os
-import sys
+import time
 import urllib.error
-import urllib.parse
 import urllib.request
-from pathlib import Path
 
-CLOUD = os.environ.get('CLOUDINARY_CLOUD_NAME') or 'deqdmwlt7'
-KEY = os.environ.get('CLOUDINARY_API_KEY', '')
-SECRET = os.environ.get('CLOUDINARY_API_SECRET', '')
-DAYS = int(os.environ.get('RETENTION_DAYS') or 30)
-DRY = os.environ.get('DRY_RUN') == '1'
-PREFIXES = ('booknest/chat/', 'booknest/files/')
-TYPES = ('image', 'video', 'raw')
-REPORT = Path('ops/chat-media-sweep.md')
-lines: list[str] = []
+FN = os.environ['FN_URL']
+ANON = os.environ['ANON']
+SERVICE = os.environ['SERVICE_KEY']
+DRY = os.environ.get('DRY_RUN', '') == '1'
 
 
-def note(t: str):
-    print(t, flush=True)
-    lines.append(t)
-
-
-def call(method: str, path: str, params: list[tuple[str, str]] | None = None):
-    url = f'https://api.cloudinary.com/v1_1/{CLOUD}/{path}'
-    data = None
-    q = urllib.parse.urlencode(params or [])
-    url += ('?' + q) if q else ''
-    auth = base64.b64encode(f'{KEY}:{SECRET}'.encode()).decode()
-    req = urllib.request.Request(url, data=data, method=method,
-                                 headers={'Authorization': f'Basic {auth}'})
+def call(body: dict, timeout: int = 160):
+    req = urllib.request.Request(FN, data=json.dumps(body).encode(), method='POST', headers={
+        'Content-Type': 'application/json', 'apikey': ANON, 'Authorization': f'Bearer {SERVICE}'})
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            return r.status, json.loads(r.read().decode() or '{}')
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, json.loads(r.read() or b'{}')
     except urllib.error.HTTPError as e:
         try:
-            return e.code, json.loads(e.read().decode() or '{}')
-        except Exception:  # noqa: BLE001
+            return e.code, json.loads(e.read() or b'{}')
+        except Exception:
             return e.code, {}
 
 
-def finish(code: int):
-    REPORT.parent.mkdir(parents=True, exist_ok=True)
-    REPORT.write_text('\n'.join(lines) + '\n')
-    sys.exit(code)
-
-
 def main():
-    now = dt.datetime.now(dt.timezone.utc)
-    cutoff = now - dt.timedelta(days=DAYS)
-    note(f'# Chat media sweep — {now:%Y-%m-%d %H:%M} UTC')
-    note('')
-    note(f'Deletes Cloudinary chat media older than **{DAYS} days** from `booknest/chat/` and '
-         '`booknest/files/` only. Readers keep their media on their phones and in their own '
-         'Google Drive backup.' + (' **Dry run — nothing deleted.**' if DRY else ''))
-    note('')
-    if not KEY or not SECRET:
-        note('⚠️ **Not configured.** Add GitHub secrets `CLOUDINARY_API_KEY` and '
-             '`CLOUDINARY_API_SECRET` (Cloudinary → Settings → API Keys). Nothing was deleted.')
-        finish(0)
-    total_del = 0
-    total_keep = 0
-    failed = False
-    for rtype in TYPES:
-        for prefix in PREFIXES:
-            cursor = ''
-            old_ids: list[str] = []
-            kept = 0
-            while True:
-                params = [('type', 'upload'), ('prefix', prefix), ('max_results', '500')]
-                if cursor:
-                    params.append(('next_cursor', cursor))
-                status, body = call('GET', f'resources/{rtype}', params)
-                if status == 401:
-                    note('❌ Cloudinary refused the API key/secret (HTTP 401). Check the two secrets.')
-                    finish(1)
-                if status != 200:
-                    note(f'- ⚠️ list {rtype} `{prefix}` → HTTP {status}: {str(body.get("error", ""))[:120]}')
-                    failed = True
-                    break
-                # With a prefix Cloudinary sorts by public id, not date —
-                # check every asset's created_at.
-                for res in body.get('resources', []):
-                    try:
-                        created = dt.datetime.fromisoformat(
-                            str(res.get('created_at', '')).replace('Z', '+00:00'))
-                    except ValueError:
-                        kept += 1
-                        continue
-                    if created < cutoff:
-                        old_ids.append(res['public_id'])
-                    else:
-                        kept += 1
-                cursor = body.get('next_cursor') or ''
-                if not cursor:
-                    break
-            deleted = 0
-            for i in range(0, len(old_ids), 100):
-                batch = old_ids[i:i + 100]
-                if DRY:
-                    deleted += len(batch)
-                    continue
-                status, body = call('DELETE', f'resources/{rtype}/upload',
-                                    [('public_ids[]', pid) for pid in batch] + [('invalidate', 'true')])
-                if status != 200:
-                    note(f'- ⚠️ delete {rtype} batch → HTTP {status}: {str(body.get("error", ""))[:120]}')
-                    failed = True
-                    break
-                deleted += sum(1 for v in (body.get('deleted') or {}).values() if v == 'deleted')
-            if old_ids or kept:
-                note(f'- {rtype:5} `{prefix}` — deleted **{deleted}**, newer than {DAYS} days kept: {kept}')
-            total_del += deleted
-            total_keep += kept
-    note('')
-    note(f'**{"Would delete" if DRY else "Deleted"} {total_del} chat files older than {DAYS} days.**')
-    status, body = call('GET', 'usage')
-    if status == 200:
-        st = body.get('storage', {}) or {}
-        used = st.get('usage')
-        if isinstance(used, (int, float)):
-            note(f'Cloudinary storage now: {used / 1048576:.1f} MB.')
-    finish(1 if failed else 0)
+    lines = [f"# Chat media sweep — {time.strftime('%Y-%m-%d %H:%M', time.gmtime())} UTC", '',
+             'Runs on the server with its own Cloudinary and R2 keys. Chat **photos** leave Cloudinary after **30 days**; '
+             'chat **files, voice notes and videos** leave the private R2 relay after **3 days**. '
+             'Readers keep them on their devices and in their own Google Drive.', '']
+    status, body = call({'action': 'ops.mediaSweep', 'payload': {'dryRun': DRY}})
+    data = body.get('data') or {}
+    if status != 200 or not body.get('ok'):
+        lines.append(f"❌ Server answered HTTP {status}: {body.get('error') or body}")
+        open('ops/chat-media-sweep.md', 'w').write('\n'.join(lines) + '\n')
+        print('\n'.join(lines))
+        raise SystemExit(1)
+    if DRY:
+        lines.append('_Dry run — nothing deleted._')
+    relay = data.get('relay') or {}
+    lines.append('## Cloudflare R2 relay (3 days)')
+    if not relay.get('configured'):
+        lines.append('- ⚠️ R2 is not configured on the server')
+    else:
+        lines.append(f"- lifecycle rule: {relay.get('lifecycle')}")
+        lines.append(f"- files scanned: {relay.get('scanned')}, expired: {relay.get('expired')}, deleted: {relay.get('deleted')}")
+        lines.append(f"- live relay size: {round((relay.get('bytesLive') or 0) / 1048576, 1)} MB")
+        if relay.get('error'):
+            lines.append(f"- error: {relay['error']}")
+    cl = data.get('cloudinary') or {}
+    lines.append('')
+    lines.append('## Cloudinary (chat folders only, 30 days)')
+    if not cl.get('configured'):
+        lines.append('- ⚠️ CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET missing on the server')
+    else:
+        for name, s in (cl.get('folders') or {}).items():
+            extra = f" — {s['error']}" if s.get('error') else ''
+            part = ' (continues tomorrow)' if s.get('partial') else ''
+            lines.append(f"- `{name}`: scanned {s.get('scanned')}, older than 30 days {s.get('old')}, deleted {s.get('deleted')}{part}{extra}")
+    open('ops/chat-media-sweep.md', 'w').write('\n'.join(lines) + '\n')
+    print('\n'.join(lines))
 
 
 if __name__ == '__main__':
