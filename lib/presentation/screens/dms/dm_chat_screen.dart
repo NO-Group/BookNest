@@ -19,6 +19,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/chat_repository.dart';
 import '../../../services/inbox_watcher.dart';
 import '../../../state/chat_providers.dart';
+import '../../components/adaptive.dart';
 
 /// 1:1 chat on the BookNest watermark canvas — glass bubbles, delivery
 /// ticks, day separators, photos via Cloudinary and rich book-share cards.
@@ -329,45 +330,54 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
         elevation: 0,
         leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
-        actions: [
-          IconButton(
-            tooltip: 'Shared media & files',
-            icon: const Icon(Icons.folder_shared_outlined, size: 21),
-            onPressed: conversationId == null || conversationId.isEmpty
+        // Phones: everything folds into ⋮ (the header was crowded with
+        // five icons). Tablets / PC: plain icons.
+        actions: adaptiveActions(context, [
+          HeaderAction(
+            icon: Icons.call_outlined,
+            label: 'Voice call',
+            onTap: widget.peerId == null || widget.peerId!.isEmpty
+                ? null
+                : () => _startCall(video: false),
+          ),
+          HeaderAction(
+            icon: Icons.videocam_outlined,
+            label: 'Video call',
+            onTap: widget.peerId == null || widget.peerId!.isEmpty
+                ? null
+                : () => _startCall(video: true),
+          ),
+          HeaderAction(
+            icon: Icons.search_rounded,
+            label: 'Search messages',
+            onTap: () => setState(() {
+              _searching = !_searching;
+              if (!_searching) _searchController.clear();
+            }),
+          ),
+          HeaderAction(
+            icon: Icons.folder_shared_outlined,
+            label: 'Shared media & files',
+            onTap: conversationId == null || conversationId.isEmpty
                 ? null
                 : () => context.push(
                       '/shared/$conversationId'
                       '?title=${Uri.encodeComponent(_peerName)}',
                     ),
           ),
-          IconButton(
-            tooltip: 'Search messages',
-            icon: const Icon(Icons.search_rounded, size: 21),
-            onPressed: () => setState(() {
-              _searching = !_searching;
-              if (!_searching) _searchController.clear();
-            }),
+          HeaderAction(
+            icon: Icons.palette_outlined,
+            label: 'Chat theme',
+            onTap: _editTheme,
           ),
-          IconButton(
-            tooltip: 'Voice call',
-            icon: const Icon(Icons.call_outlined, size: 20),
-            onPressed: widget.peerId == null || widget.peerId!.isEmpty
+          HeaderAction(
+            icon: Icons.person_outline_rounded,
+            label: 'View profile',
+            onTap: widget.peerId == null || widget.peerId!.isEmpty
                 ? null
-                : () => _startCall(video: false),
+                : () => context.push('/user/${widget.peerId}'),
           ),
-          IconButton(
-            tooltip: 'Video call',
-            icon: const Icon(Icons.videocam_outlined, size: 21),
-            onPressed: widget.peerId == null || widget.peerId!.isEmpty
-                ? null
-                : () => _startCall(video: true),
-          ),
-          IconButton(
-            tooltip: 'Chat theme',
-            icon: const Icon(Icons.palette_outlined, size: 21),
-            onPressed: _editTheme,
-          ),
-        ],
+        ]),
         titleSpacing: 0,
         title: InkWell(
           borderRadius: BorderRadius.circular(10),

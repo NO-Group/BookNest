@@ -214,13 +214,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 350),
-                child: _awaitingConfirmation
-                    ? _buildConfirmation(theme)
-                    : _profileStepActive
-                        ? _buildProfileStep(theme, onSurface)
-                        : _buildAccountForm(theme, onSurface),
+              child: ConstrainedBox(
+                // Readable form width on tablets / PC.
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  child: _awaitingConfirmation
+                      ? _buildConfirmation(theme)
+                      : _profileStepActive
+                          ? _buildProfileStep(theme, onSurface)
+                          : _buildAccountForm(theme, onSurface),
+                ),
               ),
             ),
           ),
@@ -419,6 +423,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           hintText: 'Password',
           obscureText: _obscure,
           suffix: IconButton(
+            tooltip: _obscure ? 'Show password' : 'Hide password',
             icon: Icon(
               _obscure
                   ? Icons.visibility_off_outlined

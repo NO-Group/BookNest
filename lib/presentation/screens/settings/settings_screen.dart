@@ -127,6 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Change password'),
         content: TextField(
           controller: controller,
@@ -845,6 +846,7 @@ class _SignOutButton extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Sign out?'),
         content: const Text('You can sign back in anytime.'),
         actions: [
@@ -907,6 +909,7 @@ class _DeleteAccountButtonState extends State<_DeleteAccountButton> {
     final first = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Delete your account?'),
         content: const Text(
             'This permanently removes your profile, books, drafts, posts, '
@@ -930,6 +933,7 @@ class _DeleteAccountButtonState extends State<_DeleteAccountButton> {
     final typed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Type DELETE to confirm'),
         content: TextField(
           controller: controller,

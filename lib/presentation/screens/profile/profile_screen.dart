@@ -16,6 +16,7 @@ import '../../../services/reader_profile.dart';
 import '../../../config/locales.dart';
 import '../../components/booknest_keyboard.dart';
 import '../chat/media_viewer_screen.dart';
+import '../../components/adaptive.dart';
 
 /// The reader's own profile. Per the architecture: the profile row lives in
 /// Supabase (1:1 with the auth user, holds lightweight Cloudinary URLs),
@@ -65,6 +66,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(next == 'author'
             ? 'Switch to Author mode?'
             : 'Switch to Reader mode?'),
@@ -204,9 +206,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_coverUploading) return;
     if (_coverUrl == null) return _changeCover();
     final choice = await showModalBottomSheet<String>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       showDragHandle: true,
-      builder: (sheet) => SafeArea(
+      builder: (sheet) => SheetBody(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

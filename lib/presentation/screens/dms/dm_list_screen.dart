@@ -87,6 +87,7 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
       builder: (dialogContext) {
         final controller = TextEditingController();
         return AlertDialog(
+          scrollable: true,
           title: const Text('Restore your chats?'),
           content: Column(
             mainAxisSize: MainAxisSize.min,

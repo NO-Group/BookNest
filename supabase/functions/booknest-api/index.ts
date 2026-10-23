@@ -1562,7 +1562,7 @@ async function handleRequest(req: Request): Promise<Response> {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.31.0',
+          server: '2.32.0',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -2954,6 +2954,51 @@ async function handleRequest(req: Request): Promise<Response> {
           await members.deleteOne({ groupId: id, userId: uid });
         }
         return ok({ member: action === 'groups.join', count: await members.countDocuments({ groupId: id }) });
+      }
+
+      // Owner (or the overall moderator) closes a group for good: the group,
+      // its members, forum, channels, events, departments, classes and the
+      // group chat rooms' membership. Chat messages already sent stay with
+      // the people who received them.
+      case 'groups.delete': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'clubs');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const id = String(p.groupId ?? '');
+        if (!id) return fail('A valid groupId is required');
+        const g = await (await dbFor('groups')).collection(kind)
+          .findOne({ _id: id } as never, { projection: { ownerId: 1, name: 1 } });
+        if (!g) return fail('Not found', 404);
+        const isAdmin = g.ownerId !== uid ? Boolean(await adminUserId(req)) : false;
+        if (g.ownerId !== uid && !isAdmin) return fail('Only the owner can delete this group', 403);
+        const gdb = await dbFor('groups');
+        const unitIds = (await gdb.collection('units').find({ groupId: id }, { projection: { _id: 1 } })
+          .toArray()).map((u) => String(u._id));
+        const eventIds = (await gdb.collection('events').find({ groupId: id }, { projection: { _id: 1 } })
+          .toArray()).map((e) => String(e._id));
+        const classIds = (await gdb.collection('school_classes').find({ schoolId: id }, { projection: { _id: 1 } })
+          .toArray()).map((c) => String(c._id));
+        await Promise.all([
+          gdb.collection(`${kind}_members`).deleteMany({ groupId: id }),
+          gdb.collection('announcements').deleteMany({ groupId: id }),
+          gdb.collection('channels').deleteMany({ groupId: id }),
+          gdb.collection('events').deleteMany({ groupId: id }),
+          eventIds.length ? gdb.collection('event_rsvps').deleteMany({ eventId: { $in: eventIds } }) : null,
+          gdb.collection('units').deleteMany({ groupId: id }),
+          unitIds.length ? gdb.collection('unit_members').deleteMany({ unitId: { $in: unitIds } }) : null,
+          gdb.collection('school_classes').deleteMany({ schoolId: id }),
+          classIds.length ? gdb.collection('school_class_members').deleteMany({ classId: { $in: classIds } }) : null,
+          gdb.collection('school_assignments').deleteMany({ schoolId: id }),
+          gdb.collection('school_exams').deleteMany({ schoolId: id }),
+        ]);
+        try {
+          await (await dbFor('chats')).collection('conversations')
+            .updateMany({ type: 'club', clubId: id, kind }, { $set: { archived: true, memberIds: [] } });
+        } catch { /* no rooms */ }
+        await gdb.collection(kind).deleteOne({ _id: id } as never);
+        if (isAdmin) await logAdmin(uid, 'deleteGroup', { kind, id, name: g.name ?? '' });
+        return ok({ deleted: true });
       }
 
       case 'groups.create': {
@@ -4486,7 +4531,8 @@ async function handleRequest(req: Request): Promise<Response> {
       case 'users.profile.get': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const target = typeof p.userId === 'string' && isHexId(p.userId) ? p.userId : uid;
+        // User ids are Supabase UUIDs (hex-only always fell back to *you*).
+        const target = typeof p.userId === 'string' && (isUuid(p.userId) || isHexId(p.userId)) ? p.userId : uid;
         const row = await (await dbFor('users')).collection('user_prefs')
           .findOne({ userId: target });
         const isSelf = target === uid;
@@ -5151,9 +5197,9 @@ async function handleRequest(req: Request): Promise<Response> {
           if (!isNaN(parsed.getTime())) dueAt = parsed;
         }
         let book: Record<string, unknown> | null = null;
-        if (typeof p.bookId === 'string' && isHexId(p.bookId)) {
+        if (typeof p.bookId === 'string' && isAnyId(p.bookId)) {
           const b = await (await dbFor('books')).collection('books')
-            .findOne({ _id: new ObjectId(p.bookId) },
+            .findOne({ _id: bookOid(p.bookId) },
               { projection: { title: 1, authorName: 1, coverUrl: 1 } });
           if (b) {
             book = {
@@ -5279,9 +5325,11 @@ async function handleRequest(req: Request): Promise<Response> {
         const group = await groupManager(kind, groupId, uid);
         if (!group) return fail('Only the group owner can pick the read', 403);
         const bookId = String(p.bookId ?? '');
-        if (!isHexId(bookId)) return fail('A valid bookId is required');
+        // Book ids are ObjectId hex, UUIDs or imported slugs ('bulk-…') —
+        // hex-only here rejected nearly every book ("Could not add it").
+        if (!isAnyId(bookId)) return fail('A valid bookId is required');
         const book = await (await dbFor('books')).collection('books')
-          .findOne({ _id: new ObjectId(bookId) },
+          .findOne({ _id: bookOid(bookId) },
             { projection: { title: 1, authorName: 1, coverUrl: 1 } });
         if (!book) return fail('That book does not exist', 404);
         const potm = {
@@ -5357,9 +5405,11 @@ async function handleRequest(req: Request): Promise<Response> {
         const group = await groupManager(kind, groupId, uid);
         if (!group) return fail('Only the school owner can curate the list', 403);
         const bookId = String(p.bookId ?? '');
-        if (!isHexId(bookId)) return fail('A valid bookId is required');
+        // Book ids are ObjectId hex, UUIDs or imported slugs ('bulk-…') —
+        // hex-only here rejected nearly every book ("Could not add it").
+        if (!isAnyId(bookId)) return fail('A valid bookId is required');
         const book = await (await dbFor('books')).collection('books')
-          .findOne({ _id: new ObjectId(bookId) },
+          .findOne({ _id: bookOid(bookId) },
             { projection: { title: 1, authorName: 1, coverUrl: 1 } });
         if (!book) return fail('That book does not exist', 404);
         const doc = await (await dbFor('groups')).collection(kind)
@@ -6726,13 +6776,13 @@ async function handleRequest(req: Request): Promise<Response> {
         const uid = await adminUserId(req);
         if (!uid) return fail('Only the overall moderator can delete books', 403);
         const id = String(p.bookId ?? '');
-        if (!isHexId(id)) return fail('A valid bookId is required');
+        if (!isAnyId(id)) return fail('A valid bookId is required');
         const booksDb = await dbFor('books');
         const book = await booksDb.collection('books')
-          .findOne({ _id: new ObjectId(id) });
+          .findOne({ _id: bookOid(id) });
         if (!book) return fail('Book not found', 404);
         await booksDb.collection('chapters').deleteMany({ bookId: id });
-        await booksDb.collection('books').deleteOne({ _id: new ObjectId(id) });
+        await booksDb.collection('books').deleteOne({ _id: bookOid(id) });
         await logAdmin(uid, 'deleteBook', { id, title: book.title ?? '' });
         return ok({ deleted: true });
       }
@@ -6741,10 +6791,10 @@ async function handleRequest(req: Request): Promise<Response> {
         const uid = await adminUserId(req);
         if (!uid) return fail('Only the overall moderator can feature books', 403);
         const id = String(p.bookId ?? '');
-        if (!isHexId(id)) return fail('A valid bookId is required');
+        if (!isAnyId(id)) return fail('A valid bookId is required');
         const on = p.on !== false;
         await (await dbFor('books')).collection('books').updateOne(
-          { _id: new ObjectId(id) },
+          { _id: bookOid(id) },
           { $set: { featuredAt: on ? new Date() : null } },
         );
         await logAdmin(uid, on ? 'feature' : 'unfeature', { id });

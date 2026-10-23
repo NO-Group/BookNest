@@ -100,6 +100,7 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
+          scrollable: true,
           title: const Text('Create your backup passphrase'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -154,6 +155,7 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
     return showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(title),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -306,6 +308,7 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(title),
         content: Text(body),
         actions: [

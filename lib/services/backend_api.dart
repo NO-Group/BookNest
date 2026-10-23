@@ -31,6 +31,17 @@ class BackendApi {
 
   bool _available = false;
 
+  /// The server's own words for the most recent refused call (e.g.
+  /// "Already on the reading list"), so screens can say what went wrong
+  /// instead of a generic "try again". Null after a successful call.
+  String? lastError;
+
+  /// [lastError] or [fallback] — for snackbars.
+  String errorOr(String fallback) {
+    final e = lastError?.trim() ?? '';
+    return e.isEmpty ? fallback : e;
+  }
+
   /// Set only when the server could not be reached AT ALL (no answer).
   /// Calls then fail fast for a short cool-down — never for the rest of
   /// the session. (Before 2.33 one refused or timed-out call, e.g. "Sign
@@ -448,6 +459,9 @@ class BackendApi {
         );
         final data = response.data;
         _markUp();
+        lastError = data is Map && data['ok'] != true
+            ? data['error']?.toString()
+            : null;
         if (data is Map && data['ok'] == true) {
           final result = data['data'];
           final value = result is Map
@@ -466,6 +480,10 @@ class BackendApi {
         // The server ANSWERED (4xx/5xx): it is reachable — only this
         // request was refused. Never switch the backend off for that.
         _markUp();
+        final details = error.details;
+        lastError = details is Map
+            ? details['error']?.toString()
+            : (details is String && details.length < 200 ? details : null);
         if (retryable && attempt == 0 && _transient(error.status)) {
           await Future<void>.delayed(const Duration(milliseconds: 700));
           continue;
@@ -477,6 +495,7 @@ class BackendApi {
         return null;
       } catch (error) {
         // No answer at all (offline, DNS, timeout).
+        lastError = 'BookNest could not be reached — check your connection.';
         if (retryable && attempt == 0) {
           await Future<void>.delayed(const Duration(milliseconds: 800));
           continue;

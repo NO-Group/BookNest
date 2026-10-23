@@ -34,6 +34,7 @@ import 'booknest_ui.dart';
 import 'booknest_emojis.dart';
 import 'booknest_keyboard.dart';
 import 'watermark_background.dart';
+import 'adaptive.dart';
 
 /// Shared chat kit — one messaging language across 1:1 and club chats.
 /// Original BookNest styling: navy/cyan glass bubbles on the watermark
@@ -379,9 +380,11 @@ class _ChatBubbleState extends State<ChatBubble>
     final canAct = !_pending && !_failed && !_deletedForEveryone;
     HapticFeedback.mediumImpact();
     showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2178,10 +2181,12 @@ Future<void> showMessageTranslation(
     return;
   }
   showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
     context: context,
     showDragHandle: true,
     builder: (sheetContext) {
-      return SafeArea(
+      return SheetBody(
         child: FutureBuilder<Map<String, dynamic>?>(
           future: BackendApi.instance.translateText(text, target),
           builder: (context, snap) {
@@ -2545,11 +2550,13 @@ void showMessageInfo(
     }
   }
   showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
     context: context,
     showDragHandle: true,
     builder: (sheetContext) {
       String labelOf(String uid) => nameOf?.call(uid) ?? 'Reader';
-      return SafeArea(
+      return SheetBody(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
           child: Column(
@@ -2949,9 +2956,11 @@ class _ChatComposerState extends State<ChatComposer> {
 
   void _openAttachSheet() {
     showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

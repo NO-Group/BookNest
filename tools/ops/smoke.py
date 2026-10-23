@@ -302,7 +302,91 @@ def main():
                               ('smoke.docx', docx, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')):
         ok, detail = relay_roundtrip(a_tok, fname, blob, mime)
         check(f'Chat file sends and opens (R2 relay, 3 days): {fname}', ok, detail)
+    # ── clubs / communities / organizations / schools ──
+    try:
+        s2, b2, _ = api(a_tok, 'books.list', {'limit': 50, 'search': 'the'})
+        ids = [str(x.get('id')) for x in (b2.get('data', {}) or {}).get('books', [])] + \
+            [str(x.get('id')) for x in books]
+        groups_suite(a_id, a_tok, b_id, b_tok, ids)
+    except Exception as e:
+        check('Group features', False, str(e)[:240])
     finish(users)
+
+
+def groups_suite(a_id, a_tok, b_id, b_tok, book_ids):
+    """Every group feature the app offers, for all four kinds, the way the
+    group screens call them. Books are imported classics ('bulk-…' slugs)
+    and user books (UUIDs) — the ids that used to be refused."""
+    def ok(r):
+        return r[0] == 200 and r[1].get('ok') is True
+
+    def err(r):
+        return '' if ok(r) else f"HTTP {r[0]} {str(r[1].get('error') or r[1])[:120]}"
+
+    # someone else's reader profile must be theirs, not mine
+    api(b_tok, 'users.profile.save', {'country': 'Ghana', 'countryCode': 'GH'})
+    api(a_tok, 'users.profile.save', {'country': 'Nigeria', 'countryCode': 'NG'})
+    r = api(a_tok, 'users.profile.get', {'userId': b_id})
+    prof = ((r[1].get('data', {}) or {}).get('profile', {}) or {})
+    check("Viewing another reader's profile shows theirs", ok(r) and prof.get('countryCode') == 'GH',
+          err(r) or f"country shown: {prof.get('countryCode')} (theirs is GH, mine NG)")
+    book = next((b for b in book_ids if b.startswith('bulk-')), book_ids[0] if book_ids else '')
+    for kind in ('clubs', 'communities', 'organizations', 'schools'):
+        label = kind[:-1].capitalize() if kind != 'communities' else 'Community'
+        r = api(a_tok, 'groups.create', {'kind': kind, 'name': f'Smoke {label} {secrets.token_hex(2)}',
+                                         'description': 'smoke test'})
+        gid = (r[1].get('data', {}) or {}).get('group', {}).get('_id') or \
+            (r[1].get('data', {}) or {}).get('id') or (r[1].get('data', {}) or {}).get('group', {}).get('id')
+        if not ok(r) or not gid:
+            check(f'{label}: create', False, err(r) or str(r[1])[:160])
+            continue
+        steps = []
+
+        def step(name, res):
+            steps.append((name, ok(res), err(res)))
+            return res
+        step('join', api(b_tok, 'groups.join', {'kind': kind, 'groupId': gid}))
+        step('get', api(b_tok, 'groups.get', {'kind': kind, 'groupId': gid}))
+        if book:
+            step('add book to reading list', api(a_tok, 'schools.readinglist.add',
+                                                 {'kind': kind, 'groupId': gid, 'bookId': book}))
+            g = api(b_tok, 'groups.get', {'kind': kind, 'groupId': gid})
+            listed = any(e.get('bookId') == book for e in
+                         ((g[1].get('data', {}) or {}).get('group', {}) or {}).get('readingList', []) or [])
+            steps.append(('reading list shows the book', listed, '' if listed else 'not on the list'))
+            step('remove book', api(a_tok, 'schools.readinglist.remove',
+                                    {'kind': kind, 'groupId': gid, 'bookId': book}))
+            step('pick of the month', api(a_tok, 'clubs.potm.set', {'kind': kind, 'groupId': gid, 'bookId': book}))
+        step('post announcement', api(a_tok, 'groups.announcements.post',
+                                      {'kind': kind, 'groupId': gid, 'title': 'Hello', 'body': 'Smoke'}))
+        a = step('read announcements', api(b_tok, 'groups.announcements.list', {'kind': kind, 'groupId': gid}))
+        step('create channel', api(a_tok, 'groups.channels.create', {'kind': kind, 'groupId': gid, 'name': 'general-2'}))
+        step('list channels', api(b_tok, 'groups.channels.list', {'groupId': gid}))
+        ev = step('schedule event', api(a_tok, 'groups.events.create', {
+            'kind': kind, 'groupId': gid, 'title': 'Smoke night',
+            'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(time.time() + 86400))}))
+        evid = ((ev[1].get('data', {}) or {}).get('event', {}) or {}).get('id') or \
+            ((ev[1].get('data', {}) or {}).get('event', {}) or {}).get('_id')
+        if evid:
+            step('RSVP', api(b_tok, 'groups.events.rsvp', {'eventId': str(evid), 'status': 'going'}))
+        step('list events', api(b_tok, 'groups.events.list', {'groupId': gid}))
+        step('create department', api(a_tok, 'groups.units.create', {'kind': kind, 'groupId': gid, 'name': 'Smoke unit'}))
+        step('list departments', api(b_tok, 'groups.units.list', {'kind': kind, 'groupId': gid}))
+        step('set rules', api(a_tok, 'groups.rules.set', {'kind': kind, 'groupId': gid, 'rules': ['Be kind']}))
+        if kind == 'schools':
+            c = step('create class', api(a_tok, 'schools.class.create', {'schoolId': gid, 'name': 'Smoke 101'}))
+            cid = ((c[1].get('data', {}) or {}).get('class', {}) or {}).get('id') or \
+                ((c[1].get('data', {}) or {}).get('class', {}) or {}).get('_id')
+            step('list classes', api(b_tok, 'schools.class.list', {'schoolId': gid}))
+            if cid:
+                step('assignment with a book', api(a_tok, 'schools.assignment.create', {
+                    'classId': str(cid), 'title': 'Read chapter 1', 'bookId': book}))
+            step('schedule exam', api(a_tok, 'schools.exam.create', {'schoolId': gid, 'title': 'Smoke test', 'subject': 'English'}))
+            step('leaderboard', api(b_tok, 'schools.leaderboard', {'kind': kind, 'groupId': gid}))
+        step('delete group (owner)', api(a_tok, 'groups.delete', {'kind': kind, 'groupId': gid}))
+        bad = [f'{n}: {e}' for n, good, e in steps if not good]
+        check(f'{label}: every feature works ({len(steps) - len(bad)}/{len(steps)})', not bad,
+              '; '.join(bad)[:400] if bad else ', '.join(n for n, _, _ in steps))
 
 
 def finish(users):

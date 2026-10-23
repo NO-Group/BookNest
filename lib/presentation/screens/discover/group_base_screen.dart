@@ -6,6 +6,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 import 'group_extras.dart';
+import '../../components/adaptive.dart';
 
 /// The full group experience shared by organizations, communities and
 /// schools: real membership, announcements, a named member directory with
@@ -147,8 +148,8 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     if (res == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(isMember
-              ? 'Could not leave right now — try again.'
-              : 'Could not join right now — try again.')));
+              ? BackendApi.instance.errorOr('Could not leave right now — try again.')
+              : BackendApi.instance.errorOr('Could not join right now — try again.'))));
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -176,6 +177,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (sheetContext, setDialog) => AlertDialog(
+          scrollable: true,
           title: const Text('New announcement'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(
@@ -293,6 +295,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     final okToDelete = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Remove announcement?'),
         content: Text('"${a['title']}" disappears for every member.'),
         actions: [
@@ -313,7 +316,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not remove it — try again.'
+            ? BackendApi.instance.errorOr('Could not remove it — try again.')
             : 'Announcement removed.')));
     if (res != null) _loadAnnouncements();
   }
@@ -336,10 +339,12 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     if (userId.isEmpty || isOwner == false) return;
     final isVice = memberIsVice(member);
     final choice = await showModalBottomSheet<String>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 10),
           ListTile(
@@ -368,7 +373,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not update the role — try again.'
+            ? BackendApi.instance.errorOr('Could not update the role — try again.')
             : (choice == 'promote'
                 ? '${_nameOf(userId)} is now the deputy.'
                 : 'Deputy role removed.'))));
@@ -638,7 +643,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? (next ? 'Organization verified ✓' : 'Verification removed')
-            : 'Could not update verification — try again.')));
+            : BackendApi.instance.errorOr('Could not update verification — try again.'))));
     if (res != null) await reload();
   }
 
@@ -949,6 +954,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('New department',
@@ -981,7 +987,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? 'Department "$name" created.'
-            : 'Could not create the department — try again.')));
+            : BackendApi.instance.errorOr('Could not create the department — try again.'))));
     if (res != null) _load();
   }
 
@@ -1004,10 +1010,12 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
 
   Future<void> _manageUnit(Map<String, dynamic> unit) async {
     final action = await showModalBottomSheet<String>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 6),
           ListTile(
@@ -1075,7 +1083,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? 'Lead appointed ✓'
-            : 'Could not appoint the lead — try again.')));
+            : BackendApi.instance.errorOr('Could not appoint the lead — try again.'))));
     if (res != null) _load();
   }
 
@@ -1083,6 +1091,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
     final sure = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Remove department?',
             style: TextStyle(fontWeight: FontWeight.w800)),
@@ -1111,7 +1120,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? 'Department removed.'
-            : 'Could not remove the department — try again.')));
+            : BackendApi.instance.errorOr('Could not remove the department — try again.'))));
     if (res != null) _load();
   }
 

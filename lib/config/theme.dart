@@ -221,6 +221,11 @@ class BookNestTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        // Responsive pop-ups: roomier on small phones (Flutter's default
+        // 40 px side gutters squeezed content), never a stretched slab on
+        // tablets / PC.
+        insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+        constraints: const BoxConstraints(minWidth: 280, maxWidth: 560),
         titleTextStyle: TextStyle(
             fontFamily: fontFamily, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -.3, color: onSurface),
         contentTextStyle: TextStyle(fontFamily: fontFamily, fontSize: 14.5, height: 1.45, color: muted),
@@ -233,6 +238,8 @@ class BookNestTheme {
         modalElevation: 0,
         dragHandleColor: muted.withValues(alpha: .5),
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        // Sheets stay phone-width and centred on big screens.
+        constraints: const BoxConstraints(maxWidth: 640),
       ),
       popupMenuTheme: PopupMenuThemeData(
         color: scheme.surfaceContainerHigh,

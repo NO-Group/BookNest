@@ -1130,6 +1130,7 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Delete this post?'),
         content: const Text(
             'It disappears for every reader, along with its comments, likes '
@@ -1804,6 +1805,7 @@ void _showEventDetails(BuildContext context, dynamic post) {
   showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
+      scrollable: true,
       backgroundColor: (Theme.of(dialogContext).brightness == Brightness.dark
               ? BookNestColors.darkChatBackground
               : Colors.white)

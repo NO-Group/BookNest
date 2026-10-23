@@ -271,6 +271,7 @@ Future<String?> askFormula(BuildContext context, {String initial = ''}) {
   return showDialog<String>(
     context: context,
     builder: (dialogContext) => AlertDialog(
+      scrollable: true,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Row(children: const [
         Icon(Icons.functions_rounded, color: BookNestColors.cyan, size: 20),
@@ -426,6 +427,22 @@ class MathAwareMarkdown extends StatelessWidget {
     );
   }
 }
+
+/// Fallback for anything the editor doesn't know (older/foreign content).
+/// Without it Quill throws and release builds paint the whole page grey.
+class UnknownEmbedBuilder extends EmbedBuilder {
+  const UnknownEmbedBuilder();
+
+  @override
+  String get key => '__unknown__';
+
+  @override
+  Widget build(BuildContext context, EmbedContext embedContext) {
+    return const SizedBox(height: 4);
+  }
+}
+
+const EmbedBuilder manuscriptUnknownEmbedBuilder = UnknownEmbedBuilder();
 
 /// Everything a manuscript needs, registered in one line.
 final List<EmbedBuilder> manuscriptEmbedBuilders = [

@@ -145,6 +145,7 @@ Future<void> _checkBroadcast() async {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: Row(children: [
           const Icon(Icons.campaign_rounded, color: BookNestColors.cyan),

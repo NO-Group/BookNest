@@ -21,6 +21,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/chapter_cache.dart';
 import '../../../services/home_widgets_service.dart';
 import '../../../services/supabase_service.dart';
+import '../../components/adaptive.dart';
 
 /// The BookNest Reader — a distraction-free, full-screen reading room for
 /// published chapters. Typography controls, tap-to-reveal chrome, a
@@ -786,9 +787,11 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   void _openTypography() {
     showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Container(
           margin: const EdgeInsets.all(12),
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
@@ -1174,6 +1177,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                                                       ink: pageText),
                                               embedBuilders:
                                                   manuscriptEmbedBuilders,
+                                              unknownEmbedBuilder: manuscriptUnknownEmbedBuilder,
                                               padding:
                                                   const EdgeInsets.fromLTRB(
                                                       24, 20, 24, 120),

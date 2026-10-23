@@ -14,6 +14,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/book_repository.dart';
 import '../../../services/supabase_service.dart';
 import '../../../state/book_providers.dart';
+import '../../components/adaptive.dart';
 
 /// Store-style book landing page. Reading opens the immersive Reader.
 /// The page's data lives in [bookDetailProvider] — this widget paints it.
@@ -88,9 +89,11 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
 
   void _showMoreMenu() {
     showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           ListTile(
             leading: const Icon(Icons.flag_rounded, color: BookNestColors.cyan),
@@ -113,9 +116,11 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
     AuthGuard.run(context, () {
       const reasons = ['Spam or scam', 'Hate or harassment', 'Copyright issue', 'Wrong category', 'Something else'];
       showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
         context: context,
         showDragHandle: true,
-        builder: (sheetContext) => SafeArea(
+        builder: (sheetContext) => SheetBody(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
@@ -345,6 +350,7 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(mode == 'remix'
             ? 'Write a remix of this book?'
             : 'Write the next part?'),
@@ -725,6 +731,7 @@ class _BoostButtonState extends State<_BoostButton> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(active ? 'Extend the boost?' : 'Boost this book?'),
         content: const Text(
             '20 gems put this book at the top of Discover for three days. '

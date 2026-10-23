@@ -15,6 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscure = true;
 
   Future<void> _signIn() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -82,7 +83,10 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
-            child: Column(
+            // A readable form on tablets / PC instead of a 1900 px field.
+            child: ConstrainedBox(
+             constraints: const BoxConstraints(maxWidth: 440),
+             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -106,9 +110,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     keyboardType: TextInputType.emailAddress),
                 const SizedBox(height: 16),
                 _buildTextField(
-                    controller: _passwordController,
-                    hintText: 'Password',
-                    obscureText: true),
+                  controller: _passwordController,
+                  hintText: 'Password',
+                  obscureText: _obscure,
+                  onSubmitted: (_) => _isLoading ? null : _signIn(),
+                  suffix: IconButton(
+                    tooltip: _obscure ? 'Show password' : 'Hide password',
+                    icon: Icon(
+                      _obscure
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: theme.hintColor,
+                      size: 20,
+                    ),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  ),
+                ),
                 const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
@@ -169,6 +186,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
               ],
+             ),
             ),
           ),
         ),
@@ -181,16 +199,22 @@ class _LoginScreenState extends State<LoginScreen> {
     required String hintText,
     bool obscureText = false,
     TextInputType keyboardType = TextInputType.text,
+    Widget? suffix,
+    ValueChanged<String>? onSubmitted,
   }) {
     final theme = Theme.of(context);
     return TextField(
       controller: controller,
       obscureText: obscureText,
       keyboardType: keyboardType,
+      textInputAction:
+          onSubmitted != null ? TextInputAction.done : TextInputAction.next,
+      onSubmitted: onSubmitted,
       style: TextStyle(color: theme.colorScheme.onSurface),
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: TextStyle(color: theme.hintColor),
+        suffixIcon: suffix,
         filled: true,
         fillColor: theme.colorScheme.surface,
         border: OutlineInputBorder(

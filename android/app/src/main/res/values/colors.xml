@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand launch colours: navy page, white logo tile (never black). -->
+    <color name="splash_background">#071A3D</color>
+    <color name="splash_icon_background">#FFFFFF</color>
+</resources>

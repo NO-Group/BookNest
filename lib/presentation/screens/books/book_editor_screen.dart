@@ -190,6 +190,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Remove this chapter?'),
         content: Text(
           '“${_chapters[index].title.text.trim().isNotEmpty ? _chapters[index].title.text.trim() : 'Chapter ${index + 1}'}” '
@@ -487,6 +488,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
         await showDialog<void>(
           context: context,
           builder: (dialogContext) => AlertDialog(
+            scrollable: true,
             title: const Text('Saved ✓'),
             content: Text(
                 '"$title" now carries every change — readers see it instantly.'),
@@ -536,6 +538,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
+          scrollable: true,
           title: Text(asDraft
               ? 'Draft saved 🌱'
               : (part > 1 ? 'Part $part is live 🎉' : 'Your book is live 🎉')),
@@ -896,6 +899,10 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
             config: quill.QuillEditorConfig(
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 40),
               placeholder: 'Once upon a time…',
+              // Pictures, dividers and formulas. Missing builders made
+              // Quill throw (grey screen) the moment a Divider was added.
+              embedBuilders: manuscriptEmbedBuilders,
+              unknownEmbedBuilder: manuscriptUnknownEmbedBuilder,
             ),
           ),
         ),

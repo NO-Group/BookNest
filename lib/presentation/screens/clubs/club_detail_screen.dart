@@ -137,9 +137,9 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
     if (!mounted) return;
     setState(() => _deciding.remove(bookId));
     if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content:
-              Text('Could not reach the moderation service — try again.')));
+              Text(BackendApi.instance.errorOr('Could not reach the moderation service — try again.'))));
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -362,7 +362,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
     setState(() => _potmBusy = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not set the club read — try again.'
+            ? BackendApi.instance.errorOr('Could not set the club read — try again.')
             : '"${book['title']}" is this month\'s read. 📖')));
     if (res != null) _load();
   }
@@ -377,8 +377,8 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
     if (!mounted) return;
     setState(() => _potmBusy = false);
     if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not clear it — try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(BackendApi.instance.errorOr('Could not clear it — try again.'))));
       return;
     }
     _load();
