@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.37.2+67 — 2026-10-23 · Accurate message for blocked PDFs
+
+- The document viewer's "file host refused" message no longer promises that
+  re-sending helps; it says PDF/ZIP delivery has to be allowed (see 2.37.1).
+
 ## 2.37.1+66 — 2026-10-23 · Chat documents stored raw; PDF delivery check
 
 - Documents sent in chat (PDF, ZIP, Office, SVG — everything that isn't a

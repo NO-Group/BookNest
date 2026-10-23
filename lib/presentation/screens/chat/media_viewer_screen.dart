@@ -135,9 +135,9 @@ Future<File> _downloadToCache(String url, void Function(int, int)? onProgress) a
     final res = await client.send(http.Request('GET', Uri.parse(url)));
     if (res.statusCode != 200) {
       throw res.statusCode == 401 || res.statusCode == 403
-          ? 'The file host refused this file (${res.statusCode}). Files sent '
-              'from BookNest 2.37 or newer always open; ask the sender to send '
-              'it again.'
+          ? 'The file host refused to deliver this file (${res.statusCode}). '
+              'PDF and ZIP files need to be allowed by the BookNest team — '
+              'please try again later.'
           : 'The file could not be loaded (${res.statusCode}).';
     }
     final total = res.contentLength ?? 0;
