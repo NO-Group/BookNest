@@ -6435,6 +6435,9 @@ async function handleRequest(req: Request): Promise<Response> {
           for (let i = 0; i < svc.length; i++) diff |= svc.charCodeAt(i) ^ bearer.charCodeAt(i);
           allowed = diff === 0;
         }
+        // Authoritative fallback: only a genuine service key may list users
+        // on the Auth admin endpoint (works with legacy and new API keys).
+        if (!allowed && bearer) allowed = await isServiceToken(bearer);
         if (!allowed) allowed = !!(await adminUserId(req));
         if (!allowed) return fail('Not allowed', 403);
         const dryRun = p.dryRun === true;
@@ -7247,4 +7250,20 @@ async function sweepCloudinary(dryRun: boolean, deadline: number) {
     }
   }
   return { configured: true, cloud, folders };
+}
+
+/** True when [token] is a Supabase service key (Auth admin accepts it). */
+async function isServiceToken(token: string): Promise<boolean> {
+  const base = Deno.env.get('SUPABASE_URL') ?? '';
+  if (!base || token.length < 20) return false;
+  try {
+    const r = await fetch(`${base}/auth/v1/admin/users?page=1&per_page=1`, {
+      headers: { apikey: token, Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8_000),
+    });
+    await r.body?.cancel();
+    return r.ok;
+  } catch {
+    return false;
+  }
 }
