@@ -1,4 +1,4 @@
-# Google Play readiness — 2026-10-23 09:06 UTC
+# Google Play readiness — 2026-10-23 09:34 UTC
 
 Build tools: `37.0.0` · APK 116M · AAB 97M
 
@@ -7,7 +7,7 @@ Build tools: `37.0.0` · APK 116M · AAB 97M
 | item | value | Play |
 |---|---|---|
 | package | `com.n_o_group.booknest` | |
-| version | 2.37.0 (65) | |
+| version | 2.37.1 (66) | |
 | minSdk | 24 | |
 | targetSdk | 36 | ✅ needs ≥ 35 |
 | push (Firebase config) | built in | ✅ |
