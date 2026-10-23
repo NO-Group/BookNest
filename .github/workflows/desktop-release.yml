@@ -23,7 +23,8 @@ on:
       - arena/01a03a7f-booknest
       - arena/01a106c8-booknest
     paths:
-      # The pipeline itself, or a version bump (= a new release).
+      # The pipeline itself, or a version bump (= a new release). Bump the
+      # version for UI changes so the PC build matches the phone builds.
       - '.github/workflows/desktop-release.yml'
       - 'pubspec.yaml'
       # Native PC files (icons, runners, installer).
