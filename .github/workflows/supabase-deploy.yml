@@ -26,7 +26,7 @@ on:
       - '.github/workflows/supabase-deploy.yml'
 
 permissions:
-  contents: write # commits ops/turn-setup.md (names and statuses only, never secrets)
+  contents: write # commits ops/turn-setup.md + ops/push-setup.md (names and statuses only, never secrets)
 
 env:
   # Public by design (it is in the app's Supabase URL).
@@ -158,6 +158,36 @@ jobs:
           cat $R; cat $R >> "$GITHUB_STEP_SUMMARY"
           git config user.email "booknest-ci@users.noreply.github.com"; git config user.name "booknest-ci"
           git add -f $R && git commit -q -m "TURN relay setup report [skip ci]" && \
+            for i in 1 2 3; do git pull -q --rebase --autostash origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break; sleep 5; done || true
+
+      - name: Push notifications (Firebase Cloud Messaging)
+        continue-on-error: true
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -uo pipefail
+          mkdir -p ops
+          R=ops/push-setup.md
+          echo "# Push (FCM) setup — $(date -u +%F' '%H:%M) UTC" > $R
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "- GitHub secret FIREBASE_SERVICE_ACCOUNT not set — push stays off (in-app alerts still work)." >> $R
+          else
+            pip install -q pyjwt cryptography >/dev/null 2>&1
+            OUT_JSON="$RUNNER_TEMP/sa.json" python3 tools/ops/firebase_check.py >> $R; RC=$?
+            if [ -s "$RUNNER_TEMP/sa.json" ]; then
+              PID="$(jq -r .project_id "$RUNNER_TEMP/sa.json")"
+              supabase secrets set --project-ref "$PROJECT_REF" \
+                FIREBASE_SERVICE_ACCOUNT="$(cat "$RUNNER_TEMP/sa.json")" FIREBASE_PROJECT_ID="$PID" >/dev/null \
+                && echo "- stored as server secrets FIREBASE_SERVICE_ACCOUNT + FIREBASE_PROJECT_ID ✅" >> $R \
+                || echo "- ❌ could not store the server secrets" >> $R
+              rm -f "$RUNNER_TEMP/sa.json"
+            fi
+            [ "$RC" = 0 ] || echo "- check exit code $RC (see above)" >> $R
+          fi
+          cat $R; cat $R >> "$GITHUB_STEP_SUMMARY"
+          git config user.email "booknest-ci@users.noreply.github.com"; git config user.name "booknest-ci"
+          git add -f $R && git commit -q -m "Push setup report [skip ci]" && \
             for i in 1 2 3; do git pull -q --rebase --autostash origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break; sleep 5; done || true
 
       - name: Deploy booknest-api

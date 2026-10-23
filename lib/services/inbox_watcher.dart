@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend_api.dart';
 import 'background_link.dart';
 import 'notification_service.dart';
 import 'punishment_gate.dart';
+import 'push_service.dart';
 import 'supabase_service.dart';
 
 /// Zero-external message notifications. While BookNest is alive — in hand
@@ -203,6 +205,11 @@ class InboxWatcher {
 
   void _notify(String conversationId,
       {required String title, required String body}) {
+    // With push active, alerts outside the app come from push (Android
+    // shows them even when the app is closed) — never both.
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    final onScreen = lifecycle == null || lifecycle == AppLifecycleState.resumed;
+    if (PushService.instance.active && !onScreen) return;
     // Deterministic id per conversation: follow-ups replace instead of
     // stacking a banner tower.
     NotificationService.instance.showInstant(

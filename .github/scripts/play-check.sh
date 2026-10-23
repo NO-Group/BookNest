@@ -32,6 +32,11 @@ echo "| package | \`$PKG\` | |"
 echo "| version | $VN ($VC) | |"
 echo "| minSdk | ${MSDK:-?} | |"
 echo "| targetSdk | ${TSDK:-?} | $(ok $([ "${TSDK:-0}" -ge 35 ] && echo 1 || echo 0)) needs ≥ 35 |"
+if "$AAPT2" dump resources "$APK" 2>/dev/null | grep -q 'string/google_app_id'; then
+  echo "| push (Firebase config) | built in | ✅ |"
+else
+  echo "| push (Firebase config) | not built in (no matching google-services.json) | ⚠️ |"
+fi
 echo
 
 echo "## Permissions"

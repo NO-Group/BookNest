@@ -58,3 +58,6 @@ backend/secrets.local.env
 supabase/.branches/
 supabase/.temp/
 supabase/.deno/
+
+# Firebase config is injected by CI from a secret
+android/app/google-services.json

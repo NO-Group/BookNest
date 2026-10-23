@@ -61,6 +61,16 @@
                 <data android:scheme="booknest"/>
             </intent-filter>
         </activity>
+        <!-- Push (FCM): data messages are shown by BookNestMessagingService
+             only while the app is not on screen (the in-app watcher
+             handles the foreground). -->
+        <service
+            android:name=".BookNestMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+            </intent-filter>
+        </service>
         <!-- flutter_foreground_task: the background-link service.
              Warning: do not change this service name. -->
         <service

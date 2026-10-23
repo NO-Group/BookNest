@@ -225,6 +225,11 @@ def main():
           ', '.join(sorted({re.sub(r'^(turns?):[^:]+:(\d+).*?(transport=(\w+))?$', r'\1 \2 \4', x['urls']) for x in turns}))[:200])
     if turns:
         turn_probe(turns)
+    # ── push notifications (server side: Firebase key works) ──
+    s, b, _ = api(a_tok, 'push.status')
+    d = b.get('data', {}) if s == 200 else {}
+    check('Push notifications ready on the server (Firebase)', bool(d.get('configured') and d.get('auth')),
+          f"HTTP {s}, configured={d.get('configured')}, google sign-in={d.get('auth')}, project={d.get('project')}")
     finish(users)
 
 

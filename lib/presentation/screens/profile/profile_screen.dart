@@ -8,6 +8,7 @@ import '../../../config/theme.dart';
 import '../../../config/app_config.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/cloudinary_service.dart';
+import '../../../services/push_service.dart';
 import '../../../services/supabase_service.dart';
 import '../../../services/profile_layout.dart';
 import '../../../services/reader_profile.dart';
@@ -341,6 +342,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _signOut() async {
+    // This phone stops receiving the account's pushes (needs the session).
+    await PushService.instance.tearDown();
     await SupabaseService().auth.signOut();
     if (!mounted) return;
     context.go('/login');

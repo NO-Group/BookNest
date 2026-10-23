@@ -396,6 +396,17 @@ async function firebaseAccessToken(): Promise<string | null> {
   }
 }
 
+/** Firebase project: FIREBASE_PROJECT_ID, else the service account's own. */
+function firebaseProjectId(): string {
+  const explicit = Deno.env.get('FIREBASE_PROJECT_ID') ?? '';
+  if (explicit) return explicit;
+  try {
+    return String(JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT') ?? '{}').project_id ?? '');
+  } catch (_) {
+    return '';
+  }
+}
+
 /** Sends an FCM push to every device of a reader (fire-and-forget). */
 async function sendPush(
   userId: string, title: string, body: string,
@@ -410,8 +421,7 @@ async function sendPush(
     await Promise.all(tokens.map(async (t) => {
       try {
         const res = await fetch(
-          'https://fcm.googleapis.com/v1/projects/' +
-          `${Deno.env.get('FIREBASE_PROJECT_ID') ?? ''}/messages:send`,
+          `https://fcm.googleapis.com/v1/projects/${firebaseProjectId()}/messages:send`,
           {
             method: 'POST',
             headers: {
@@ -419,11 +429,12 @@ async function sendPush(
               'content-type': 'application/json',
             },
             body: JSON.stringify({
+              // Data-only: the app decides what to show (nothing while
+              // it is on screen, one banner per conversation otherwise).
               message: {
                 token: String(t.token),
-                notification: { title, body },
-                data,
-                android: { priority: 'HIGH' },
+                data: { ...data, title, body, tag: data.route ?? data.kind ?? 'booknest' },
+                android: { priority: 'HIGH', ttl: '86400s' },
               },
             }),
           },
@@ -1549,7 +1560,7 @@ async function handleRequest(req: Request): Promise<Response> {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.28.0',
+          server: '2.29.0',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -6315,6 +6326,16 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       // ── FCM device tokens ──────────────────────────────────────────────
+      // Is push wired on the server? (no secrets in the answer)
+      case 'push.status': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const configured = Boolean(Deno.env.get('FIREBASE_SERVICE_ACCOUNT'));
+        const auth = configured ? (await firebaseAccessToken()) !== null : false;
+        const devices = await (await dbFor('users')).collection('push_tokens').countDocuments({ userId: uid });
+        return ok({ configured, auth, project: firebaseProjectId() || null, devices });
+      }
+
       case 'push.register': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
@@ -6884,6 +6905,7 @@ async function handleRequest(req: Request): Promise<Response> {
         await counts('messages', chats.collection('messages').deleteMany({ senderId: uid }));
         await counts('conversations', chats.collection('conversations').deleteMany({ memberIds: uid }));
         await counts('gem_ledger', users.collection('gem_ledger').deleteMany({ userId: uid }));
+        await counts('push_tokens', users.collection('push_tokens').deleteMany({ userId: uid }));
         await counts('blocks', moderation.collection('blocks').deleteMany({ $or: [{ userId: uid }, { blockedId: uid }] }));
         await counts('reports', moderation.collection('reports').deleteMany({ reporterId: uid }));
         // The profile row and the auth account itself.

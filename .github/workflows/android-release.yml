@@ -170,6 +170,28 @@ jobs:
             echo "No signing secrets — using the committed identity."
           fi
 
+      - name: Firebase config for push (google-services.json)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          # Only a file registered for THIS app id is used: the Google
+          # Services plugin fails the build when no client matches.
+          APP_ID="$(grep -oE 'applicationId = "[^"]+"' android/app/build.gradle.kts | cut -d'"' -f2)"
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+            echo "- push: GOOGLE_SERVICES_JSON secret not set — building without Firebase" | tee -a firebase-android.md
+            exit 0
+          fi
+          printf '%s' "$GOOGLE_SERVICES_JSON" > "$RUNNER_TEMP/gs.json"
+          PKGS="$(jq -r '[.client[]?.client_info.android_client_info.package_name] | join(", ")' "$RUNNER_TEMP/gs.json" 2>/dev/null)"
+          PROJ="$(jq -r '.project_info.project_id // "?"' "$RUNNER_TEMP/gs.json" 2>/dev/null)"
+          if jq -e --arg p "$APP_ID" '[.client[]?.client_info.android_client_info.package_name] | index($p)' "$RUNNER_TEMP/gs.json" >/dev/null 2>&1; then
+            cp "$RUNNER_TEMP/gs.json" android/app/google-services.json
+            echo "- push: google-services.json for \`$APP_ID\` (project \`$PROJ\`) ✅" | tee -a firebase-android.md
+          else
+            echo "- push: ❌ google-services.json (project \`$PROJ\`) has apps [${PKGS:-unreadable}] but not \`$APP_ID\` — building without Firebase. Add an Android app with package $APP_ID in Firebase and re-download the file." | tee -a firebase-android.md
+          fi
+          rm -f "$RUNNER_TEMP/gs.json"
+
       - name: Build release APK
         run: |
           set -o pipefail
@@ -197,6 +219,7 @@ jobs:
         run: |
           bash .github/scripts/play-check.sh build/app/outputs/flutter-apk/app-release.apk \
             build/app/outputs/bundle/release/app-release.aab > play-check.md || true
+          [ -f firebase-android.md ] && { echo; echo '## Push'; echo; cat firebase-android.md; } >> play-check.md
           cat play-check.md
           cat play-check.md >> "$GITHUB_STEP_SUMMARY"
           mkdir -p ops && cp play-check.md ops/play-check.md

@@ -61,7 +61,7 @@ ephemerally = no)
 | Files and docs → **Files and docs** (files sent in chats) | Optional | App functionality |
 | App activity → **App interactions** (books opened, likes, bookmarks, reading progress, streaks) | Required | App functionality, Personalization |
 | App activity → **Other user-generated content** (books, chapters, posts, comments, reviews) | Optional | App functionality |
-| Device or other IDs → **Device or other IDs** (notification token; tick once Firebase push is live) | Optional | App functionality |
+| Device or other IDs → **Device or other IDs** (Firebase notification token — **tick it**: push is live from 2.36.0) | Optional | App functionality |
 
 **Do not tick:**
 - Location (no location permission; country is typed by the user, see Other info).

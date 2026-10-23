@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.36.0+64 — 2026-10-23 · Push notifications, package com.n_o_group.booknest
+
+- **Android package is now `com.n_o_group.booknest`** — the same id as the
+  Play listing, Firebase and Drive chat backup. Because the id changed, this
+  APK installs as a separate app next to older direct-download copies
+  (`com.nogroup.booknest`): back up chats there (Settings → Chat backup),
+  sign in on the new app, restore, then uninstall the old one.
+- **Push notifications (Firebase Cloud Messaging).** New messages and club
+  messages reach the phone even when BookNest is closed. One banner per
+  conversation, tapping opens that chat; nothing is shown while BookNest is
+  on screen (the in-app banners cover that), so nothing appears twice.
+  Firebase runs natively on Android only — the PC build has no Firebase.
+- Sign-out and account deletion remove this phone's push token, so a
+  signed-out phone no longer receives the account's messages.
+- Server 2.29.0: data-only high-priority pushes, Firebase project read from
+  the service account, `push.status` health check, push tokens removed on
+  account deletion.
+- CI: `GOOGLE_SERVICES_JSON` is built in only when it holds the
+  `com.n_o_group.booknest` app (report in `ops/play-check.md` → Push);
+  `FIREBASE_SERVICE_ACCOUNT` is copied to the server and tested with a
+  real Google sign-in + FCM test send (`ops/push-setup.md`, no secrets).
+  The production smoke test now checks push too.
+- Play Console Data safety: tick **Device or other IDs** (notification token).
+
 ## 2.35.0+63 — 2026-10-22 · Faster screens, far less data
 
 - **Screens open instantly.** Lists you have seen are now kept on the device

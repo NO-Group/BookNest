@@ -858,6 +858,8 @@ class _SignOutButton extends StatelessWidget {
       ),
     );
     if (confirmed != true || !context.mounted) return;
+    // This phone stops receiving the account's pushes (needs the session).
+    await PushService.instance.tearDown();
     await SupabaseService().auth.signOut();
     if (!context.mounted) return;
     context.go('/login');
