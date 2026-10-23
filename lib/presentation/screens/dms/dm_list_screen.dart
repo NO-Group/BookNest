@@ -15,6 +15,8 @@ import '../../components/skeleton_kit.dart';
 import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 import '../../../state/chat_providers.dart';
+import '../../components/adaptive.dart';
+import 'dm_chat_screen.dart';
 
 /// Telegram-style conversation list.
 ///
@@ -197,16 +199,58 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
   Future<void> _pickContact() async {
     final directory = await _directory;
     if (!mounted) return;
-    await showModalBottomSheet<void>(
+    final peerId = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _ContactPickerSheet(contacts: directory ?? const <Map<String, dynamic>>[]),
     );
+    if (peerId != null && peerId.isNotEmpty && mounted) _open(peer: peerId);
+  }
+
+  // ── PC two-pane: the open chat lives beside the list ──
+  String? _openConv;
+  String? _openPeer;
+
+  void _open({String? conv, String? peer}) {
+    if (context.isExpanded) {
+      setState(() {
+        _openConv = conv;
+        _openPeer = peer;
+      });
+      return;
+    }
+    if (conv != null && conv.isNotEmpty) {
+      context.push('/chat/$conv?peer=${peer ?? ''}');
+    } else if (peer != null && peer.isNotEmpty) {
+      context.push('/chat/peer/$peer');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!context.isExpanded) return _buildList(context);
+    final theme = Theme.of(context);
+    final hasChat = (_openConv ?? '').isNotEmpty || (_openPeer ?? '').isNotEmpty;
+    return Row(
+      children: [
+        SizedBox(width: context.isWide ? 400 : 360, child: _buildList(context)),
+        VerticalDivider(width: 1, color: theme.dividerColor),
+        Expanded(
+          child: hasChat
+              ? DMChatScreen(
+                  key: ValueKey('${_openConv ?? ''}|${_openPeer ?? ''}'),
+                  conversationId: _openConv,
+                  peerId: _openPeer,
+                  embedded: true,
+                )
+              : const _NoChatSelected(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildList(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
 
@@ -346,7 +390,10 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
             _timeLabel(conversation['updatedAt']),
             style: TextStyle(color: theme.hintColor, fontSize: 12),
           ),
-          onTap: () => context.push('/chat/${conversation['id']}?peer=$peerId'),
+          selected: context.isExpanded &&
+              conversation['id']?.toString() == _openConv,
+          selectedTileColor: BookNestColors.cyan.withOpacity(.10),
+          onTap: () => _open(conv: conversation['id']?.toString(), peer: peerId),
         );
   }
 
@@ -425,7 +472,40 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
           : Text('@${person['username']}'),
       trailing: const Icon(Icons.chat_bubble_outline,
           size: 18, color: BookNestColors.cyan),
-      onTap: () => context.push('/chat/peer/${person['id']}'),
+      onTap: () => _open(peer: person['id']?.toString()),
+    );
+  }
+}
+
+/// Right pane of the PC Messages page before a chat is picked.
+class _NoChatSelected extends StatelessWidget {
+  const _NoChatSelected();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ChatCanvas(
+      child: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: BookNestColors.cyan.withOpacity(.10),
+            ),
+            child: const Icon(Icons.forum_rounded,
+                size: 44, color: BookNestColors.cyan),
+          ),
+          const SizedBox(height: 18),
+          Text('Pick a conversation',
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text('Your chats open here, right beside the list.',
+              style: TextStyle(color: theme.hintColor)),
+        ]),
+      ),
     );
   }
 }
@@ -580,8 +660,8 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                           subtitle: person['username'] == null
                               ? null
                               : Text('@${person['username']}'),
-                          onTap: () =>
-                              context.push('/chat/peer/${person['id']}'),
+                          onTap: () => Navigator.pop(
+                              context, person['id']?.toString()),
                         );
                       },
                     );

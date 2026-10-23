@@ -30,7 +30,12 @@ class DMChatScreen extends ConsumerStatefulWidget {
   final String? conversationId;
   final String? peerId;
 
-  const DMChatScreen({super.key, this.conversationId, this.peerId});
+  /// Shown inside the PC two-pane Messages page (no back arrow; the list
+  /// stays beside it).
+  final bool embedded;
+
+  const DMChatScreen(
+      {super.key, this.conversationId, this.peerId, this.embedded = false});
 
   @override
   ConsumerState<DMChatScreen> createState() => _DMChatScreenState();
@@ -328,8 +333,12 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
     return Scaffold(
       appBar: AppBar(
         elevation: 0,
-        leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
+        automaticallyImplyLeading: !widget.embedded,
+        leading: widget.embedded
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: context.pop),
         // Phones: everything folds into ⋮ (the header was crowded with
         // five icons). Tablets / PC: plain icons.
         actions: adaptiveActions(context, [
@@ -378,7 +387,7 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
                 : () => context.push('/user/${widget.peerId}'),
           ),
         ]),
-        titleSpacing: 0,
+        titleSpacing: widget.embedded ? 16 : 0,
         title: InkWell(
           borderRadius: BorderRadius.circular(10),
           onTap: widget.peerId == null || widget.peerId!.isEmpty

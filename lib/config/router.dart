@@ -74,6 +74,7 @@ import '../presentation/screens/discover/organization_detail_screen.dart';
 import '../presentation/screens/discover/school_detail_screen.dart';
 import '../services/backend_api.dart';
 import '../services/supabase_service.dart';
+import '../presentation/components/desktop_frame.dart';
 
 /// Routes that must never be reached while signed out.
 ///
@@ -139,10 +140,45 @@ String? _redirect(BuildContext context, GoRouterState state) {
 /// Root navigator key — used by system-level overlays (calls).
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
+/// Full-screen pages that never get the PC sidebar.
+const Set<String> _unframed = {
+  '/splash',
+  '/login',
+  '/register',
+  '/onboarding',
+  '/profile-setup',
+  '/reader',
+};
+
+/// Puts every signed-in page inside [DesktopFrame] (sidebar on PC, rail on
+/// tablets, nothing on phones) so the navigation stays put while books,
+/// clubs, chats and settings open — instead of a stretched phone screen.
+List<RouteBase> _withFrame(List<RouteBase> all) {
+  final top = <RouteBase>[];
+  final framed = <RouteBase>[];
+  for (final route in all) {
+    if (route is GoRoute && _unframed.contains(route.path)) {
+      top.add(route);
+    } else {
+      framed.add(route);
+    }
+  }
+  return [
+    ...top,
+    ShellRoute(
+      builder: (context, state, child) =>
+          DesktopFrame(location: state.uri.path, child: child),
+      routes: framed,
+    ),
+  ];
+}
+
 final GoRouter appRouter = GoRouter(
+  // Attached so app-wide pop-ups (announcements, calls) can find a context.
+  navigatorKey: rootNavigatorKey,
   initialLocation: '/splash',
   redirect: _redirect,
-  routes: [
+  routes: _withFrame([
     GoRoute(
       path: '/splash',
       builder: (context, state) => const SplashScreen(),
@@ -499,5 +535,5 @@ final GoRouter appRouter = GoRouter(
         ),
       ],
     ),
-  ],
+  ]),
 );

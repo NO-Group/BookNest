@@ -17,6 +17,7 @@ import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 import '../../components/skeleton_kit.dart';
 import '../../components/report_sheet.dart';
+import 'feed_side_panel.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
@@ -161,8 +162,8 @@ class _FeedScreenState extends State<FeedScreen>
     }
   }
 
-  Future<void> _onPostTypeTap(_PostType type) async {
-    _toggleStylus();
+  Future<void> _onPostTypeTap(_PostType type, {bool toggle = true}) async {
+    if (toggle) _toggleStylus();
     switch (type.label) {
       case 'Quote':
         await context.push('/create/quote');
@@ -185,12 +186,132 @@ class _FeedScreenState extends State<FeedScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Main content
-          SafeArea(
-            child: Column(
+    return LayoutBuilder(builder: (context, box) {
+      // PC: posts in a centred column + a side panel (create, trending
+      // books, shortcuts). Phones keep the single column + stylus button.
+      final panel = box.maxWidth >= 1000;
+      final column = box.maxWidth > 760
+          ? Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: _feedColumn(context),
+              ),
+            )
+          : _feedColumn(context);
+      return Scaffold(
+        body: Stack(
+          children: [
+            SafeArea(
+              child: panel
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: column),
+                        SizedBox(
+                          width: box.maxWidth >= 1300 ? 360 : 320,
+                          child: FeedSidePanel(
+                            postTypes: [
+                              for (final t in _postTypes)
+                                FeedCreateType(t.label, t.icon, t.color),
+                            ],
+                            onCreate: (label) => _onPostTypeTap(
+                                _postTypes.firstWhere((t) => t.label == label),
+                                toggle: false),
+                          ),
+                        ),
+                      ],
+                    )
+                  : column,
+            ),
+            if (!panel)
+              // Stylus FAB with vertical stack (phones / narrow windows)
+              Positioned(
+              right: 20,
+              bottom: 100,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // Post type buttons (vertical stack above stylus)
+                  AnimatedOpacity(
+                    opacity: _isStylusOpen ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutBack,
+                      height: _isStylusOpen
+                          ? min(_postTypes.length * 64.0,
+                              MediaQuery.sizeOf(context).height * .38)
+                          : 0,
+                      child: SingleChildScrollView(
+                        physics: _isStylusOpen
+                            ? const ClampingScrollPhysics()
+                            : const NeverScrollableScrollPhysics(),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: _postTypes.map((type) {
+                            return _buildPostTypeButton(type);
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Main stylus button
+                  GestureDetector(
+                    onTap: _toggleStylus,
+                    child: AnimatedBuilder(
+                      animation: _stylusRotation,
+                      builder: (context, child) {
+                        return Transform.rotate(
+                          angle: _stylusRotation.value * 3.14159,
+                          child: Container(
+                            width: 58,
+                            height: 58,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [BookNestColors.cyanSoft, BookNestColors.cyan],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: BookNestColors.navyDeep.withOpacity(.25),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: BookNestColors.cyan.withOpacity(0.35),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: SvgPicture.asset(
+                                'assets/logo/stylus_polished.svg',
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _feedColumn(BuildContext context) {
+    return Column(
               children: [
                 // Header
                 Padding(
@@ -296,91 +417,7 @@ class _FeedScreenState extends State<FeedScreen>
                             ),
                 ),
               ],
-            ),
-          ),
-
-          // Stylus FAB with vertical stack
-          Positioned(
-            right: 20,
-            bottom: 100,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Post type buttons (vertical stack above stylus)
-                AnimatedOpacity(
-                  opacity: _isStylusOpen ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOutBack,
-                    height: _isStylusOpen
-                        ? min(_postTypes.length * 64.0,
-                            MediaQuery.sizeOf(context).height * .38)
-                        : 0,
-                    child: SingleChildScrollView(
-                      physics: _isStylusOpen
-                          ? const ClampingScrollPhysics()
-                          : const NeverScrollableScrollPhysics(),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: _postTypes.map((type) {
-                          return _buildPostTypeButton(type);
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Main stylus button
-                GestureDetector(
-                  onTap: _toggleStylus,
-                  child: AnimatedBuilder(
-                    animation: _stylusRotation,
-                    builder: (context, child) {
-                      return Transform.rotate(
-                        angle: _stylusRotation.value * 3.14159,
-                        child: Container(
-                          width: 58,
-                          height: 58,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [BookNestColors.cyanSoft, BookNestColors.cyan],
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: BookNestColors.navyDeep.withOpacity(.25),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: BookNestColors.cyan.withOpacity(0.35),
-                                blurRadius: 18,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: SvgPicture.asset(
-                              'assets/logo/stylus_polished.svg',
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+            );
   }
 
   Widget _buildPostTypeButton(_PostType type) {
