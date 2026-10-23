@@ -29,7 +29,7 @@ const expectations = <String, List<String>>{
   'legacy.doc': ['I am a test document', 'This is page two', 'It’s also in blue'],
   'legacy-table.doc': ['Word 97', '| Cell 1,1 | Cell 1,2 | Cell 1,3', 'Cell 2,3', 'This text is below the table.'],
   'legacy.xls': ['First Sheet', 'Test spreadsheet', '2nd row 2nd column', 'Sheet Number 2', 'cb=sum', '13'],
-  'legacy.ppt': ['Slides', 'This is a test title', 'This is on page 1'],
+  'legacy.ppt': ['Slides', 'This is a test title', 'This is on page 1', 'This is the title on page 2', '!page: Slide 3', '!formattingT'],
 };
 
 const kinds = <String, String>{
@@ -99,7 +99,11 @@ void main(List<String> args) {
     }
     final missing = <String>[];
     for (final want in expectations[name] ?? const <String>[]) {
-      if (!out.contains(want)) missing.add(want);
+      if (want.startsWith('!')) {
+        if (out.contains(want.substring(1))) missing.add('NOT ${want.substring(1)}');
+      } else if (!out.contains(want)) {
+        missing.add(want);
+      }
     }
     final wantKind = kinds[name];
     if (wantKind != null && wantKind != kind) missing.add('kind=$wantKind (got $kind)');

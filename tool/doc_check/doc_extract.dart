@@ -571,7 +571,8 @@ Uint8List _bytesOf(ArchiveFile f) {
 Archive? _openArchive(Uint8List b, String ext) {
   if (b.length >= 2 && b[0] == 0x50 && b[1] == 0x4B) return ZipDecoder().decodeBytes(b);
   if (b.length >= 2 && b[0] == 0x1F && b[1] == 0x8B) {
-    final inner = Uint8List.fromList(GZipDecoder().decodeBytes(b) as List<int>);
+    final List<int> inner0 = GZipDecoder().decodeBytes(b);
+    final inner = Uint8List.fromList(inner0);
     if (inner.length > 262 && String.fromCharCodes(inner.sublist(257, 262)) == 'ustar') {
       return TarDecoder().decodeBytes(inner);
     }
@@ -686,7 +687,8 @@ ExtractedDoc _archiveListing(Archive a, String format) {
 }
 
 ExtractedDoc _fromGzip(Uint8List b, String ext) {
-  final inner = Uint8List.fromList(GZipDecoder().decodeBytes(b) as List<int>);
+  final List<int> inner0 = GZipDecoder().decodeBytes(b);
+  final inner = Uint8List.fromList(inner0);
   if (inner.length > 262 && String.fromCharCodes(inner.sublist(257, 262)) == 'ustar') {
     return _archiveListing(TarDecoder().decodeBytes(inner), 'Archive (.tar.gz)');
   }
@@ -1244,7 +1246,7 @@ ExtractedDoc _odf(_Zip z, String mimetype, String ext) {
   var rowRepeat = 1, cellRepeat = 1;
   String pageTitle = '';
   final grid = <int, Map<int, String>>{};
-  var gridRow = 0, gridCol = 0;
+  var gridRow = 0;
 
   bool styled(Set<String> set) => spanStack.any(set.contains);
 
@@ -1385,7 +1387,6 @@ ExtractedDoc _odf(_Zip z, String mimetype, String ext) {
         if (tableDepth == 1) {
           if (start) {
             row = [];
-            gridCol = 0;
             rowRepeat = (int.tryParse(t.attr('number-rows-repeated') ?? '1') ?? 1);
             if (t.selfClose) {
               gridRow += rowRepeat;
@@ -1436,7 +1437,6 @@ ExtractedDoc _odf(_Zip z, String mimetype, String ext) {
             }
             cell = null;
           }
-          gridCol++;
         }
         break;
     }
@@ -2525,7 +2525,51 @@ ExtractedDoc _ppt(_Cfb c) {
     }
   }
 
-  walk(0, d.length, inSlideList: false);
+  // Incremental saves leave old copies of the document behind: follow the
+  // edit chain (Current User → UserEditAtom → persist directory) to the
+  // live Document container; fall back to the last one in the stream.
+  int? docAt;
+  try {
+    final cu = c.stream('Current User');
+    if (cu != null && cu.length >= 20) {
+      var edit = cu[16] | (cu[17] << 8) | (cu[18] << 16) | (cu[19] << 24);
+      final persist = <int, int>{};
+      int? docRef;
+      for (var guard = 0; guard < 200 && edit + 28 <= d.length; guard++) {
+        final ue = edit + 8;
+        docRef ??= u32(ue + 16);
+        final lastEdit = u32(ue + 8), dirAt = u32(ue + 12);
+        if (dirAt + 8 > d.length) break;
+        final end = dirAt + 8 + u32(dirAt + 4);
+        var q = dirAt + 8;
+        while (q + 4 <= end && q + 4 <= d.length) {
+          final v = u32(q);
+          q += 4;
+          final first = v & 0xFFFFF, count = v >> 20;
+          for (var k = 0; k < count && q + 4 <= d.length; k++, q += 4) {
+            persist.putIfAbsent(first + k, () => u32(q));
+          }
+        }
+        if (lastEdit == 0 || lastEdit == edit) break;
+        edit = lastEdit;
+      }
+      final at = docRef == null ? null : persist[docRef];
+      if (at != null && at + 8 <= d.length && u16(at + 2) == 0x03E8) docAt = at;
+    }
+  } catch (_) {}
+  if (docAt == null) {
+    var p = 0;
+    while (p + 8 <= d.length) {
+      if (u16(p + 2) == 0x03E8) docAt = p;
+      p += 8 + u32(p + 4);
+    }
+  }
+  if (docAt != null) {
+    final end = docAt + 8 + u32(docAt + 4);
+    walk(docAt, end > d.length ? d.length : end, inSlideList: false);
+  } else {
+    walk(0, d.length, inSlideList: false);
+  }
   final pages = <DocPage>[
     for (var i = 0; i < slides.length; i++) DocPage('Slide ${i + 1}', slides[i]),
   ];
