@@ -14,6 +14,7 @@ Nothing here prints tokens or passwords.
 """
 from __future__ import annotations
 
+import base64
 import gzip
 import json
 import os
@@ -276,6 +277,33 @@ def main():
     d = b.get('data', {}) if s == 200 else {}
     check('Push notifications ready on the server (Firebase)', bool(d.get('configured') and d.get('auth')),
           f"HTTP {s}, configured={d.get('configured')}, google sign-in={d.get('auth')}, project={d.get('project')}")
+    # ── text chat backup (sealed blob in MongoDB; media goes to Google Drive) ──
+    try:
+        blob = base64.b64encode(b'BNBK' + bytes([2]) + secrets.token_bytes(3000)).decode()
+        s, b, _ = api(a_tok, 'backup.put', {'blob': blob})
+        put_ok = s == 200 and bool(b.get('data', {}).get('saved'))
+        s2, b2, _ = api(a_tok, 'backup.get')
+        same = s2 == 200 and b2.get('data', {}).get('blob') == blob
+        api(a_tok, 'backup.delete')
+        s3, b3, _ = api(a_tok, 'backup.status')
+        gone = s3 == 200 and not b3.get('data', {}).get('exists')
+        check('Text chat backup: save, restore, delete', put_ok and same and gone,
+              f"put HTTP {s} {b.get('error') or ''}, restore identical={same}, deleted={gone}")
+    except Exception as e:
+        check('Text chat backup: save, restore, delete', False, str(e)[:200])
+    # ── profile cover photo (profiles.cover_url) ──
+    try:
+        url = 'https://res.cloudinary.com/deqdmwlt7/image/upload/booknest/profile_covers/smoke.jpg'
+        s, b, _ = http('PATCH', f'{SUPA}/rest/v1/profiles?id=eq.{a_id}', {'cover_url': url},
+                       {'apikey': ANON, 'Authorization': f'Bearer {a_tok}', 'Prefer': 'return=representation'})
+        s2, b2, _ = http('GET', f'{SUPA}/rest/v1/profiles?id=eq.{a_id}&select=cover_url', None,
+                         {'apikey': ANON, 'Authorization': f'Bearer {b_tok}'})
+        rows = b2 if isinstance(b2, list) else []
+        seen = bool(rows) and rows[0].get('cover_url') == url
+        check('Profile cover photo saves and others see it', s in (200, 204) and seen,
+              f'save HTTP {s}, visible to another reader={seen} {str(b)[:120] if s >= 300 else ""}')
+    except Exception as e:
+        check('Profile cover photo saves and others see it', False, str(e)[:200])
     # ── chat files open in the in-app viewer (Cloudinary delivers PDFs/documents) ──
     pdf, docx = tiny_files()
     for fname, blob, mime in (('smoke.pdf', pdf, 'application/pdf'),
