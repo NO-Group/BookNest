@@ -137,6 +137,51 @@ def turn_probe(servers: list[dict]):
         check(f'TURN relay carries traffic ({label})', good, str(detail)[:220])
 
 
+def cloudinary_roundtrip(name: str, data: bytes, mime: str):
+    """Uploads like the app's chat 'Send a file' (unsigned, auto) and downloads
+    it back the way the in-app document viewer does. Free Cloudinary accounts
+    can block PDF/ZIP delivery (HTTP 401) — this proves they open."""
+    cloud = os.environ.get('CLOUDINARY_CLOUD_NAME') or 'deqdmwlt7'
+    preset = os.environ.get('CLOUDINARY_UPLOAD_PRESET') or 'BookNest'
+    boundary = '----bn' + secrets.token_hex(8)
+    parts = []
+    for k, v in (('upload_preset', preset), ('folder', 'booknest/files/smoke')):
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\n'
+                 f'Content-Type: {mime}\r\n\r\n'.encode() + data + b'\r\n')
+    parts.append(f'--{boundary}--\r\n'.encode())
+    req = urllib.request.Request(f'https://api.cloudinary.com/v1_1/{cloud}/auto/upload', data=b''.join(parts),
+                                 method='POST', headers={'Content-Type': f'multipart/form-data; boundary={boundary}'})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            url = json.loads(r.read().decode()).get('secure_url', '')
+    except urllib.error.HTTPError as e:
+        return False, f"upload HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:160]}"
+    except Exception as e:  # noqa: BLE001
+        return False, f'upload failed: {e}'[:200]
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'BookNest'}), timeout=60) as r:
+            got = r.read()
+        return got == data, f'{url.split("/upload/")[-1][:70]} → {len(got)} bytes' + ('' if got == data else ' (content differs)')
+    except urllib.error.HTTPError as e:
+        return False, (f'download HTTP {e.code} — enable "Allow delivery of PDF and ZIP files" in Cloudinary '
+                       'Settings → Security' if e.code in (401, 403) else f'download HTTP {e.code}')
+    except Exception as e:  # noqa: BLE001
+        return False, f'download failed: {e}'[:200]
+
+
+def tiny_files():
+    import io
+    import zipfile
+    pdf = (b'%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n'
+           b'3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        z.writestr('[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>')
+        z.writestr('word/document.xml', '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>BookNest smoke</w:t></w:r></w:p></w:body></w:document>')
+    return pdf, buf.getvalue()
+
+
 def main():
     note(f"# Production smoke test — {time.strftime('%Y-%m-%d %H:%M', time.gmtime())} UTC")
     note('')
@@ -230,6 +275,12 @@ def main():
     d = b.get('data', {}) if s == 200 else {}
     check('Push notifications ready on the server (Firebase)', bool(d.get('configured') and d.get('auth')),
           f"HTTP {s}, configured={d.get('configured')}, google sign-in={d.get('auth')}, project={d.get('project')}")
+    # ── chat files open in the in-app viewer (Cloudinary delivers PDFs/documents) ──
+    pdf, docx = tiny_files()
+    for fname, blob, mime in (('smoke.pdf', pdf, 'application/pdf'),
+                              ('smoke.docx', docx, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')):
+        ok, detail = cloudinary_roundtrip(fname, blob, mime)
+        check(f'Chat file opens: {fname}', ok, detail)
     finish(users)
 
 

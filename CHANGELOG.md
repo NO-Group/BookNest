@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.37.0+65 — 2026-10-23 · Chat media plays and opens inside BookNest
+
+- **Videos play in a real video player.** Videos sent as files (mp4, mov,
+  mkv, webm, 3gp, avi …) now show as a playable video in the chat bubble
+  instead of a file name, and they start playing right away (streamed, no
+  waiting for a full download). The PC app plays them too (Windows Media
+  Foundation).
+- **Voice notes and audio files play inline.** Tap play in the bubble: no
+  full-screen page. Tap anywhere on the waveform to jump; speed 1×/1.5×/2×.
+  Songs and recordings sent as files get the same player, with their title.
+- **Every document opens in the BookNest document viewer.** It works on
+  any extension: PDF; Word (.docx, .doc 97-2003, .odt, .rtf); Excel (.xlsx,
+  .xls, .ods, .csv/.tsv shown as a real grid with column letters and long-press
+  to copy a cell); PowerPoint (.pptx, .ppt, .odp, slide by slide); e-books
+  (.epub, .fb2); web pages, Markdown, code and logs; Outlook .msg and .eml
+  e-mails; SVG and images; ZIP/JAR/APK-style archives (browse and open files
+  inside). Unknown types are sniffed by content, so a mislabelled file still
+  opens. Headings, bold/italic, lists, tables and pictures are kept; adjustable
+  text size; page picker for long files.
+- Save / share button on every opened file.
+- Chat list previews say 🎬 Video, 🎵 Audio or 📷 Photo for media sent as files.
+- Production smoke test now proves chat PDFs and documents download from
+  Cloudinary (free accounts can block PDF/ZIP delivery).
+- CI: `Document viewer check` opens 24 real sample files in every format
+  on each change to the reader (`ops/doc-viewer-check.md`).
+
 ## 2.36.0+64 — 2026-10-23 · Push notifications, package com.n_o_group.booknest
 
 - **Android package is now `com.n_o_group.booknest`** — the same id as the

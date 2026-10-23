@@ -1,7 +1,7 @@
 name: booknest
 description: BookNest by N.O Group - The Digital Library Ecosystem for Bookworms
 publish_to: 'none'
-version: 2.36.0+64
+version: 2.37.0+65
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -36,6 +36,11 @@ dependencies:
   camera: ^0.12.1
   audioplayers: ^6.8.1
   pdfx: ^2.11.0
+  # Document viewer: zip-based formats (docx/xlsx/pptx/odt/epub) and archives.
+  archive: ">=3.6.1 <5.0.0"
+  # Windows implementation of video_player (Media Foundation): chat videos
+  # play in the PC app too.
+  video_player_win: ^3.1.0
   speech_to_text: ^7.4.0
   record: ^7.1.1
   # WhatsApp-style chat storage: encrypted local store + Google Drive backup.

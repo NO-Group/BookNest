@@ -302,6 +302,22 @@ class _ChatBubbleState extends State<ChatBubble>
       _deletedForEveryone ? 'deleted' : (widget.message['type']?.toString() ?? 'text');
   String get _text => widget.message['text']?.toString() ?? '';
   String get _mediaUrl => widget.message['mediaUrl']?.toString() ?? '';
+  String get _fileName {
+    final n = widget.message['fileName']?.toString() ?? '';
+    return n.isNotEmpty ? n : _text;
+  }
+
+  /// A "file" that is really a video, song or picture plays/shows right in
+  /// the bubble instead of appearing as a file name: 'video', 'audio',
+  /// 'image' or '' for real documents.
+  String get _fileMediaKind {
+    if (_type != 'file' || !_mediaUrl.startsWith('http')) return '';
+    final item = MediaItem(url: _mediaUrl, name: _fileName);
+    if (item.isVideo) return 'video';
+    if (item.isAudio) return 'audio';
+    if (item.isImage) return 'image';
+    return '';
+  }
   bool get _isMine => widget.mine;
 
   /// The blue ticks. True only when someone OTHER than the sender has
@@ -586,6 +602,19 @@ class _ChatBubbleState extends State<ChatBubble>
         _mediaUrl.startsWith('http') &&
         !_deletedForEveryone) {
       content = _ImageContent(url: _mediaUrl, onTap: widget.onOpenImage);
+    } else if (_fileMediaKind.isNotEmpty && !_deletedForEveryone) {
+      final kind = _fileMediaKind;
+      content = kind == 'video'
+          ? _VideoContent(url: _mediaUrl, dark: dark, onOpen: widget.onOpenFile)
+          : kind == 'audio'
+              ? _VoiceContent(
+                  url: _mediaUrl,
+                  durationLabel: '',
+                  dark: dark,
+                  mine: mine,
+                  title: _fileName,
+                )
+              : _ImageContent(url: _mediaUrl, onTap: widget.onOpenFile);
     } else if (_type == 'file' &&
         _mediaUrl.startsWith('http') &&
         !_deletedForEveryone) {
@@ -628,9 +657,12 @@ class _ChatBubbleState extends State<ChatBubble>
         left: mine ? 48 : 0,
         right: mine ? 0 : 48,
       ),
-      padding: (_type == 'book_share' || _type == 'file')
+      padding: (_type == 'book_share' || (_type == 'file' && _fileMediaKind.isEmpty))
           ? const EdgeInsets.all(10)
-          : (_type == 'image' || _type == 'video'
+          : (_type == 'image' ||
+                  _type == 'video' ||
+                  _fileMediaKind == 'video' ||
+                  _fileMediaKind == 'image'
               ? const EdgeInsets.all(4)
               : const EdgeInsets.fromLTRB(13, 8, 13, 6)),
       constraints:
@@ -1494,12 +1526,16 @@ class _VoiceContent extends StatefulWidget {
     required this.durationLabel,
     required this.dark,
     required this.mine,
+    this.title,
   });
 
   final String url;
   final String durationLabel;
   final bool dark;
   final bool mine;
+
+  /// Shown above the waveform for audio files (songs, recordings).
+  final String? title;
 
   @override
   State<_VoiceContent> createState() => _VoiceContentState();
@@ -1619,13 +1655,30 @@ class _VoiceContentState extends State<_VoiceContent> {
     final progress =
         total > Duration.zero ? played / total.inMilliseconds : 0.0;
     final onMySide = widget.mine;
+    // Received bubbles are white in light mode — draw in navy there.
+    final fg = onMySide || widget.dark ? Colors.white : BookNestColors.navyDeep;
     final tint = onMySide ? Colors.white : BookNestColors.cyan;
+    final title = widget.title?.trim() ?? '';
     return Container(
       width: 248,
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (title.isNotEmpty) ...[
+            Row(children: [
+              Icon(Icons.audiotrack_rounded, size: 14, color: tint),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
+              ),
+            ]),
+            const SizedBox(height: 6),
+          ],
           Row(children: [
             GestureDetector(
               onTap: _loading ? null : _toggle,
@@ -1638,60 +1691,64 @@ class _VoiceContentState extends State<_VoiceContent> {
                   border: Border.all(color: tint.withOpacity(.5)),
                 ),
                 child: _loading
-                    ? const Padding(
-                        padding: EdgeInsets.all(10),
+                    ? Padding(
+                        padding: const EdgeInsets.all(10),
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white70),
+                            strokeWidth: 2, color: fg.withOpacity(.7)),
                       )
                     : Icon(
                         _playing
                             ? Icons.pause_rounded
                             : Icons.play_arrow_rounded,
                         size: 22,
-                        color: Colors.white,
+                        color: fg,
                       ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: (details) async {
-                  if (total <= Duration.zero) return;
-                  final box = context.findRenderObject() as RenderBox;
-                  final ratio =
-                      (details.localPosition.dx / box.size.width)
-                          .clamp(0.0, 1.0);
-                  try {
-                    await _player
-                        .seek(Duration(milliseconds: (ratio * total.inMilliseconds).round()));
-                    setState(() =>
-                        _position = Duration(milliseconds: (ratio * total.inMilliseconds).round()));
-                  } catch (_) {}
-                },
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Waveform: fixed bars, filled by progress.
-                    SizedBox(
-                      height: 26,
-                      child: CustomPaint(
-                        size: const Size(double.infinity, 26),
-                        painter: _VoiceWavePainter(
-                          progress: progress,
-                          played: Colors.white,
-                          rest: Colors.white.withOpacity(.38),
+              child: LayoutBuilder(
+                builder: (context, box) => GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (details) async {
+                    // Not loaded yet: a tap on the wave starts playing.
+                    if (!_ready) {
+                      if (!_loading && !_playing) await _toggle();
+                      return;
+                    }
+                    if (total <= Duration.zero || box.maxWidth <= 0) return;
+                    final ratio =
+                        (details.localPosition.dx / box.maxWidth).clamp(0.0, 1.0);
+                    final to = Duration(
+                        milliseconds: (ratio * total.inMilliseconds).round());
+                    try {
+                      await _player.seek(to);
+                      if (mounted) setState(() => _position = to);
+                    } catch (_) {}
+                  },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Waveform: fixed bars, filled by progress.
+                      SizedBox(
+                        height: 26,
+                        child: CustomPaint(
+                          size: const Size(double.infinity, 26),
+                          painter: _VoiceWavePainter(
+                            progress: progress,
+                            played: onMySide ? Colors.white : BookNestColors.cyan,
+                            rest: fg.withOpacity(.32),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${_clock(_playing || _position > Duration.zero ? _position : Duration.zero)}'
-                      ' · ${_clock(total)}',
-                      style: TextStyle(
-                          fontSize: 10.5, color: Colors.white.withOpacity(.75)),
-                    ),
-                  ],
+                      const SizedBox(height: 3),
+                      Text(
+                        '${_clock(_playing || _position > Duration.zero ? _position : Duration.zero)}'
+                        ' · ${total > Duration.zero ? _clock(total) : '--:--'}',
+                        style: TextStyle(fontSize: 10.5, color: fg.withOpacity(.75)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1703,14 +1760,14 @@ class _VoiceContentState extends State<_VoiceContent> {
                     const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  color: Colors.white.withOpacity(.14),
+                  color: fg.withOpacity(.12),
                 ),
                 child: Text(
                   '${_speeds[_speedIndex].toStringAsFixed(_speeds[_speedIndex] == 2.0 ? 0 : 1)}×',
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
-                      color: Colors.white),
+                      color: fg),
                 ),
               ),
             ),
@@ -1718,8 +1775,7 @@ class _VoiceContentState extends State<_VoiceContent> {
           if (_error != null) ...[
             const SizedBox(height: 4),
             Text(_error!,
-                style: TextStyle(
-                    fontSize: 10.5, color: Colors.white.withOpacity(.7))),
+                style: TextStyle(fontSize: 10.5, color: fg.withOpacity(.7))),
           ],
         ],
       ),

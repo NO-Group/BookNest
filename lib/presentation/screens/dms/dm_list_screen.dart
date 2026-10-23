@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../components/chat_kit.dart';
+import '../../../services/doc_extract.dart';
 import '../../../services/chat_store.dart';
 import '../../../services/chat_backup_service.dart';
 import '../../components/booknest_ui.dart';
@@ -167,7 +168,16 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
     if (type == 'book_share') return '$prefix📖 $text';
     if (type == 'image') return '${prefix}📷 Photo';
     if (type == 'voice') return '${prefix}🎙 Voice note';
-    if (type == 'file') return '${prefix}📎 Attachment';
+    if (type == 'video') return '${prefix}🎬 Video';
+    if (type == 'file') {
+      final name = (last['fileName'] ?? text).toString();
+      final dot = name.lastIndexOf('.');
+      final ext = dot < 0 ? '' : name.substring(dot + 1);
+      if (isVideoExtension(ext)) return '${prefix}🎬 Video';
+      if (isAudioExtension(ext)) return '${prefix}🎵 Audio';
+      if (isImageExtension(ext)) return '${prefix}📷 Photo';
+      return name.trim().isEmpty ? '${prefix}📎 Attachment' : '${prefix}📎 $name';
+    }
     return '$prefix$text';
   }
 
