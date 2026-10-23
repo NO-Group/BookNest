@@ -1,4 +1,6 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -6,12 +8,19 @@ import '../../../config/theme.dart';
 import '../../../services/call_service.dart';
 import '../calls/call_screen.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/cloudinary_service.dart';
+import '../chat/media_viewer_screen.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 import '../../components/report_sheet.dart';
 import '../../components/watermark_background.dart';
 
-/// Public profile — with TWO faces. A reader's page keeps the familiar
+/// Public profile. One responsive design for readers and authors (authors
+/// add the badge, cyan-tinted banner and Works cards): phones scroll the
+/// whole header away under pinned tabs; PC shows a sticky profile card
+/// beside a works grid.
+///
+/// History: it used to have TWO faces. A reader's page keeps the familiar
 /// identity-header layout; an author's page switches to the second
 /// design: a full-bleed banner with the wordmark pattern, an avatar
 /// overlapping its edge, stat chips, action buttons and card tabs —
@@ -132,6 +141,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
             .toList();
       });
     } catch (_) {}
+    _loadCover();
     final stats = await BackendApi.instance.fetchUserStats(widget.userId);
     if (!mounted) return;
     setState(() {
@@ -139,6 +149,39 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
       _loading = false;
     });
   }
+
+  /// Read on its own so the profile still loads if the column is missing.
+  Future<void> _loadCover() async {
+    try {
+      final row = await SupabaseService()
+          .client
+          .from('profiles')
+          .select('cover_url')
+          .eq('id', widget.userId)
+          .maybeSingle();
+      if (!mounted || row == null) return;
+      setState(() => _profile = {...?_profile, 'cover_url': row['cover_url']});
+    } catch (_) {}
+  }
+
+  String? get _coverUrl {
+    final url = _profile?['cover_url']?.toString();
+    return url != null && url.startsWith('http') ? url : null;
+  }
+
+  void _viewCover() {
+    final url = _coverUrl;
+    if (url == null) return;
+    openChatPhoto(context, url,
+        album: [MediaItem(url: url, name: '$_name · cover photo')]);
+  }
+
+  Widget _coverImage() => CachedNetworkImage(
+        imageUrl: CloudinaryService.transformUrl(_coverUrl!, width: 1280),
+        fit: BoxFit.cover,
+        fadeInDuration: const Duration(milliseconds: 200),
+        errorWidget: (_, __, ___) => const SizedBox.shrink(),
+      );
 
   String get _name {
     final name =
@@ -163,7 +206,6 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
     });
   }
 
-  @override
   Future<void> _call({required bool video}) async {
     if (widget.userId.isEmpty) return;
     final service = CallService.instance;
@@ -181,8 +223,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     if (_loading || !_modeLoaded) {
       return const Scaffold(
           body: Center(
@@ -191,282 +232,539 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
     final followers =
         ((_stats?['followers'] as num?)?.toInt() ?? 0) + _followerDelta;
     final following = (_stats?['following'] as num?)?.toInt() ?? 0;
-    // ── The second face: author mode renders the banner layout. ──
-    if (_isAuthor) {
-      return _buildAuthorPage(context,
-          dark: dark, followers: followers, following: following);
-    }
+    final bg =
+        dark ? BookNestColors.darkChatBackground : BookNestColors.lightSurface;
     return DefaultTabController(
       length: 2,
-      child: Scaffold(
-        backgroundColor: dark
-            ? BookNestColors.darkChatBackground
-            : BookNestColors.lightSurface,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
+      child: LayoutBuilder(builder: (context, box) {
+        // Big screens get a two-column page (sticky profile card + works
+        // grid); phones get one scrolling column with pinned tabs.
+        final wide = box.maxWidth >= 1000;
+        if (wide) {
+          return Scaffold(
+            backgroundColor: bg,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              title: Text(_name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
+              actions: _authorActions(compact: false),
+            ),
+            body: _wideLayout(context,
+                dark: dark,
+                followers: followers,
+                following: following,
+                cardWidth: box.maxWidth >= 1300 ? 380 : 340),
+          );
+        }
+        return Scaffold(
+          backgroundColor: bg,
+          body: _phoneLayout(context,
+              dark: dark, bg: bg, followers: followers, following: following),
+        );
+      }),
+    );
+  }
+
+  int get _gems => (_profile?['gems'] as num?)?.toInt() ?? 0;
+  String? get _joined =>
+      _joinedAt == null ? null : DateFormat('d MMM y').format(_joinedAt!);
+
+  // ── Phone: banner → identity → pinned tabs, all in one scroll ──────
+  Widget _phoneLayout(BuildContext context,
+      {required bool dark,
+      required Color bg,
+      required int followers,
+      required int following}) {
+    final theme = Theme.of(context);
+    final media = MediaQuery.of(context);
+    final topPad = media.padding.top;
+    const avatarR = 38.0;
+    const strip = avatarR + 8; // part of the avatar below the banner
+    final art = (media.size.width * .24).clamp(64.0, 120.0);
+    final expanded = kToolbarHeight + art + strip;
+    final minH = topPad + kToolbarHeight;
+    final maxH = topPad + expanded;
+    return NestedScrollView(
+      headerSliverBuilder: (context, _) => [
+        SliverAppBar(
+          pinned: true,
+          expandedHeight: expanded,
           elevation: 0,
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(_name,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-              ),
-              if (_isAuthor) ...[
-                const SizedBox(width: 7),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    color: BookNestColors.cyan.withOpacity(.14),
-                    border:
-                        Border.all(color: BookNestColors.cyan.withOpacity(.5)),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.history_edu_rounded,
-                          size: 11, color: BookNestColors.cyan),
-                      SizedBox(width: 3),
-                      Text('Author',
-                          style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              color: BookNestColors.cyan)),
-                    ],
+          backgroundColor: _bannerColors.first,
+          foregroundColor: Colors.white,
+          iconTheme: const IconThemeData(color: Colors.white),
+          systemOverlayStyle: SystemUiOverlayStyle.light,
+          actions: _authorActions(compact: true),
+          flexibleSpace: LayoutBuilder(builder: (context, c) {
+            final t = ((c.maxHeight - minH) / (maxH - minH)).clamp(0.0, 1.0);
+            final s = strip * t;
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  bottom: s,
+                  child: GestureDetector(
+                    onTap: _viewCover,
+                    child: _bannerArt(),
                   ),
                 ),
+                Positioned(
+                    left: 0, right: 0, bottom: 0, height: s,
+                    child: ColoredBox(color: bg)),
+                if (t > .35)
+                  Positioned(
+                    left: 20,
+                    bottom: 0,
+                    child: Opacity(
+                      opacity: ((t - .35) / .4).clamp(0.0, 1.0),
+                      child: _avatarRing(avatarR, dark),
+                    ),
+                  ),
+                if (t < .2)
+                  Positioned(
+                    left: 64,
+                    right: _isMe ? 16 : 64,
+                    top: topPad,
+                    height: kToolbarHeight,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(_name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800)),
+                    ),
+                  ),
               ],
+            );
+          }),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+            child: _identity(context,
+                dark: dark, followers: followers, following: following),
+          ),
+        ),
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: _TabsHeader(_tabBar(theme, dark), bg),
+        ),
+      ],
+      body: TabBarView(
+        children: [
+          _works.isEmpty
+              ? _emptyWorks(theme)
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
+                  itemCount: _works.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, i) => _WorkCard(book: _works[i]),
+                ),
+          ListView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
+            children: [
+              _card(theme,
+                  child: Column(
+                      children: _aboutRows(context,
+                          followers: followers, following: following))),
             ],
           ),
-          actions: [
-            if (!_isMe && !_loading) ...[
-              IconButton(
-                tooltip: 'Voice call',
-                icon: const Icon(Icons.call_outlined, size: 20),
-                onPressed: () => _call(video: false),
-              ),
-              IconButton(
-                tooltip: 'Video call',
-                icon: const Icon(Icons.videocam_outlined, size: 21),
-                onPressed: () => _call(video: true),
-              ),
-            ],
-            if (!_isMe && !_loading)
-              PopupMenuButton<String>(
-                tooltip: 'More options',
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-                icon: const Icon(Icons.more_vert_rounded),
-                onSelected: (value) async {
-                  if (value == 'report') {
-                    await showReportSheet(context,
-                        kind: ReportTargetKind.user,
-                        targetId: widget.userId,
-                        hintName: _name);
-                  }
-                  if (value == 'block') {
-                    await confirmBlock(
-                      context,
-                      peerId: widget.userId,
-                      peerName: _name,
-                      currentlyBlocked: _blocked,
-                    );
-                    if (mounted) {
-                      setState(() => _blocked = !_blocked);
-                    }
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'report',
-                    child: Row(children: [
-                      Icon(Icons.flag_rounded,
-                          color: Colors.redAccent, size: 19),
-                      SizedBox(width: 10),
-                      Text('Report profile'),
-                    ]),
-                  ),
-                  PopupMenuItem(
-                    value: 'block',
-                    child: Row(children: [
-                      Icon(
-                          _blocked
-                              ? Icons.lock_open_rounded
-                              : Icons.block_rounded,
-                          size: 19),
-                      SizedBox(width: 10),
-                      Text(_blocked ? 'Unblock reader' : 'Block reader'),
-                    ]),
-                  ),
-                ],
-              ),
-          ],
-        ),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Identity header: avatar left, name + @handle beside it ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-              child: Row(
+        ],
+      ),
+    );
+  }
+
+  // ── PC / tablet landscape: sticky card left, works grid right ──────
+  Widget _wideLayout(BuildContext context,
+      {required bool dark,
+      required int followers,
+      required int following,
+      required double cardWidth}) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: cardWidth,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 12, 32),
+            child: _card(
+              theme,
+              padding: EdgeInsets.zero,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  BookNestAvatar(
-                    imageUrl: _profile?['avatar_url']?.toString(),
-                    name: _name,
-                    radius: 32,
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(_name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w800)),
-                        if (_username?.isNotEmpty == true)
-                          Text('@$_username',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  color: BookNestColors.cyan,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // ── Plain stat counters (tap → follower/following lists) ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-              child: Row(
-                children: [
-                  _countBlock('${_works.length}', 'Books'),
-                  _countBlock('$followers', 'Followers',
-                      onTap: () => context.push(
-                          '/user/${widget.userId}/follows?type=followers')),
-                  _countBlock('$following', 'Following',
-                      onTap: () => context.push(
-                          '/user/${widget.userId}/follows?type=following')),
-                ],
-              ),
-            ),
-            // ── Action pills ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-              child: !_isMe
-                  ? Row(
-                      children: [
-                        Expanded(
-                          child: _pill(
-                            context,
-                            dark: dark,
-                            filled: !_following,
-                            busy: _followBusy,
-                            icon: _following
-                                ? Icons.check_rounded
-                                : Icons.person_add_alt_rounded,
-                            label: _followBusy
-                                ? '…'
-                                : (_following ? 'Following' : 'Follow'),
-                            onTap: _toggleFollow,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        _pill(
-                          context,
-                          dark: dark,
-                          filled: false,
-                          icon: Icons.chat_bubble_outline_rounded,
-                          label: 'Message',
-                          onTap: () =>
-                              context.push('/chat/peer/${widget.userId}'),
-                        ),
-                      ],
-                    )
-                  : _pill(
-                      context,
-                      dark: dark,
-                      filled: false,
-                      icon: Icons.edit_rounded,
-                      label: 'Edit profile',
-                      onTap: () => context.push('/settings/edit-profile'),
-                    ),
-            ),
-            // ── Tabs: works & about, like the feed apps readers know ──
-            TabBar(
-              indicatorColor: BookNestColors.cyan,
-              labelColor: dark ? Colors.white : BookNestColors.navy,
-              unselectedLabelColor: theme.hintColor,
-              labelStyle:
-                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
-              unselectedLabelStyle:
-                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
-              dividerColor: theme.dividerColor,
-              tabs: const [Tab(text: 'Books'), Tab(text: 'About')],
-            ),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  // ── Books tab ──
-                  _works.isEmpty
-                      ? Center(
-                          child: Text(
-                            _isMe
-                                ? 'Publish a book and it will appear here.'
-                                : 'No published books yet.',
-                            style: TextStyle(color: theme.hintColor),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding:
-                              const EdgeInsets.fromLTRB(20, 14, 20, 40),
-                          itemCount: _works.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, i) =>
-                              _AuthorBookRow(book: _works[i]),
-                        ),
-                  // ── About tab ──
-                  ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 40),
+                  Stack(
+                    clipBehavior: Clip.none,
                     children: [
-                      _aboutRow(context, Icons.person_rounded, 'Member',
-                          _isAuthor ? 'Author' : 'Reader'),
-                      _aboutRow(context, Icons.menu_book_rounded,
-                          'Books published', '${_works.length}'),
-                      _aboutRow(
-                          context, Icons.favorite_rounded, 'Followers',
-                          '$followers'),
-                      _aboutRow(context, Icons.person_search_rounded,
-                          'Following', '$following'),
-                      if (_username?.isNotEmpty == true)
-                        _aboutRow(context, Icons.alternate_email_rounded,
-                            'Handle', '@$_username'),
+                      SizedBox(
+                        height: 132,
+                        width: double.infinity,
+                        child: GestureDetector(
+                            onTap: _viewCover, child: _bannerArt()),
+                      ),
+                      Positioned(
+                          left: 18,
+                          bottom: -40,
+                          child: _avatarRing(38, dark)),
                     ],
                   ),
+                  const SizedBox(height: 50),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 6),
+                    child: _identity(context,
+                        dark: dark,
+                        followers: followers,
+                        following: following),
+                  ),
+                  Divider(height: 26, color: theme.dividerColor),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+                    child: Column(
+                        children: _aboutRows(context,
+                            followers: followers, following: following)),
+                  ),
                 ],
               ),
             ),
-          ],
+          ),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 24, 12),
+                child: Row(children: [
+                  Text(_isAuthor ? 'Works' : 'Books',
+                      style: theme.textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(width: 10),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: BookNestColors.cyan.withOpacity(.14),
+                    ),
+                    child: Text('${_works.length}',
+                        style: const TextStyle(
+                            color: BookNestColors.cyan,
+                            fontWeight: FontWeight.w800)),
+                  ),
+                ]),
+              ),
+              Expanded(
+                child: _works.isEmpty
+                    ? _emptyWorks(theme)
+                    : GridView.builder(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 24, 40),
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 460,
+                          mainAxisExtent: 132,
+                          crossAxisSpacing: 14,
+                          mainAxisSpacing: 14,
+                        ),
+                        itemCount: _works.length,
+                        itemBuilder: (context, i) =>
+                            _WorkCard(book: _works[i]),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Shared pieces ──────────────────────────────────────────────────
+
+  /// Cover photo when there is one, otherwise the per-user navy blend
+  /// under the BookNest wordmark pattern.
+  Widget _bannerArt() {
+    if (_coverUrl != null) {
+      return Stack(fit: StackFit.expand, children: [
+        DecoratedBox(
+            decoration:
+                BoxDecoration(gradient: LinearGradient(colors: _bannerColors))),
+        _coverImage(),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0x66000000), Color(0x00000000)],
+              stops: [0, .55],
+            ),
+          ),
+        ),
+      ]);
+    }
+    return WatermarkOverlay(
+      color: Colors.white,
+      opacity: 0.08,
+      spacing: 148,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              ..._bannerColors,
+              if (_isAuthor) BookNestColors.cyan.withOpacity(.45),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // ── The author face — the second profile design ────────────────────
-  // Rendered only when the profile owner is in Author mode: full-bleed
-  // banner (a per-user navy/cyan blend under the BookNest wordmark
-  // pattern), avatar overlapping the banner edge, stat chips, follow
-  // and message buttons, then Works & About as outlined cards.
+  Widget _avatarRing(double radius, bool dark) {
+    final url = _profile?['avatar_url']?.toString();
+    return GestureDetector(
+      onTap: url == null || !url.startsWith('http')
+          ? null
+          : () => openChatPhoto(context, url,
+              album: [MediaItem(url: url, name: _name)]),
+      child: Container(
+        padding: const EdgeInsets.all(3.5),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            colors: [BookNestColors.cyan, BookNestColors.navy],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(
+              color: dark ? BookNestColors.darkChatBackground : Colors.white,
+              width: 2),
+        ),
+        child: BookNestAvatar(imageUrl: url, name: _name, radius: radius),
+      ),
+    );
+  }
 
-  static const double _bannerExtra = 72;
+  /// Name, badge, handle, stat strip, chips and the action buttons.
+  Widget _identity(BuildContext context,
+      {required bool dark, required int followers, required int following}) {
+    final theme = Theme.of(context);
+    final joined = _joined;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            Text(_name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.w800)),
+            if (_isAuthor) _authorBadge,
+          ],
+        ),
+        if (_username.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text('@$_username',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: BookNestColors.cyan,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600)),
+          ),
+        const SizedBox(height: 14),
+        _card(
+          theme,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                _stat('${_works.length}', _isAuthor ? 'Works' : 'Books'),
+                VerticalDivider(width: 1, color: theme.dividerColor),
+                _stat('$followers', 'Followers',
+                    onTap: () => context.push(
+                        '/user/${widget.userId}/follows?type=followers')),
+                VerticalDivider(width: 1, color: theme.dividerColor),
+                _stat('$following', 'Following',
+                    onTap: () => context.push(
+                        '/user/${widget.userId}/follows?type=following')),
+              ],
+            ),
+          ),
+        ),
+        if (_gems > 0 || joined != null) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 0,
+            runSpacing: 8,
+            children: [
+              if (_gems > 0) _redditChip(Icons.diamond_rounded, '$_gems gems'),
+              if (joined != null)
+                _redditChip(Icons.cake_rounded, 'Joined $joined'),
+            ],
+          ),
+        ],
+        const SizedBox(height: 14),
+        if (!_isMe)
+          Row(
+            children: [
+              Expanded(
+                child: _pill(
+                  context,
+                  dark: dark,
+                  filled: !_following,
+                  busy: _followBusy,
+                  icon: _following
+                      ? Icons.check_rounded
+                      : Icons.person_add_alt_rounded,
+                  label: _followBusy
+                      ? '…'
+                      : (_following ? 'Following' : 'Follow'),
+                  onTap: _toggleFollow,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _pill(
+                  context,
+                  dark: dark,
+                  filled: false,
+                  icon: Icons.chat_bubble_outline_rounded,
+                  label: 'Message',
+                  onTap: () => context.push('/chat/peer/${widget.userId}'),
+                ),
+              ),
+            ],
+          )
+        else
+          SizedBox(
+            width: double.infinity,
+            child: _pill(
+              context,
+              dark: dark,
+              filled: false,
+              icon: Icons.edit_rounded,
+              label: 'Edit profile',
+              onTap: () => context.push('/settings/edit-profile'),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _stat(String value, String label, {VoidCallback? onTap}) {
+    final theme = Theme.of(context);
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(value,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 17)),
+              ),
+              const SizedBox(height: 2),
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: theme.hintColor,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _aboutRows(BuildContext context,
+      {required int followers, required int following}) {
+    final joined = _joined;
+    return [
+      if (joined != null)
+        _aboutRow(context, Icons.cake_rounded, 'Joined', joined),
+      _aboutRow(context, Icons.person_rounded, 'Member',
+          _isAuthor ? 'Author' : 'Reader'),
+      _aboutRow(context, Icons.menu_book_rounded, 'Books published',
+          '${_works.length}'),
+      _aboutRow(context, Icons.favorite_rounded, 'Followers', '$followers'),
+      _aboutRow(
+          context, Icons.person_search_rounded, 'Following', '$following'),
+      if (_gems > 0)
+        _aboutRow(context, Icons.diamond_rounded, 'Gems', '$_gems'),
+      if (_username.isNotEmpty)
+        _aboutRow(
+            context, Icons.alternate_email_rounded, 'Handle', '@$_username'),
+    ];
+  }
+
+  Widget _card(ThemeData theme,
+      {required Widget child,
+      EdgeInsetsGeometry padding = const EdgeInsets.all(14)}) {
+    return Container(
+      padding: padding,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.dividerColor),
+      ),
+      child: child,
+    );
+  }
+
+  TabBar _tabBar(ThemeData theme, bool dark) => TabBar(
+        indicatorColor: BookNestColors.cyan,
+        labelColor: dark ? Colors.white : BookNestColors.navy,
+        unselectedLabelColor: theme.hintColor,
+        labelStyle:
+            const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+        unselectedLabelStyle:
+            const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+        dividerColor: theme.dividerColor,
+        tabs: [Tab(text: _isAuthor ? 'Works' : 'Books'), const Tab(text: 'About')],
+      );
+
+  Widget _emptyWorks(ThemeData theme) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.auto_stories_outlined,
+                  size: 42, color: BookNestColors.cyan.withOpacity(.6)),
+              const SizedBox(height: 10),
+              Text(
+                _isMe
+                    ? 'Publish a book and it will appear here.'
+                    : 'No published books yet.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: theme.hintColor),
+              ),
+            ],
+          ),
+        ),
+      );
 
   /// Deterministic per-user banner blend — the same profile always
   /// shows the same banner, with zero uploads or storage.
@@ -505,305 +803,89 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
         ),
       );
 
-  List<Widget> _authorActions() {
+  /// Calls + report/block. On phones the call buttons fold into the ⋮
+  /// menu so the banner stays clean; big screens show them as icons.
+  List<Widget> _authorActions({required bool compact}) {
+    if (_isMe) return const [];
+    final iconColor = compact ? Colors.white : null;
     return [
-      if (!_isMe) ...[
+      if (!compact) ...[
         IconButton(
           tooltip: 'Voice call',
-          icon: const Icon(Icons.call_outlined,
-              size: 20, color: Colors.white),
+          icon: const Icon(Icons.call_outlined, size: 20),
           onPressed: () => _call(video: false),
         ),
         IconButton(
           tooltip: 'Video call',
-          icon: const Icon(Icons.videocam_outlined,
-              size: 21, color: Colors.white),
+          icon: const Icon(Icons.videocam_outlined, size: 21),
           onPressed: () => _call(video: true),
         ),
       ],
-      if (!_isMe)
-        PopupMenuButton<String>(
-          tooltip: 'More options',
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16)),
-          icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-          onSelected: (value) async {
-            if (value == 'report') {
-              await showReportSheet(context,
-                  kind: ReportTargetKind.user,
-                  targetId: widget.userId,
-                  hintName: _name);
-            }
-            if (value == 'block') {
-              await confirmBlock(
-                context,
-                peerId: widget.userId,
-                peerName: _name,
-                currentlyBlocked: _blocked,
-              );
-              if (mounted) {
-                setState(() => _blocked = !_blocked);
-              }
-            }
-          },
-          itemBuilder: (context) => [
+      PopupMenuButton<String>(
+        tooltip: 'More options',
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: Icon(Icons.more_vert_rounded, color: iconColor),
+        onSelected: (value) async {
+          if (value == 'voice') return _call(video: false);
+          if (value == 'video') return _call(video: true);
+          if (value == 'report') {
+            await showReportSheet(context,
+                kind: ReportTargetKind.user,
+                targetId: widget.userId,
+                hintName: _name);
+          }
+          if (value == 'block') {
+            await confirmBlock(
+              context,
+              peerId: widget.userId,
+              peerName: _name,
+              currentlyBlocked: _blocked,
+            );
+            if (mounted) setState(() => _blocked = !_blocked);
+          }
+        },
+        itemBuilder: (context) => [
+          if (compact) ...[
             const PopupMenuItem(
-              value: 'report',
+              value: 'voice',
               child: Row(children: [
-                Icon(Icons.flag_rounded,
-                    color: Colors.redAccent, size: 19),
+                Icon(Icons.call_outlined, color: BookNestColors.cyan, size: 19),
                 SizedBox(width: 10),
-                Text('Report profile'),
+                Text('Voice call'),
               ]),
             ),
-            PopupMenuItem(
-              value: 'block',
+            const PopupMenuItem(
+              value: 'video',
               child: Row(children: [
-                Icon(
-                    _blocked
-                        ? Icons.lock_open_rounded
-                        : Icons.block_rounded,
-                    size: 19),
+                Icon(Icons.videocam_outlined,
+                    color: BookNestColors.cyan, size: 19),
                 SizedBox(width: 10),
-                Text(_blocked ? 'Unblock reader' : 'Block reader'),
+                Text('Video call'),
               ]),
             ),
+            const PopupMenuDivider(),
           ],
-        ),
-    ];
-  }
-
-  Widget _buildAuthorPage(BuildContext context,
-      {required bool dark, required int followers, required int following}) {
-    final theme = Theme.of(context);
-    final topPad = MediaQuery.of(context).padding.top;
-    final bannerH = topPad + kToolbarHeight + _bannerExtra;
-    final gems = (_profile?['gems'] as num?)?.toInt() ?? 0;
-    final joined =
-        _joinedAt == null ? null : DateFormat('d MMM y').format(_joinedAt!);
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        backgroundColor: dark
-            ? BookNestColors.darkChatBackground
-            : BookNestColors.lightSurface,
-        extendBodyBehindAppBar: true,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          iconTheme: const IconThemeData(color: Colors.white),
-          actions: _authorActions(),
-        ),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Banner: per-user gradient under the BookNest pattern,
-            //    avatar ringed and overlapping its bottom edge ──
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                SizedBox(
-                  height: bannerH,
-                  width: double.infinity,
-                  child: WatermarkOverlay(
-                    color: Colors.white,
-                    opacity: 0.08,
-                    spacing: 148,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: _bannerColors,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 20,
-                  bottom: -38,
-                  child: Container(
-                    padding: const EdgeInsets.all(3.5),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white,
-                      border: Border.all(
-                          color: dark
-                              ? Colors.white
-                              : BookNestColors.lightBorder),
-                    ),
-                    child: BookNestAvatar(
-                      imageUrl: _profile?['avatar_url']?.toString(),
-                      name: _name,
-                      radius: 34,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 50),
-            // ── Name, author badge, handle ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-              child: Row(
-                children: [
-                  Flexible(
-                    child: Text(_name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w800)),
-                  ),
-                  const SizedBox(width: 8),
-                  _authorBadge,
-                ],
-              ),
-            ),
-            if (_username?.isNotEmpty == true)
-              Padding(
-                padding: const EdgeInsets.only(left: 20, top: 3),
-                child: Text('@$_username',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: BookNestColors.cyan,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600)),
-              ),
-            // ── Stat chips: books, followers, following, gems, joined ──
-            Padding(
-              padding: const EdgeInsets.only(top: 14),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    _redditChip(Icons.menu_book_rounded,
-                        '${_works.length} books'),
-                    _redditChip(Icons.person_rounded, '$followers followers',
-                        onTap: () => context.push(
-                            '/user/${widget.userId}/follows?type=followers')),
-                    _redditChip(
-                        Icons.person_outline_rounded, '$following following',
-                        onTap: () => context.push(
-                            '/user/${widget.userId}/follows?type=following')),
-                    _redditChip(Icons.diamond_rounded, '$gems gems'),
-                    if (joined != null)
-                      _redditChip(Icons.cake_rounded, 'Joined $joined'),
-                  ],
-                ),
-              ),
-            ),
-            // ── Action buttons ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-              child: !_isMe
-                  ? Row(
-                      children: [
-                        Expanded(
-                          child: _pill(
-                            context,
-                            dark: dark,
-                            filled: !_following,
-                            busy: _followBusy,
-                            icon: _following
-                                ? Icons.check_rounded
-                                : Icons.person_add_alt_rounded,
-                            label: _followBusy
-                                ? '…'
-                                : (_following ? 'Following' : 'Follow'),
-                            onTap: _toggleFollow,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _pill(
-                            context,
-                            dark: dark,
-                            filled: false,
-                            icon: Icons.chat_bubble_outline_rounded,
-                            label: 'Message',
-                            onTap: () =>
-                                context.push('/chat/peer/${widget.userId}'),
-                          ),
-                        ),
-                      ],
-                    )
-                  : SizedBox(
-                      width: double.infinity,
-                      child: _pill(
-                        context,
-                        dark: dark,
-                        filled: false,
-                        icon: Icons.edit_rounded,
-                        label: 'Edit profile',
-                        onTap: () => context.push('/settings/edit-profile'),
-                      ),
-                    ),
-            ),
-            // ── Tabs: outlined-card works feed & about ──
-            TabBar(
-              indicatorColor: BookNestColors.cyan,
-              labelColor: dark ? Colors.white : BookNestColors.navy,
-              unselectedLabelColor: theme.hintColor,
-              labelStyle:
-                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
-              unselectedLabelStyle:
-                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
-              dividerColor: theme.dividerColor,
-              tabs: const [Tab(text: 'Works'), Tab(text: 'About')],
-            ),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  _works.isEmpty
-                      ? Center(
-                          child: Text(
-                            _isMe
-                                ? 'Publish a book and it will appear here.'
-                                : 'No published books yet.',
-                            style: TextStyle(color: theme.hintColor),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding:
-                              const EdgeInsets.fromLTRB(20, 14, 20, 40),
-                          itemCount: _works.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, i) =>
-                              _WorkCard(book: _works[i]),
-                        ),
-                  ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 40),
-                    children: [
-                      if (joined != null)
-                        _aboutRow(
-                            context, Icons.cake_rounded, 'Joined', joined),
-                      _aboutRow(
-                          context, Icons.person_rounded, 'Member', 'Author'),
-                      _aboutRow(context, Icons.menu_book_rounded,
-                          'Books published', '${_works.length}'),
-                      _aboutRow(
-                          context, Icons.favorite_rounded, 'Followers',
-                          '$followers'),
-                      _aboutRow(context, Icons.person_search_rounded,
-                          'Following', '$following'),
-                      _aboutRow(
-                          context, Icons.diamond_rounded, 'Gems', '$gems'),
-                      if (_username?.isNotEmpty == true)
-                        _aboutRow(context, Icons.alternate_email_rounded,
-                            'Handle', '@$_username'),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          const PopupMenuItem(
+            value: 'report',
+            child: Row(children: [
+              Icon(Icons.flag_rounded, color: Colors.redAccent, size: 19),
+              SizedBox(width: 10),
+              Text('Report profile'),
+            ]),
+          ),
+          PopupMenuItem(
+            value: 'block',
+            child: Row(children: [
+              Icon(_blocked ? Icons.lock_open_rounded : Icons.block_rounded,
+                  size: 19),
+              const SizedBox(width: 10),
+              Text(_blocked ? 'Unblock reader' : 'Block reader'),
+            ]),
+          ),
+        ],
       ),
-    );
+    ];
   }
 
   /// Rounded stat pill — icon + live count, tappable where it opens a list.
@@ -831,33 +913,6 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
     if (onTap == null) return chip;
     return InkWell(
         borderRadius: BorderRadius.circular(18), onTap: onTap, child: chip);
-  }
-
-  Widget _countBlock(String value, String label, {VoidCallback? onTap}) {
-    final theme = Theme.of(context);
-    final block = Padding(
-      padding: const EdgeInsets.only(right: 22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value,
-              style:
-                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5)),
-          const SizedBox(height: 1),
-          Text(label,
-              style: TextStyle(
-                  color: theme.hintColor,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-    if (onTap == null) return block;
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: onTap,
-      child: block,
-    );
   }
 
   Widget _pill(
@@ -924,43 +979,6 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
                     const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _AuthorBookRow extends StatelessWidget {
-  final Map<String, dynamic> book;
-  const _AuthorBookRow({required this.book});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final id = book['id']?.toString() ?? '';
-    final title = book['title']?.toString() ?? 'Untitled';
-    return Material(
-      color: theme.colorScheme.surface,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => context.push('/book/$id'),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            children: [
-              BookCover(coverUrl: book['cover_url']?.toString(), title: title),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 14.5)),
-              ),
-              Icon(Icons.chevron_right_rounded, color: theme.hintColor),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -1062,4 +1080,27 @@ class _WorkCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Keeps the Works / About tabs pinned under the collapsed banner.
+class _TabsHeader extends SliverPersistentHeaderDelegate {
+  final TabBar tabBar;
+  final Color color;
+
+  _TabsHeader(this.tabBar, this.color);
+
+  @override
+  double get minExtent => tabBar.preferredSize.height;
+
+  @override
+  double get maxExtent => tabBar.preferredSize.height;
+
+  @override
+  Widget build(
+          BuildContext context, double shrinkOffset, bool overlapsContent) =>
+      ColoredBox(color: color, child: tabBar);
+
+  @override
+  bool shouldRebuild(covariant _TabsHeader old) =>
+      old.color != color || old.tabBar != tabBar;
 }

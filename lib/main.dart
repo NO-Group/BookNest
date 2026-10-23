@@ -9,6 +9,7 @@ import 'config/router.dart';
 import 'presentation/screens/calls/call_screen.dart';
 import 'config/theme.dart';
 import 'services/home_widgets_service.dart';
+import 'services/media_storage.dart';
 import 'services/push_service.dart';
 import 'services/call_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,19 +23,25 @@ import 'services/background_link.dart';
 import 'services/notification_service.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'services/supabase_service.dart';
 import 'presentation/components/booknest_keyboard.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppSettings.load();
+  await MediaStorage.init();
   await loadKeyboardEnabled();
   await SupabaseService().initialize();
   // Self-heal: guarantee a profiles row exists for returning users whose
   // signup predated the auto-create trigger (fixes empty chat/search results).
+  // Bounded: on a slow or offline network the app must still open — the
+  // heal simply finishes in the background (it is idempotent).
   if (SupabaseService().auth.currentUser != null) {
-    await SupabaseService().ensureProfile();
+    try {
+      await SupabaseService()
+          .ensureProfile()
+          .timeout(const Duration(seconds: 4));
+    } catch (_) {}
   }
   unawaited(_startupAftercare());
   unawaited(PushService.instance.warmUp());
@@ -138,6 +145,7 @@ Future<void> _checkBroadcast() async {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: Row(children: [
           const Icon(Icons.campaign_rounded, color: BookNestColors.cyan),

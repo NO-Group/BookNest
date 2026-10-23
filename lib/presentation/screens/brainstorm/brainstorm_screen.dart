@@ -28,8 +28,12 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    final res = await BackendApi.instance.callFresh('brainstorm.list');
+  /// Cached ideas paint instantly; pull-to-refresh and writes ask the
+  /// server (rev-checked, so an unchanged list costs a few bytes).
+  Future<void> _load({bool fresh = false}) async {
+    final res = fresh
+        ? await BackendApi.instance.callFresh('brainstorm.list')
+        : await BackendApi.instance.call('brainstorm.list');
     if (!mounted) return;
     setState(() {
       _ideas = ((res?['ideas'] as List?) ?? const [])
@@ -134,7 +138,7 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Idea live — the floor is yours. 💡')));
-    _load();
+    _load(fresh: true);
   }
 
   Future<void> _like(Map<String, dynamic> idea) async {
@@ -155,7 +159,7 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => _IdeaThreadSheet(idea: idea),
     );
-    if (changed == true) _load();
+    if (changed == true) _load(fresh: true);
   }
 
   @override
@@ -178,7 +182,7 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
           ? const RowsSkeleton(count: 6)
           : RefreshIndicator(
               color: BookNestColors.cyan,
-              onRefresh: _load,
+              onRefresh: () => _load(fresh: true),
               child: _ideas.isEmpty
                   ? ListView(children: [
                       const SizedBox(height: 120),

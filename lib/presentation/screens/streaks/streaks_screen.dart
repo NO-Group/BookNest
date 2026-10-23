@@ -78,6 +78,7 @@ class _StreaksScreenState extends State<StreaksScreen> {
       builder: (dialogContext) {
         final controller = TextEditingController();
         return AlertDialog(
+          scrollable: true,
           title: const Text("Log today's reading"),
           content: TextField(
             controller: controller,

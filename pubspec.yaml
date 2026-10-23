@@ -1,7 +1,7 @@
 name: booknest
 description: BookNest by N.O Group - The Digital Library Ecosystem for Bookworms
 publish_to: 'none'
-version: 2.30.1+56
+version: 2.39.1+73
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -36,6 +36,11 @@ dependencies:
   camera: ^0.12.1
   audioplayers: ^6.8.1
   pdfx: ^2.11.0
+  # Document viewer: zip-based formats (docx/xlsx/pptx/odt/epub) and archives.
+  archive: ">=3.6.1 <5.0.0"
+  # Windows implementation of video_player (Media Foundation): chat videos
+  # play in the PC app too.
+  video_player_win: ^3.1.0
   speech_to_text: ^7.4.0
   record: ^7.1.1
   # WhatsApp-style chat storage: encrypted local store + Google Drive backup.
@@ -67,3 +72,17 @@ flutter:
     - assets/emotes/
     - assets/sounds/call_ring.wav
     - supabase/functions/booknest-api/index.ts
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans_400Regular.ttf
+        - asset: assets/fonts/PlusJakartaSans_400Regular_Italic.ttf
+          style: italic
+        - asset: assets/fonts/PlusJakartaSans_500Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans_600SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans_700Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PlusJakartaSans_800ExtraBold.ttf
+          weight: 800

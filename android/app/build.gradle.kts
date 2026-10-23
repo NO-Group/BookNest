@@ -27,7 +27,9 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.nogroup.booknest"
+        // Store identity (Google Play, Firebase, Google Sign-In). The Kotlin
+        // namespace below stays com.nogroup.booknest — only the id changes.
+        applicationId = "com.n_o_group.booknest"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 24 // camera plugin floor
@@ -55,6 +57,12 @@ android {
         }
     }
 
+    // Google Play build (BN_PLAY=true, used for the .aab): drops the
+    // background-link foreground service (see src/play/AndroidManifest.xml).
+    if (System.getenv("BN_PLAY") == "true") {
+        sourceSets.getByName("release").manifest.srcFile("src/play/AndroidManifest.xml")
+    }
+
     buildTypes {
         release {
             signingConfig = if (keystoreProps.isNotEmpty())
@@ -77,4 +85,9 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // Push (FCM), used natively so the PC builds carry no Firebase SDK.
+    // Without google-services.json Firebase simply stays uninitialized.
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("androidx.core:core:1.13.1")
 }

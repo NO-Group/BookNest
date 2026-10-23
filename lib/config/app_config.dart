@@ -24,7 +24,7 @@
 ///  With no --dart-define flags, the defaults below are used.
 class AppConfig {
   /// Display version — keep in sync with pubspec.yaml on every release.
-  static const String appVersion = '2.30.0+55';
+  static const String appVersion = '2.39.1+73';
 
   /// Jenny is PARKED: the feature stays built, but every entrance is
   /// hidden. Flip to true to bring her back everywhere at once.
@@ -42,6 +42,23 @@ class AppConfig {
     defaultValue:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrZ2JiYmJqd2dmaXhxYXJsbmlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3MDAzODEsImV4cCI6MjEwMzI3NjM4MX0.DTTcX2DOxME72qF0fJzcAPJAWPd64LmhYKtT2SOlRy0',
   );
+
+  // ── Google sign-in on iPhone (Drive media backup) ────────────────────────
+  // Android finds its OAuth client from the package name + signing key; iOS
+  // needs the iOS OAuth client id. CI passes it from the GitHub secret
+  // GOOGLE_IOS_CLIENT_ID (and writes the matching URL scheme into
+  // Info.plist). Empty = Drive backup hidden on iPhone, everything else works.
+  static const String googleIosClientId =
+      String.fromEnvironment('GOOGLE_IOS_CLIENT_ID', defaultValue: '');
+
+  // PC (Windows/macOS/Linux): a Google Cloud "Desktop app" OAuth client —
+  // browser sign-in for the Drive media backup. From GitHub secrets
+  // GOOGLE_DESKTOP_CLIENT_ID / GOOGLE_DESKTOP_CLIENT_SECRET (desktop client
+  // secrets are public by Google's design). Empty = hidden on PC.
+  static const String googleDesktopClientId =
+      String.fromEnvironment('GOOGLE_DESKTOP_CLIENT_ID', defaultValue: '');
+  static const String googleDesktopClientSecret =
+      String.fromEnvironment('GOOGLE_DESKTOP_CLIENT_SECRET', defaultValue: '');
 
   // ── Cloudinary · covers, avatars, feed & chat images ─────────────────────
   static const String cloudinaryCloudName = String.fromEnvironment(
@@ -69,6 +86,16 @@ class AppConfig {
   /// reviews, follows, chats, notifications.
 
   static const String edgeFunctionName = 'booknest-api';
+
+  /// Region the edge function runs in. By default Supabase runs it next to
+  /// the caller (a US phone → California), but the data lives in Western
+  /// Europe (MongoDB on GCP Belgium, Supabase in Ireland), and every
+  /// transatlantic database round trip cost seconds. eu-west-1 sits next
+  /// to both. Sent as the `x-region` header.
+  static const String edgeRegion = String.fromEnvironment(
+    'EDGE_REGION',
+    defaultValue: 'eu-west-1',
+  );
 
   /// Deep link to this project's edge function in the Supabase dashboard —
   /// the exact page where the owner pastes a server update and hits Deploy.

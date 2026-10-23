@@ -24,6 +24,9 @@ class SupabaseService {
     await Supabase.initialize(
       url: AppConfig.supabaseUrl,
       anonKey: AppConfig.supabaseAnonKey,
+      // Pins edge-function calls next to the data (see AppConfig.edgeRegion);
+      // the other Supabase services ignore this header.
+      headers: const <String, String>{'x-region': AppConfig.edgeRegion},
       // Only log auth/network debug output in debug builds — never in release.
       debug: kDebugMode,
     );
@@ -492,7 +495,8 @@ class SupabaseService {
       'username': username,
       'display_name': displayName ?? username,
       'phone_number': phoneNumber,
-      'gems': 77, // Welcome bonus
+      // gems are server-owned: new rows get the 77-gem welcome bonus from
+      // the column default, and the database ignores client-sent values.
     });
   }
 }

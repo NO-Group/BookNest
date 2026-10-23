@@ -14,6 +14,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/book_repository.dart';
 import '../../../services/supabase_service.dart';
 import '../../../state/book_providers.dart';
+import '../../components/adaptive.dart';
 
 /// Store-style book landing page. Reading opens the immersive Reader.
 /// The page's data lives in [bookDetailProvider] — this widget paints it.
@@ -88,9 +89,11 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
 
   void _showMoreMenu() {
     showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           ListTile(
             leading: const Icon(Icons.flag_rounded, color: BookNestColors.cyan),
@@ -113,9 +116,11 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
     AuthGuard.run(context, () {
       const reasons = ['Spam or scam', 'Hate or harassment', 'Copyright issue', 'Wrong category', 'Something else'];
       showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
         context: context,
         showDragHandle: true,
-        builder: (sheetContext) => SafeArea(
+        builder: (sheetContext) => SheetBody(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
@@ -198,9 +203,8 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
                 errorBuilder: (_, __, ___) => const SizedBox.shrink(),
               ),
             ),
-          SliverToBoxAdapter(child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 30),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SliverToBoxAdapter(child: LayoutBuilder(builder: (context, box) {
+            final hero = <Widget>[
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Hero(tag: 'book-${widget.bookId}', child: _Cover(title: title, coverUrl: book['cover_url']?.toString())), const SizedBox(width: 18),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -300,6 +304,8 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
                     ),
                   ),
                 ]),
+            ];
+            final rest = <Widget>[
               const SizedBox(height: 28), _Heading('About this book'), const SizedBox(height: 10), Text(description, style: theme.textTheme.bodyLarge?.copyWith(height: 1.55, color: muted)),
               const SizedBox(height: 28), _Heading('Ratings and reviews'), const SizedBox(height: 14),
               _Reviews(
@@ -334,8 +340,44 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
                 ),
               const SizedBox(height: 28), _Heading('Recommended for you'), const SizedBox(height: 12),
               SizedBox(height: 184, child: ListView.separated(scrollDirection: Axis.horizontal, itemCount: _recommended.length, separatorBuilder: (_, __) => const SizedBox(width: 12), itemBuilder: (_, i) { final item = _recommended[i]; return InkWell(borderRadius: BorderRadius.circular(16), onTap: () => context.push('/book/${item['id']}'), child: SizedBox(width: 112, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_Cover(title: item['title']?.toString() ?? 'Book', coverUrl: item['cover_url']?.toString(), small: true), const SizedBox(height: 7), Text(item['title']?.toString() ?? 'Untitled', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12))]))); })),
-            ]),
-          )),
+            ];
+            // PC: book card + actions on the left, the reading matter
+            // (about, reviews, recommendations) on the right.
+            if (box.maxWidth >= 980) {
+              return Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1240),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(32, 12, 32, 40),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 420,
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: hero),
+                        ),
+                        const SizedBox(width: 40),
+                        Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: rest),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 30),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [...hero, ...rest]),
+            );
+          })),
         ],
       ),
     );
@@ -345,6 +387,7 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(mode == 'remix'
             ? 'Write a remix of this book?'
             : 'Write the next part?'),
@@ -725,6 +768,7 @@ class _BoostButtonState extends State<_BoostButton> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(active ? 'Extend the boost?' : 'Boost this book?'),
         content: const Text(
             '20 gems put this book at the top of Discover for three days. '

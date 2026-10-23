@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../services/backend_api.dart';
 import '../services/book_repository.dart';
 
 /// ─────────────────────────────────────────────────────────────────────────────
@@ -31,6 +32,11 @@ class BooksCatalogController
   @override
   BooksCatalogState build() {
     Future.microtask(() => refresh());
+    // A background refresh brought a changed shelf — repaint from cache.
+    final sub = BackendApi.instance.cacheUpdates
+        .where((action) => action == 'books.list')
+        .listen((_) => refresh());
+    ref.onDispose(sub.cancel);
     return const BooksCatalogState();
   }
 

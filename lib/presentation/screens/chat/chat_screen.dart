@@ -15,6 +15,7 @@ import '../../../services/chat_repository.dart';
 import '../../../services/typing_broadcaster.dart';
 import '../../../services/supabase_service.dart';
 import '../../../state/chat_providers.dart';
+import '../../components/adaptive.dart';
 
 /// Club / community / organization / school group chat — membership-gated
 /// rooms on the BookNest watermark canvas. Everyone in the group sees the
@@ -212,31 +213,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         elevation: 0,
         leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
-        actions: [
-          IconButton(
-            tooltip: 'Shared media & files',
-            icon: const Icon(Icons.folder_shared_outlined, size: 21),
-            onPressed: (chat.conversationId ?? '').isEmpty
+        actions: adaptiveActions(context, [
+          HeaderAction(
+            icon: Icons.search_rounded,
+            label: 'Search messages',
+            onTap: () => setState(() {
+              _searching = !_searching;
+              if (!_searching) _searchController.clear();
+            }),
+          ),
+          HeaderAction(
+            icon: Icons.folder_shared_outlined,
+            label: 'Shared media & files',
+            onTap: (chat.conversationId ?? '').isEmpty
                 ? null
                 : () => context.push(
                       '/shared/${chat.conversationId}'
                       '?title=${Uri.encodeComponent(widget.title)}',
                     ),
           ),
-          IconButton(
-            tooltip: 'Search messages',
-            icon: const Icon(Icons.search_rounded, size: 21),
-            onPressed: () => setState(() {
-              _searching = !_searching;
-              if (!_searching) _searchController.clear();
-            }),
+          HeaderAction(
+            icon: Icons.palette_outlined,
+            label: 'Chat theme',
+            onTap: _editTheme,
           ),
-          IconButton(
-            tooltip: 'Chat theme',
-            icon: const Icon(Icons.palette_outlined, size: 21),
-            onPressed: _editTheme,
-          ),
-        ],
+        ]),
         titleSpacing: 0,
         title: Row(
           children: [
@@ -573,12 +574,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       color: BookNestColors.cyan.withOpacity(.10),
       child: InkWell(
         onTap: () => showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
           context: context,
           showDragHandle: true,
           shape: const RoundedRectangleBorder(
               borderRadius:
                   BorderRadius.vertical(top: Radius.circular(24))),
-          builder: (sheetContext) => SafeArea(
+          builder: (sheetContext) => SheetBody(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
               child: Column(mainAxisSize: MainAxisSize.min,

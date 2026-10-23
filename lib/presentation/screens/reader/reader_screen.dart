@@ -18,8 +18,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../services/backend_api.dart';
+import '../../../services/chapter_cache.dart';
 import '../../../services/home_widgets_service.dart';
 import '../../../services/supabase_service.dart';
+import '../../components/adaptive.dart';
 
 /// The BookNest Reader — a distraction-free, full-screen reading room for
 /// published chapters. Typography controls, tap-to-reveal chrome, a
@@ -186,10 +188,9 @@ class _ReaderScreenState extends State<ReaderScreen>
       _restoredScroll = false;
       _scrollFraction = 0;
     });
-    final res = await BackendApi.instance.call('books.chapter', {
-      'bookId': widget.bookId,
-      'chapterNumber': chapterNumber,
-    });
+    // Saved chapters open from the device (classics with no request at
+    // all; members' books with a few-byte "unchanged?" check).
+    final res = await ChapterCache.instance.load(widget.bookId, chapterNumber);
     if (!mounted) return;
     if (res == null) {
       setState(() => _cloudOffline = true);
@@ -786,9 +787,11 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   void _openTypography() {
     showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Container(
           margin: const EdgeInsets.all(12),
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
@@ -1174,6 +1177,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                                                       ink: pageText),
                                               embedBuilders:
                                                   manuscriptEmbedBuilders,
+                                              unknownEmbedBuilder: manuscriptUnknownEmbedBuilder,
                                               padding:
                                                   const EdgeInsets.fromLTRB(
                                                       24, 20, 24, 120),

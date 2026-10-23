@@ -29,6 +29,15 @@ class LinkService {
   static const String _dataPass = 'bn.link.pass';
   static const String _dataMe = 'bn.link.me';
 
+  /// The Google Play build (built with --dart-define=BN_PLAY=true) ships
+  /// without the foreground service: Play only allows that service type
+  /// for moving messages between a user's own devices. There, alerts come
+  /// from the in-app watcher (and FCM push once Firebase is configured).
+  static const bool playBuild = bool.fromEnvironment('BN_PLAY');
+
+  /// Whether this build can run the background link at all.
+  bool get supported => Platform.isAndroid && !playBuild;
+
   bool _preferred = false;
   bool _started = false;
   bool _initialized = false;
@@ -48,7 +57,7 @@ class LinkService {
   /// Restores the link on app start when the reader prefers it on.
   Future<void> ensureStartedIfPreferred() async {
     try {
-      if (!Platform.isAndroid) return;
+      if (!supported) return;
       final prefs = await SharedPreferences.getInstance();
       _preferred = prefs.getBool(_prefKey) ?? false;
       if (!_preferred) return;
@@ -65,7 +74,7 @@ class LinkService {
   /// most when the system still plans to kill our link.
   Future<bool> setEnabled(bool on) async {
     try {
-      if (!Platform.isAndroid) return false;
+      if (!supported) return false;
       _preferred = on;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_prefKey, on);
@@ -81,8 +90,10 @@ class LinkService {
             }
           } catch (_) {}
           try {
+            // Google Play restricts the direct exemption request, so open
+            // the system list where the reader can exempt BookNest.
             if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
-              await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+              await FlutterForegroundTask.openIgnoreBatteryOptimizationSettings();
             }
           } catch (_) {}
           await _provisionPass();
@@ -329,6 +340,7 @@ class LinkTaskHandler extends TaskHandler {
       final request = await client.postUrl(Uri.parse(
           '${AppConfig.supabaseUrl}/functions/v1/${AppConfig.edgeFunctionName}'));
       request.headers.set('apikey', AppConfig.supabaseAnonKey);
+      request.headers.set('x-region', AppConfig.edgeRegion);
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
       final payload = <String, dynamic>{'linkPass': pass};
       if (ids.isNotEmpty) payload['ids'] = ids;

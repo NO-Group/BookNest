@@ -1,17 +1,25 @@
 import 'dart:convert' show utf8;
 import 'dart:io';
-import 'dart:typed_data' show BytesBuilder;
+import 'dart:typed_data' show BytesBuilder, Uint8List;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdfx/pdfx.dart' as pdfx;
+import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/cloudinary_service.dart';
+import '../../../services/doc_extract.dart';
+import '../../../services/media_backup_service.dart';
+import '../../../services/media_storage.dart';
 
 /// One piece of media in a conversation — enough for the viewer to
 /// page through an album and label the file.
@@ -32,14 +40,10 @@ class MediaItem {
     return '';
   }
 
-  bool get isImage =>
-      ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'heic'].contains(extension);
-  bool get isVideo => [
-        'mp4', 'mov', 'webm', 'mkv', 'm4v', 'avi', '3gp',
-      ].contains(extension);
+  bool get isImage => isImageExtension(extension);
+  bool get isVideo => isVideoExtension(extension);
   bool get isPdf => extension == 'pdf';
-  bool get isAudio =>
-      ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'oga', 'flac', 'opus'].contains(extension);
+  bool get isAudio => isAudioExtension(extension);
   bool get isText => [
         'txt', 'md', 'csv', 'json', 'log', 'xml', 'html', 'htm', 'yaml',
         'yml', 'kt', 'java', 'dart', 'js', 'ts', 'py', 'rb', 'go', 'c',
@@ -73,7 +77,8 @@ Future<void> openChatPhoto(
   ));
 }
 
-/// Open any file attachment in-app.
+/// Open any file attachment in-app — videos and audio start playing at
+/// once (streamed), every document type opens in the BookNest reader.
 Future<void> openChatFile(
   BuildContext context,
   String url, {
@@ -88,10 +93,35 @@ Future<void> openChatFile(
   ));
 }
 
-String _mediaCachePath(String url) {
-  final safe = url.hashCode.abs().toRadixString(36);
-  return '${Directory.systemTemp.path}/booknest_media/$safe';
+/// Opens a file that is already on this device (e.g. one taken out of a
+/// zip inside the viewer).
+Future<void> openLocalFile(BuildContext context, File file, String name) {
+  return Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(
+    builder: (_) => MediaFileViewer(
+      item: MediaItem(url: file.uri.toString(), name: name),
+      localFile: file,
+    ),
+  ));
 }
+
+/// Hands a copy (with its real file name) to the system share sheet, so it
+/// can be saved to Files/Downloads or sent elsewhere.
+Future<void> shareMediaFile(BuildContext context, File file, String name) async {
+  try {
+    final safe = name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
+    final dir = Directory('${Directory.systemTemp.path}/booknest_share');
+    await dir.create(recursive: true);
+    final copy = await file.copy('${dir.path}/${safe.isEmpty ? 'attachment' : safe}');
+    await Share.shareXFiles([XFile(copy.path)]);
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('Could not share this file.')));
+    }
+  }
+}
+
+String _mediaCachePath(String url) => mediaCachePath(url);
 
 /// Streams [url] into the app cache with progress, reusing a previous
 /// download when present. Returns the local file.
@@ -103,7 +133,20 @@ Future<File> _downloadToCache(String url, void Function(int, int)? onProgress) a
   try {
     final res = await client.send(http.Request('GET', Uri.parse(url)));
     if (res.statusCode != 200) {
-      throw 'The file could not be loaded (${res.statusCode}).';
+      await res.stream.drain<void>();
+      // Chat media leaves BookNest after 30 days — the reader's own Google
+      // Drive backup has it.
+      final recovered = await MediaBackupService.instance.recover(url);
+      if (recovered != null) return recovered;
+      throw res.statusCode == 401 ||
+              res.statusCode == 403 ||
+              res.statusCode == 404
+          ? 'This file is no longer on BookNest\'s servers (chat files are '
+              'kept 3 days, photos 30 days) and it was not saved on this '
+              'device. Files are saved to the BookNest folder on your phone '
+              'automatically, and media backup (Settings → Chat backup) keeps '
+              'a copy in your Google account.'
+          : 'The file could not be loaded (${res.statusCode}).';
     }
     final total = res.contentLength ?? 0;
     final builder = BytesBuilder(copy: false);
@@ -114,6 +157,7 @@ Future<File> _downloadToCache(String url, void Function(int, int)? onProgress) a
       if (onProgress != null && total > 0) onProgress(received, total);
     }
     await file.writeAsBytes(builder.takeBytes(), flush: true);
+    MediaStorage.announce(file.path);
     return file;
   } finally {
     client.close();
@@ -278,7 +322,10 @@ class _PhotoAlbumViewerState extends State<_PhotoAlbumViewer> {
 class MediaFileViewer extends StatefulWidget {
   final MediaItem item;
 
-  const MediaFileViewer({super.key, required this.item});
+  /// Already on the device — nothing to download.
+  final File? localFile;
+
+  const MediaFileViewer({super.key, required this.item, this.localFile});
 
   @override
   State<MediaFileViewer> createState() => _MediaFileViewerState();
@@ -291,10 +338,42 @@ class _MediaFileViewerState extends State<MediaFileViewer> {
   int _total = 0;
   bool _downloading = true;
 
+  /// Videos and audio stream straight away instead of downloading first.
+  bool get _streams =>
+      widget.localFile == null &&
+      widget.item.url.startsWith('http') &&
+      (widget.item.isVideo || widget.item.isAudio);
+
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.localFile != null) {
+      _file = widget.localFile;
+      _downloading = false;
+    } else if (_streams) {
+      _downloading = false;
+    } else {
+      _load();
+    }
+  }
+
+  Future<void> _share() async {
+    var file = _file;
+    if (file == null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('Preparing the file…')));
+      try {
+        file = await _downloadToCache(widget.item.url, null);
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+              const SnackBar(content: Text('The file could not be loaded.')));
+        }
+        return;
+      }
+    }
+    if (!mounted) return;
+    await shareMediaFile(context, file, widget.item.name);
   }
 
   Future<void> _load() async {
@@ -324,12 +403,22 @@ class _MediaFileViewerState extends State<MediaFileViewer> {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final item = widget.item;
+    final cinema = _streams && item.isVideo;
     return Scaffold(
-      backgroundColor: dark ? BookNestColors.navyDeep : BookNestColors.lightSurface,
+      backgroundColor: cinema
+          ? Colors.black
+          : (dark ? BookNestColors.navyDeep : BookNestColors.lightSurface),
       appBar: AppBar(
-        backgroundColor: dark ? Colors.black : Colors.white,
-        foregroundColor: dark ? Colors.white : BookNestColors.navyDeep,
+        backgroundColor: dark || cinema ? Colors.black : Colors.white,
+        foregroundColor: dark || cinema ? Colors.white : BookNestColors.navyDeep,
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Save / share',
+            icon: const Icon(Icons.ios_share_rounded),
+            onPressed: _share,
+          ),
+        ],
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -343,12 +432,18 @@ class _MediaFileViewerState extends State<MediaFileViewer> {
                   : 'Opened inside BookNest',
               style: TextStyle(
                   fontSize: 11.5,
-                  color: dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.55)),
+                  color: dark || cinema
+                      ? Colors.white54
+                      : BookNestColors.navyDeep.withOpacity(.55)),
             ),
           ],
         ),
       ),
-      body: _downloading
+      body: _streams
+          ? (item.isVideo
+              ? Center(child: _VideoPlayerPane.network(url: item.url, name: item.name))
+              : _AudioPane(url: item.url, dark: dark, name: item.name))
+          : _downloading
           ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -370,25 +465,8 @@ class _MediaFileViewerState extends State<MediaFileViewer> {
     );
   }
 
-  Widget _body(bool dark) {
-    final item = widget.item;
-    final file = _file!;
-    if (item.isImage) {
-      return InteractiveViewer(
-        maxScale: 6,
-        child: Center(
-          child: Image.file(file, fit: BoxFit.contain),
-        ),
-      );
-    }
-    if (item.isVideo) {
-      return _VideoPlayerPane.file(file: file, name: item.name);
-    }
-    if (item.isPdf) return _PdfPane(file: file, dark: dark);
-    if (item.isAudio) return _AudioPane(file: file, dark: dark, name: item.name);
-    if (item.isText) return _TextPane(file: file, dark: dark);
-    return _DocumentCard(file: file, item: item, dark: dark);
-  }
+  Widget _body(bool dark) =>
+      _UniversalPane(file: _file!, item: widget.item, dark: dark);
 }
 
 class _ErrorPane extends StatelessWidget {
@@ -500,10 +578,11 @@ class _PdfPaneState extends State<_PdfPane> {
 // ── Audio player ─────────────────────────────────────────────────────────────
 
 class _AudioPane extends StatefulWidget {
-  final File file;
+  final File? file;
+  final String? url;
   final bool dark;
   final String name;
-  const _AudioPane({required this.file, required this.dark, required this.name});
+  const _AudioPane({this.file, this.url, required this.dark, required this.name});
 
   @override
   State<_AudioPane> createState() => _AudioPaneState();
@@ -542,7 +621,11 @@ class _AudioPaneState extends State<_AudioPane> {
   }
 
   Future<void> _start() async {
-    await _player.play(DeviceFileSource(widget.file.path));
+    if (widget.url != null) {
+      await _player.play(UrlSource(widget.url!));
+    } else {
+      await _player.play(DeviceFileSource(widget.file!.path));
+    }
   }
 
   @override
@@ -680,74 +763,6 @@ class _AudioPaneState extends State<_AudioPane> {
           ),
         ),
       ),
-    );
-  }
-}
-
-// ── Text preview ─────────────────────────────────────────────────────────────
-
-class _TextPane extends StatefulWidget {
-  final File file;
-  final bool dark;
-  const _TextPane({required this.file, required this.dark});
-
-  @override
-  State<_TextPane> createState() => _TextPaneState();
-}
-
-class _TextPaneState extends State<_TextPane> {
-  String? _text;
-  bool _truncated = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _read();
-  }
-
-  Future<void> _read() async {
-    final bytes = await widget.file.readAsBytes();
-    final limit = bytes.length > 200 * 1024 ? bytes.sublist(0, 200 * 1024) : bytes;
-    if (!mounted) return;
-    setState(() {
-      _text = utf8.decode(limit, allowMalformed: true);
-      _truncated = bytes.length > 200 * 1024;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_text == null) {
-      return const Center(child: CircularProgressIndicator(color: BookNestColors.cyan));
-    }
-    return Column(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: SelectableText(
-              _text!,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 13,
-                height: 1.5,
-                color: widget.dark ? Colors.white : BookNestColors.navyDeep,
-              ),
-            ),
-          ),
-        ),
-        if (_truncated)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            color: BookNestColors.cyan.withOpacity(.12),
-            child: const Text(
-              'Preview shows the first 200 KB — the full file is stored in BookNest.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-          ),
-      ],
     );
   }
 }
@@ -1054,6 +1069,13 @@ class _VideoPoster extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
+          if (CloudinaryService.videoThumb(url).isEmpty)
+            Container(
+              color: BookNestColors.navyDeep,
+              child: const Icon(Icons.movie_rounded,
+                  color: Colors.white24, size: 42),
+            )
+          else
           CachedNetworkImage(
             imageUrl: CloudinaryService.videoThumb(url),
             fit: BoxFit.cover,
@@ -1070,5 +1092,706 @@ class _VideoPoster extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ── Universal document pane ──────────────────────────────────────────────────
+//
+// Looks at the file's own bytes (not just its name) and picks the right
+// view: PDF pages, pictures, SVG, video, audio, Markdown, or the BookNest
+// reader for everything else (Word, Excel, PowerPoint, OpenDocument,
+// e-books, web pages, CSV, archives, code, unknown files…).
+
+class _UniversalPane extends StatefulWidget {
+  final File file;
+  final MediaItem item;
+  final bool dark;
+  const _UniversalPane({required this.file, required this.item, required this.dark});
+
+  @override
+  State<_UniversalPane> createState() => _UniversalPaneState();
+}
+
+class _UniversalPaneState extends State<_UniversalPane> {
+  String? _kind;
+
+  @override
+  void initState() {
+    super.initState();
+    _sniff();
+  }
+
+  Future<void> _sniff() async {
+    var kind = 'document';
+    try {
+      final raf = await widget.file.open();
+      final head = await raf.read(4096);
+      await raf.close();
+      kind = sniffKind(head, widget.item.extension);
+    } catch (_) {}
+    if (mounted) setState(() => _kind = kind);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final file = widget.file;
+    final item = widget.item;
+    final dark = widget.dark;
+    switch (_kind) {
+      case null:
+        return const Center(child: CircularProgressIndicator(color: BookNestColors.cyan));
+      case 'pdf':
+        return _PdfPane(file: file, dark: dark);
+      case 'image':
+        return InteractiveViewer(
+          maxScale: 6,
+          child: Center(
+            child: Image.file(file,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) =>
+                    _DocPane(file: file, item: item, dark: dark)),
+          ),
+        );
+      case 'svg':
+        return InteractiveViewer(
+          maxScale: 8,
+          child: Center(
+            child: SvgPicture.file(file,
+                fit: BoxFit.contain,
+                placeholderBuilder: (_) =>
+                    const CircularProgressIndicator(color: BookNestColors.cyan)),
+          ),
+        );
+      case 'video':
+        return Container(
+          color: Colors.black,
+          alignment: Alignment.center,
+          child: _VideoPlayerPane.file(file: file, name: item.name),
+        );
+      case 'audio':
+        return _AudioPane(file: file, dark: dark, name: item.name);
+      case 'markdown':
+        return _MarkdownPane(file: file, dark: dark);
+      default:
+        return _DocPane(file: file, item: item, dark: dark);
+    }
+  }
+}
+
+class _MarkdownPane extends StatelessWidget {
+  final File file;
+  final bool dark;
+  const _MarkdownPane({required this.file, required this.dark});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: file.readAsBytes().then((b) => utf8.decode(b, allowMalformed: true)),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator(color: BookNestColors.cyan));
+        }
+        return Markdown(
+          data: snap.data!,
+          selectable: true,
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+        );
+      },
+    );
+  }
+}
+
+/// Reads the document in a background isolate, then shows it.
+class _DocPane extends StatefulWidget {
+  final File file;
+  final MediaItem item;
+  final bool dark;
+  const _DocPane({required this.file, required this.item, required this.dark});
+
+  @override
+  State<_DocPane> createState() => _DocPaneState();
+}
+
+class _DocPaneState extends State<_DocPane> {
+  static const _maxBytes = 80 * 1024 * 1024;
+  ExtractedDoc? _doc;
+  Uint8List? _bytes;
+  String? _problem;
+  File? _previewPdf;
+
+  @override
+  void initState() {
+    super.initState();
+    _read();
+  }
+
+  Future<void> _read() async {
+    try {
+      final length = await widget.file.length();
+      if (length > _maxBytes) {
+        setState(() => _problem =
+            'This file is ${_formatBytes(length)} — too large to open on the phone. '
+            'Use Save / share to keep it.');
+        return;
+      }
+      final bytes = await widget.file.readAsBytes();
+      final doc = await compute(extractDocumentFromMap,
+          <String, Object?>{'bytes': bytes, 'ext': widget.item.extension});
+      File? pdf;
+      if (doc.previewPdf != null) {
+        pdf = File('${widget.file.path}.preview.pdf');
+        await pdf.writeAsBytes(doc.previewPdf!, flush: true);
+      }
+      if (!mounted) return;
+      setState(() {
+        _doc = doc;
+        _bytes = doc.entries.isNotEmpty ? bytes : null;
+        _previewPdf = pdf;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _problem = 'This file could not be read.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = widget.dark;
+    if (_problem != null) {
+      return _DocumentCard(file: widget.file, item: widget.item, dark: dark, note: _problem);
+    }
+    final doc = _doc;
+    if (doc == null) {
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const CircularProgressIndicator(color: BookNestColors.cyan),
+          const SizedBox(height: 14),
+          Text('Opening the document…',
+              style: TextStyle(
+                  color: dark ? Colors.white60 : BookNestColors.navyDeep.withOpacity(.6))),
+        ]),
+      );
+    }
+    if (_previewPdf != null) return _PdfPane(file: _previewPdf!, dark: dark);
+    if (doc.previewImage != null) {
+      return Column(children: [
+        if (doc.note != null) _NoteBanner(doc.note!, dark: dark),
+        Expanded(
+          child: InteractiveViewer(
+            maxScale: 6,
+            child: Center(child: Image.memory(doc.previewImage!, fit: BoxFit.contain)),
+          ),
+        ),
+      ]);
+    }
+    if (doc.entries.isNotEmpty) {
+      return _ArchiveList(doc: doc, bytes: _bytes!, item: widget.item, dark: dark);
+    }
+    if (doc.isEmpty || doc.pages.every((p) => p.blocks.isEmpty)) {
+      return _DocumentCard(
+          file: widget.file,
+          item: widget.item,
+          dark: dark,
+          note: doc.note ?? 'There is nothing readable inside this file.');
+    }
+    return _DocReader(doc: doc, dark: dark);
+  }
+}
+
+class _NoteBanner extends StatelessWidget {
+  final String text;
+  final bool dark;
+  const _NoteBanner(this.text, {required this.dark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      color: BookNestColors.cyan.withOpacity(.12),
+      child: Row(children: [
+        const Icon(Icons.info_outline_rounded, size: 16, color: BookNestColors.cyan),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text,
+              style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: dark ? Colors.white : BookNestColors.navyDeep)),
+        ),
+      ]),
+    );
+  }
+}
+
+/// The BookNest reader: pages (slides, sheets, chapters) with a picker,
+/// adjustable text size, selectable text, tables and pictures.
+class _DocReader extends StatefulWidget {
+  final ExtractedDoc doc;
+  final bool dark;
+  const _DocReader({required this.doc, required this.dark});
+
+  @override
+  State<_DocReader> createState() => _DocReaderState();
+}
+
+class _DocReaderState extends State<_DocReader> {
+  int _page = 0;
+  double _scale = 1.0;
+
+  List<DocPage> get _pages => widget.doc.pages;
+
+  void _pickPage() {
+    final dark = widget.dark;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: dark ? BookNestColors.navyDeep : Colors.white,
+      builder: (sheetContext) => SafeArea(
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: _pages.length,
+          itemBuilder: (_, i) => ListTile(
+            dense: true,
+            selected: i == _page,
+            selectedColor: BookNestColors.cyan,
+            leading: Text('${i + 1}',
+                style: const TextStyle(fontWeight: FontWeight.w800, color: BookNestColors.cyan)),
+            title: Text(_pageTitle(i), maxLines: 1, overflow: TextOverflow.ellipsis),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              setState(() => _page = i);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _pageTitle(int i) {
+    final t = _pages[i].title.trim();
+    return t.isEmpty ? 'Page ${i + 1}' : t;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = widget.dark;
+    final doc = widget.doc;
+    final fg = dark ? Colors.white : BookNestColors.navyDeep;
+    final page = _pages[_page < _pages.length ? _page : _pages.length - 1];
+    final sheetGrid = page.isSheet &&
+        page.blocks.length == 1 &&
+        page.blocks.first.type == DocBlockType.table;
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+          decoration: BoxDecoration(
+            color: dark ? Colors.white.withOpacity(.04) : Colors.white,
+            border: Border(bottom: BorderSide(color: BookNestColors.cyan.withOpacity(.18))),
+          ),
+          child: Row(
+            children: [
+              Icon(_formatIcon(doc.format), size: 18, color: BookNestColors.cyan),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  doc.title?.isNotEmpty == true ? '${doc.format} · ${doc.title}' : doc.format,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: fg),
+                ),
+              ),
+              if (!sheetGrid) ...[
+                IconButton(
+                  tooltip: 'Smaller text',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _scale > .8 ? () => setState(() => _scale -= .1) : null,
+                  icon: Icon(Icons.text_decrease_rounded, size: 20, color: fg),
+                ),
+                IconButton(
+                  tooltip: 'Larger text',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _scale < 1.8 ? () => setState(() => _scale += .1) : null,
+                  icon: Icon(Icons.text_increase_rounded, size: 20, color: fg),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (doc.note != null) _NoteBanner(doc.note!, dark: dark),
+        if (_pages.length > 1)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            child: Row(children: [
+              IconButton(
+                onPressed: _page > 0 ? () => setState(() => _page--) : null,
+                icon: const Icon(Icons.chevron_left_rounded),
+                color: BookNestColors.cyan,
+              ),
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: _pickPage,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '${_pageTitle(_page)}  ·  ${_page + 1} of ${_pages.length}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontWeight: FontWeight.w800, color: fg),
+                          ),
+                        ),
+                        const Icon(Icons.expand_more_rounded, color: BookNestColors.cyan),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed:
+                    _page < _pages.length - 1 ? () => setState(() => _page++) : null,
+                icon: const Icon(Icons.chevron_right_rounded),
+                color: BookNestColors.cyan,
+              ),
+            ]),
+          ),
+        Expanded(
+          child: sheetGrid
+              ? _SheetGrid(key: ValueKey(_page), rows: page.blocks.first.rows, dark: dark)
+              : page.blocks.isEmpty
+                  ? Center(
+                      child: Text('This page is empty.',
+                          style: TextStyle(color: fg.withOpacity(.6))))
+                  : MediaQuery(
+                      data: MediaQuery.of(context).copyWith(
+                          textScaler: TextScaler.linear(_scale)),
+                      child: ListView.builder(
+                        key: PageStorageKey('doc-page-$_page'),
+                        padding: const EdgeInsets.fromLTRB(18, 14, 18, 48),
+                        itemCount: page.blocks.length,
+                        itemBuilder: (_, i) => _BlockView(
+                            block: page.blocks[i], dark: dark, monospace: doc.monospace),
+                      ),
+                    ),
+        ),
+      ],
+    );
+  }
+
+  static IconData _formatIcon(String format) {
+    final f = format.toLowerCase();
+    if (f.contains('spreadsheet')) return Icons.table_chart_rounded;
+    if (f.contains('slides')) return Icons.slideshow_rounded;
+    if (f.contains('e-book')) return Icons.menu_book_rounded;
+    if (f.contains('web')) return Icons.language_rounded;
+    if (f.contains('message') || f.contains('mail')) return Icons.mail_outline_rounded;
+    return Icons.description_rounded;
+  }
+}
+
+class _BlockView extends StatelessWidget {
+  final DocBlock block;
+  final bool dark;
+  final bool monospace;
+  const _BlockView({required this.block, required this.dark, required this.monospace});
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = dark ? Colors.white : BookNestColors.navyDeep;
+    final body = TextStyle(fontSize: 15.5, height: 1.55, color: fg.withOpacity(.92));
+    TextSpan spans(TextStyle base) => TextSpan(
+          style: base,
+          children: [
+            for (final s in block.spans)
+              TextSpan(
+                text: s.text,
+                style: TextStyle(
+                  fontWeight: s.bold ? FontWeight.w800 : null,
+                  fontStyle: s.italic ? FontStyle.italic : null,
+                  decoration: s.underline ? TextDecoration.underline : null,
+                ),
+              ),
+          ],
+        );
+    switch (block.type) {
+      case DocBlockType.heading:
+        final level = block.level < 1 ? 1 : (block.level > 6 ? 6 : block.level);
+        final size = const [24.0, 21.0, 18.5, 17.0, 16.0, 15.5][level - 1];
+        return Padding(
+          padding: EdgeInsets.only(top: block.level <= 2 ? 18 : 12, bottom: 8),
+          child: SelectableText(block.text,
+              style: TextStyle(
+                  fontSize: size, fontWeight: FontWeight.w800, height: 1.3, color: fg)),
+        );
+      case DocBlockType.paragraph:
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: SelectableText.rich(spans(body)),
+        );
+      case DocBlockType.bullet:
+        return Padding(
+          padding: EdgeInsets.only(
+              bottom: 6, left: 6.0 + 16.0 * (block.level < 1 ? 0 : (block.level > 5 ? 4 : block.level - 1))),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 1, right: 8),
+              child: Text('•',
+                  style: body.copyWith(color: BookNestColors.cyan, fontWeight: FontWeight.w900)),
+            ),
+            Expanded(child: SelectableText.rich(spans(body))),
+          ]),
+        );
+      case DocBlockType.code:
+        return Container(
+          margin: EdgeInsets.only(bottom: monospace ? 0 : 10),
+          padding: monospace ? EdgeInsets.zero : const EdgeInsets.all(12),
+          decoration: monospace
+              ? null
+              : BoxDecoration(
+                  color: fg.withOpacity(.06), borderRadius: BorderRadius.circular(10)),
+          child: SelectableText(block.text,
+              style: TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.5, color: fg)),
+        );
+      case DocBlockType.table:
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: _DocTable(rows: block.rows, dark: dark),
+        );
+      case DocBlockType.image:
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.memory(block.image!,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+          ),
+        );
+      case DocBlockType.divider:
+        return Divider(height: 28, color: BookNestColors.cyan.withOpacity(.3));
+    }
+  }
+}
+
+/// A table inside a document: scrolls sideways, header row in bold.
+class _DocTable extends StatelessWidget {
+  final List<List<String>> rows;
+  final bool dark;
+  const _DocTable({required this.rows, required this.dark});
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = dark ? Colors.white : BookNestColors.navyDeep;
+    final shown = rows.length > 400 ? rows.sublist(0, 400) : rows;
+    final width = shown.fold<int>(0, (w, r) => r.length > w ? r.length : w);
+    if (width == 0) return const SizedBox.shrink();
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Table(
+        defaultColumnWidth: const IntrinsicColumnWidth(),
+        border: TableBorder.all(color: BookNestColors.cyan.withOpacity(.28), width: .8),
+        children: [
+          for (var r = 0; r < shown.length; r++)
+            TableRow(
+              decoration: BoxDecoration(
+                  color: r == 0 ? BookNestColors.cyan.withOpacity(.10) : null),
+              children: [
+                for (var c = 0; c < width; c++)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 260),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      child: Text(
+                        c < shown[r].length ? shown[r][c] : '',
+                        style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: r == 0 ? FontWeight.w800 : FontWeight.w500,
+                            color: fg),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A spreadsheet tab: a real grid with column letters and row numbers that
+/// scrolls both ways and builds only the visible rows. Long-press a cell to
+/// copy it.
+class _SheetGrid extends StatelessWidget {
+  final List<List<String>> rows;
+  final bool dark;
+  const _SheetGrid({super.key, required this.rows, required this.dark});
+
+  static String _letters(int i) {
+    var n = i + 1;
+    var s = '';
+    while (n > 0) {
+      final r = (n - 1) % 26;
+      s = String.fromCharCode(65 + r) + s;
+      n = (n - 1) ~/ 26;
+    }
+    return s;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = dark ? Colors.white : BookNestColors.navyDeep;
+    final line = BookNestColors.cyan.withOpacity(.22);
+    final cols = rows.fold<int>(0, (w, r) => r.length > w ? r.length : w);
+    final widths = List<double>.filled(cols, 64);
+    for (final r in rows.take(300)) {
+      for (var c = 0; c < r.length; c++) {
+        final chars = r[c].split('\n').fold<int>(0, (m, l) => l.length > m ? l.length : m);
+        final w = (chars < 3 ? 3 : (chars > 42 ? 42 : chars)) * 7.6 + 22;
+        if (w > widths[c]) widths[c] = w;
+      }
+    }
+    const rowHead = 46.0, rowHeight = 34.0;
+    final total = rowHead + widths.fold<double>(0, (a, b) => a + b);
+
+    Widget cell(String text, double width,
+        {bool head = false, Alignment align = Alignment.centerLeft}) {
+      return GestureDetector(
+        onLongPress: head || text.isEmpty
+            ? null
+            : () {
+                Clipboard.setData(ClipboardData(text: text));
+                ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                    const SnackBar(content: Text('Cell copied')));
+              },
+        child: Container(
+          width: width,
+          height: rowHeight,
+          alignment: align,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: head ? BookNestColors.cyan.withOpacity(.10) : null,
+            border: Border(right: BorderSide(color: line), bottom: BorderSide(color: line)),
+          ),
+          child: Text(text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: head ? FontWeight.w800 : FontWeight.w500,
+                  color: head ? BookNestColors.cyan : fg)),
+        ),
+      );
+    }
+
+    final numeric = RegExp(r'^-?[\d,.]+%?$');
+    return Scrollbar(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: total,
+          child: ListView.builder(
+            itemCount: rows.length + 1,
+            itemBuilder: (_, i) {
+              if (i == 0) {
+                return Row(children: [
+                  cell('', rowHead, head: true),
+                  for (var c = 0; c < cols; c++)
+                    cell(_letters(c), widths[c], head: true, align: Alignment.center),
+                ]);
+              }
+              final r = rows[i - 1];
+              return Row(children: [
+                cell('$i', rowHead, head: true, align: Alignment.center),
+                for (var c = 0; c < cols; c++)
+                  cell(
+                    c < r.length ? r[c] : '',
+                    widths[c],
+                    align: c < r.length && numeric.hasMatch(r[c])
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
+                  ),
+              ]);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The files inside a zip / tar: tap one to open it in the viewer.
+class _ArchiveList extends StatelessWidget {
+  final ExtractedDoc doc;
+  final Uint8List bytes;
+  final MediaItem item;
+  final bool dark;
+  const _ArchiveList(
+      {required this.doc, required this.bytes, required this.item, required this.dark});
+
+  static IconData _icon(String name) {
+    final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+    if (isImageExtension(ext)) return Icons.image_outlined;
+    if (isVideoExtension(ext)) return Icons.movie_outlined;
+    if (isAudioExtension(ext)) return Icons.audiotrack_outlined;
+    if (ext == 'pdf') return Icons.picture_as_pdf_outlined;
+    if (const {'zip', 'tar', 'gz', 'tgz', 'rar', '7z'}.contains(ext)) {
+      return Icons.folder_zip_outlined;
+    }
+    return Icons.insert_drive_file_outlined;
+  }
+
+  Future<void> _open(BuildContext context, ArchiveEntryInfo e) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final data = await compute(archiveEntryFromMap,
+        <String, Object?>{'bytes': bytes, 'ext': item.extension, 'name': e.name});
+    if (data == null) {
+      messenger?.showSnackBar(const SnackBar(content: Text('That file could not be opened.')));
+      return;
+    }
+    final base = e.name.split('/').last;
+    final dir = Directory(
+        '${Directory.systemTemp.path}/booknest_media/zip_${(item.url + e.name).hashCode.abs().toRadixString(36)}');
+    await dir.create(recursive: true);
+    final file = File('${dir.path}/$base');
+    await file.writeAsBytes(data, flush: true);
+    if (!context.mounted) return;
+    await openLocalFile(context, file, base);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = dark ? Colors.white : BookNestColors.navyDeep;
+    return Column(children: [
+      _NoteBanner(
+          '${doc.format} · ${doc.entries.length} file${doc.entries.length == 1 ? '' : 's'} — tap one to open it',
+          dark: dark),
+      Expanded(
+        child: ListView.separated(
+          itemCount: doc.entries.length,
+          separatorBuilder: (_, __) =>
+              Divider(height: 1, color: BookNestColors.cyan.withOpacity(.12)),
+          itemBuilder: (_, i) {
+            final e = doc.entries[i];
+            final slash = e.name.lastIndexOf('/');
+            return ListTile(
+              leading: Icon(_icon(e.name), color: BookNestColors.cyan),
+              title: Text(slash < 0 ? e.name : e.name.substring(slash + 1),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.w700, color: fg)),
+              subtitle: Text(
+                  [if (slash > 0) e.name.substring(0, slash), _formatBytes(e.size)].join('  ·  '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: fg.withOpacity(.6))),
+              onTap: () => _open(context, e),
+            );
+          },
+        ),
+      ),
+    ]);
   }
 }

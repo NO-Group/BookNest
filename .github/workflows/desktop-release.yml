@@ -1,63 +1,51 @@
 name: Desktop Release
 
 # BookNest for every PC: Windows, macOS and Linux, built from the same
-# code as the phone app. Each OS uploads its own artifact:
-#   • Windows → BookNest-windows (unzip, run booknest.exe)
-#   • macOS   → BookNest-macos (unzip, drag to Applications; unsigned,
-#                so right-click → Open the first time)
-#   • Linux   → BookNest-linux (untar, run ./booknest)
-# When a build fails, the exact compiler error is committed into the
-# repo (desktop-error-<os>.txt) so it can be read from anywhere — the
-# commit rebases over anything that landed while the build ran.
-# v3 of this pipeline builds WITHOUT Firebase entirely (removed from
-# the app), which takes its heavy C++ SDK out of the Windows build.
+# code as the phone app, published together on ONE GitHub Release
+# ("BookNest <version> for PC"):
+#   • Windows → BookNest-Setup.exe (installer — double-click, done)
+#               BookNest-windows.zip (portable — unzip, run booknest.exe)
+#   • macOS   → BookNest-macos.zip (unzip, drag to Applications; unsigned,
+#               so right-click → Open the first time)
+#   • Linux   → BookNest-linux.tar.gz (untar, run ./booknest)
+#
+# Each OS uploads straight to the release (no artifact hop — the 500 MB
+# artifact quota and its accounting lag used to eat uploads). The first job
+# to finish creates the release; the others attach to it.
+# When a build fails, the exact compiler error is pushed to a
+# desktop-diag-<os> branch and opened as an issue.
 
 on:
   workflow_dispatch:
   push:
     branches:
+      - BookNest
       - arena/01a03a7f-booknest
+      - arena/01a106c8-booknest
     paths:
+      # The pipeline itself, or a version bump (= a new release). Bump the
+      # version for UI changes so the PC build matches the phone builds.
       - '.github/workflows/desktop-release.yml'
+      - 'pubspec.yaml'
+      # Native PC files (icons, runners, installer).
+      - 'windows/**'
+      - 'macos/**'
+      - 'linux/**'
 
 permissions:
   contents: write
   issues: write # failed builds open a dated issue with the real error
-  actions: write # cleanup of old artifacts keeps us under the storage quota
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
-      - name: Free artifact storage (quota is 500 MB; keep this run only)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
-            --jq '.artifacts[] | select(.expired==false) | .id' > /tmp/ids${JOB}_$.txt || true
-          n=0
-          while read -r id; do
-            [ -n "$id" ] || continue
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" >/dev/null 2>&1 && n=$((n+1)) || true
-          done < /tmp/ids${JOB}_$.txt
-          echo "cleared $n old artifact(s)"
-      - name: Free artifact storage (quota is 500 MB; keep this run only)
-        continue-on-error: true
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
-            --jq '.artifacts[] | select(.expired==false) | .id' > /tmp/ids.txt || true
-          n=0
-          while read -r id; do
-            [ -n "$id" ] || continue
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" >/dev/null 2>&1 && n=$((n+1)) || true
-          done < /tmp/ids.txt
-          echo "cleared $n old artifacts"
-
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -66,9 +54,10 @@ jobs:
       - name: Build Windows
         shell: bash
         env:
-          # The Firebase C++ SDK's bundled CMake files pre-date CMake 4's
-          # compatibility cutoff — this restores it (recommended by the
-          # error itself).
+          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
+          # Older plugin CMake files pre-date CMake 4's compatibility
+          # cutoff — this restores it (recommended by the error itself).
           CMAKE_POLICY_VERSION_MINIMUM: '3.5'
           # permission_handler_windows compiles against the deprecated
           # <experimental/coroutine> header; MSVC 18 hard-errors on it
@@ -79,99 +68,63 @@ jobs:
           MSYS2_ARG_CONV_EXCL: '*'
         run: |
           set -o pipefail
-          flutter build windows --release 2>&1 | tee build.log
+          flutter build windows --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="$GOOGLE_DESKTOP_CLIENT_ID" --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$GOOGLE_DESKTOP_CLIENT_SECRET" 2>&1 | tee build.log
+          test -f build/windows/x64/runner/Release/booknest.exe ||
+            { echo "booknest.exe was not produced"; exit 1; }
+
+      - name: Bundle the Visual C++ runtime (app-local)
+        shell: pwsh
+        run: |
+          # Flutter apps need the MSVC runtime. Shipping it next to the exe
+          # means BookNest starts even on PCs that never installed the
+          # "VC++ Redistributable" (Microsoft permits app-local copies).
+          $rel = 'build/windows/x64/runner/Release'
+          foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            $src = Join-Path $env:WINDIR "System32\$dll"
+            if (Test-Path $src) { Copy-Item $src $rel -Force; "bundled $dll" }
+            else { "WARNING: $dll not found on runner" }
+          }
+
+      - name: Package (portable zip + installer)
+        id: pkg
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver = ((Select-String -Path pubspec.yaml -Pattern '^version:\s*([^+\s]+)').Matches[0].Groups[1].Value)
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath dist/BookNest-windows.zip
+
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress | Out-Null
+          }
+          if (-not (Test-Path $iscc)) { throw 'Inno Setup (ISCC.exe) is not available' }
+          $src = (Resolve-Path 'build/windows/x64/runner/Release').Path
+          $out = (Resolve-Path 'dist').Path
+          & $iscc "/DMyAppVersion=$ver" "/DSourceDir=$src" "/O$out" 'windows/installer/booknest.iss'
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
+          Get-ChildItem dist | Select-Object Name, Length
+
+      - name: Publish to GitHub Releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.pkg.outputs.version }}
+        run: bash .github/scripts/publish-pc-release.sh "$VER" dist/BookNest-Setup.exe dist/BookNest-windows.zip
+
       - name: Commit build diagnostics
         if: failure()
         shell: bash
-        run: |
-          tail -c 3000 build.log > desktop-error-windows.txt 2>/dev/null || echo "build.log missing" > desktop-error-windows.txt
-          cp build.log windows-full.log 2>/dev/null || true
-          git config user.email "booknest-ci@users.noreply.github.com"
-          git config user.name "booknest-ci"
-          git checkout -q -B desktop-diag-windows
-          git add desktop-error-windows.txt windows-full.log 2>/dev/null || git add desktop-error-windows.txt
-          git commit -q -m "windows build diag $(date -u +%FT%TZ)" || true
-          git push -q -f origin desktop-diag-windows || git push -f origin desktop-diag-windows || true
-          {
-            echo "OS: $RUNNER_OS — [run log](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
-            echo ''
-            echo '```'
-            cat desktop-error-windows.txt
-            echo '```'
-          } > issue-body.md
-          gh issue create \
-            --title "Desktop build failed: windows ($(date -u +%H:%M))" \
-            --body-file issue-body.md || true
-      - name: Package
-        if: success()
-        id: pkg
-        shell: pwsh
-        run: |-
-          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath BookNest-windows.zip
-          Get-Item BookNest-windows.zip | Select-Object Name, Length
-      - uses: actions/upload-artifact@v4
-        if: success()
-        id: up
-        with:
-          name: BookNest-windows
-          path: BookNest-windows.zip
-          if-no-files-found: error
-      - name: Retry artifact upload once
-        if: failure() && steps.pkg.outcome == 'success' && steps.up.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: BookNest-windows
-          path: BookNest-windows.zip
-          if-no-files-found: error
-          overwrite: true
-      - name: Commit package/upload diagnostics
-        if: failure() && steps.pkg.outcome != 'success'
-        shell: bash
-        run: |
-          { echo "windows package/upload diag $(date -u +%FT%TZ)";
-            echo '--- build.log tail ---';
-            tail -c 1500 build.log 2>/dev/null;
-            echo '--- files ---';
-            ls -la BookNest-windows.zip build/windows/x64/runner/Release/ 2>&1 | tail -30; } > desktop-error-windows.txt
-          git config user.email "booknest-ci@users.noreply.github.com"
-          git config user.name "booknest-ci"
-          git checkout -q -B desktop-diag-windows
-          git add desktop-error-windows.txt
-          git commit -q -m "windows pkg diag $(date -u +%FT%TZ)" || true
-          git push -q -f origin desktop-diag-windows || git push -f origin desktop-diag-windows || true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/desktop-diag.sh windows
 
   macos:
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
-      - name: Free artifact storage (quota is 500 MB; keep this run only)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
-            --jq '.artifacts[] | select(.expired==false) | .id' > /tmp/ids${JOB}_$.txt || true
-          n=0
-          while read -r id; do
-            [ -n "$id" ] || continue
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" >/dev/null 2>&1 && n=$((n+1)) || true
-          done < /tmp/ids${JOB}_$.txt
-          echo "cleared $n old artifact(s)"
-      - name: Free artifact storage (quota is 500 MB; keep this run only)
-        continue-on-error: true
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
-            --jq '.artifacts[] | select(.expired==false) | .id' > /tmp/ids.txt || true
-          n=0
-          while read -r id; do
-            [ -n "$id" ] || continue
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" >/dev/null 2>&1 && n=$((n+1)) || true
-          done < /tmp/ids.txt
-          echo "cleared $n old artifacts"
-
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -180,151 +133,91 @@ jobs:
       - name: Build macOS (unsigned for CI)
         env:
           CODE_SIGNING_ALLOWED: 'NO'
+          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: |
           set -o pipefail
-          flutter build macos --release 2>&1 | tee build.log
+          flutter build macos --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="$GOOGLE_DESKTOP_CLIENT_ID" --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$GOOGLE_DESKTOP_CLIENT_SECRET" 2>&1 | tee build.log
       - name: Package
-        if: success()
-        shell: bash
+        id: pkg
         run: |
+          VER="$(grep '^version:' pubspec.yaml | sed 's/version: //;s/+.*//')"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
           cd build/macos/Build/Products/Release
           APP=$(ls -d *.app | head -1)
           echo "Packaging $APP"
-          # Absolute destination on purpose: a relative '../..' count once
-          # landed this zip one level short of the workspace root, which
-          # is exactly why Publish kept refusing to ship it.
-          ditto -c -k --sequesterRsrc --keepParent "$APP" "$GITHUB_WORKSPACE/BookNest-macos.zip"
-          ls -la "$GITHUB_WORKSPACE/BookNest-macos.zip" > "$GITHUB_WORKSPACE/package.log" 2>&1
-      - uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: BookNest-macos
-          path: BookNest-macos.zip
-          if-no-files-found: error
+          # Absolute destination on purpose (a relative path once landed
+          # the zip one level short of the workspace root).
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$GITHUB_WORKSPACE/dist/BookNest-macos.zip"
+          ls -la "$GITHUB_WORKSPACE/dist"
       - name: Publish to GitHub Releases
-        if: success()
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -o pipefail
-          TAG="pc-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
-          NOTES="BookNest for PC — macOS build. Unzip, drag to Applications. Unsigned: right-click → Open the first time."
-          TRY() {
-            gh "$@" 2>&1 | tee -a release.log
-            return ${PIPESTATUS[0]}
-          }
-          : > release.log
-          TRY release create "$TAG" BookNest-macos.zip \
-            --target "$GITHUB_SHA" --title "BookNest for PC — $TAG" --notes "$NOTES" \
-          || TRY release create "$TAG" BookNest-macos.zip \
-            --title "BookNest for PC — $TAG" --notes "$NOTES" \
-          || TRY release upload "$TAG" BookNest-macos.zip --clobber
-          if [ $? != 0 ]; then
-            tail -c 1500 release.log > release-error.txt || echo "release failed" > release-error.txt
-            exit 1
-          fi
-
+          VER: ${{ steps.pkg.outputs.version }}
+        run: bash .github/scripts/publish-pc-release.sh "$VER" dist/BookNest-macos.zip
       - name: Commit build diagnostics
         if: failure()
-        run: |
-          tail -c 3000 build.log > desktop-error-macos.txt 2>/dev/null || echo "build.log missing" > desktop-error-macos.txt
-          [ -f release-error.txt ] && { echo ''; echo '--- release.log tail ---'; cat release-error.txt; } >> desktop-error-macos.txt || true
-          [ -f release.log ] && { echo ''; echo '--- full release log ---'; tail -c 2000 release.log; } >> desktop-error-macos.txt || true
-          [ -f package.log ] && { echo ''; echo '--- package evidence ---'; cat package.log; } >> desktop-error-macos.txt || true
-          { echo ''; echo '--- workspace listing ---'; ls -la "$GITHUB_WORKSPACE" | tail -25; } >> desktop-error-macos.txt || true
-          git config user.email "booknest-ci@users.noreply.github.com"
-          git config user.name "booknest-ci"
-          git checkout -q -B desktop-diag-macos
-          git add desktop-error-macos.txt
-          git commit -q -m "macos build diag $(date -u +%FT%TZ)" || true
-          git push -q -f origin desktop-diag-macos || git push -f origin desktop-diag-macos || true
-          {
-            echo "OS: $RUNNER_OS — [run log](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
-            echo ''
-            echo '```'
-            cat desktop-error-macos.txt
-            echo '```'
-          } > issue-body.md
-          gh issue create \
-            --title "Desktop build failed: macos ($(date -u +%H:%M))" \
-            --body-file issue-body.md || true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/desktop-diag.sh macos
 
   linux:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is moving to Ubuntu 26 (Oct 2026) and its apt step
+    # hung for 15 min. 24.04 also keeps the glibc floor low for users' PCs.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Free artifact storage (quota is 500 MB; keep this run only)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
-            --jq '.artifacts[] | select(.expired==false) | .id' > /tmp/ids${JOB}_$.txt || true
-          n=0
-          while read -r id; do
-            [ -n "$id" ] || continue
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" >/dev/null 2>&1 && n=$((n+1)) || true
-          done < /tmp/ids${JOB}_$.txt
-          echo "cleared $n old artifact(s)"
-      - name: Free artifact storage (quota is 500 MB; keep this run only)
-        continue-on-error: true
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
-            --jq '.artifacts[] | select(.expired==false) | .id' > /tmp/ids.txt || true
-          n=0
-          while read -r id; do
-            [ -n "$id" ] || continue
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" >/dev/null 2>&1 && n=$((n+1)) || true
-          done < /tmp/ids.txt
-          echo "cleared $n old artifacts"
-
       - name: Linux build libraries
+        # A stuck Ubuntu mirror once hung this step for the whole job; give up
+        # after 25 min (three capped attempts) instead of blocking the release.
+        timeout-minutes: 25
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        # Lean install: only the -dev headers the build links against (the
+        # GStreamer runtime plugins pulled hundreds of MB and are not needed
+        # to compile), no recommends, and no man-db trigger (it can stall
+        # for minutes on the 24.04 images). Each attempt is capped.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config \
-            libgtk-3-dev liblzma-dev libsecret-1-dev libpulse-dev \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
-            gstreamer1.0-plugins-ugly gstreamer1.0-libav
+          sudo rm -f /var/lib/man-db/auto-update
+          echo 'man-db man-db/auto-update boolean false' | sudo debconf-set-selections || true
+          PKGS="clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libpulse-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev"
+          for attempt in 1 2 3; do
+            if sudo timeout 240 apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 &&
+               sudo timeout 360 apt-get install -y --no-install-recommends -o Acquire::Retries=3 -o Acquire::http::Timeout=30 $PKGS; then
+              exit 0
+            fi
+            echo "apt attempt $attempt failed — retrying"; sleep 15
+          done
+          exit 1
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
       - run: flutter pub get
       - name: Build Linux
+        env:
+          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: |
           set -o pipefail
-          flutter build linux --release 2>&1 | tee build.log
+          flutter build linux --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="$GOOGLE_DESKTOP_CLIENT_ID" --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$GOOGLE_DESKTOP_CLIENT_SECRET" 2>&1 | tee build.log
+      - name: Package
+        id: pkg
+        run: |
+          VER="$(grep '^version:' pubspec.yaml | sed 's/version: //;s/+.*//')"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          mkdir -p dist
+          tar -czf dist/BookNest-linux.tar.gz -C build/linux/x64/release/bundle .
+          ls -la dist
+      - name: Publish to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.pkg.outputs.version }}
+        run: bash .github/scripts/publish-pc-release.sh "$VER" dist/BookNest-linux.tar.gz
       - name: Commit build diagnostics
         if: failure()
-        run: |
-          tail -c 3000 build.log > desktop-error-linux.txt 2>/dev/null || echo "build.log missing" > desktop-error-linux.txt
-          git config user.email "booknest-ci@users.noreply.github.com"
-          git config user.name "booknest-ci"
-          git checkout -q -B desktop-diag-linux
-          git add desktop-error-linux.txt
-          git commit -q -m "linux build diag $(date -u +%FT%TZ)" || true
-          git push -q -f origin desktop-diag-linux || git push -f origin desktop-diag-linux || true
-          {
-            echo "OS: $RUNNER_OS — [run log](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
-            echo ''
-            echo '```'
-            cat desktop-error-linux.txt
-            echo '```'
-          } > issue-body.md
-          gh issue create \
-            --title "Desktop build failed: linux ($(date -u +%H:%M))" \
-            --body-file issue-body.md || true
-      - name: Package
-        if: success()
-        run: |
-          tar -czf BookNest-linux.tar.gz -C build/linux/x64/release/bundle .
-          mv BookNest-linux.tar.gz ~/BookNest-linux.tar.gz
-      - uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: BookNest-linux
-          path: ~/BookNest-linux.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/desktop-diag.sh linux

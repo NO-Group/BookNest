@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../components/adaptive.dart';
 import '../components/booknest_bottom_nav.dart';
 
 /// Persistent shell layout wrapping the primary [StatefulNavigationShell].
@@ -23,13 +24,17 @@ class MainShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Tablets / PC navigate with the DesktopFrame sidebar instead.
+    final phone = context.isCompact;
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: BookNestBottomNav(
-        currentIndex: navigationShell.currentIndex,
-        onTap: _onDestinationSelected,
-      ),
-      extendBody: true,
+      bottomNavigationBar: phone
+          ? BookNestBottomNav(
+              currentIndex: navigationShell.currentIndex,
+              onTap: _onDestinationSelected,
+            )
+          : null,
+      extendBody: phone,
     );
   }
 }

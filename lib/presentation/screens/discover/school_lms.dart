@@ -50,6 +50,7 @@ class _SchoolClassesSectionState extends State<SchoolClassesSection> {
     final created = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('New class'),
         content: TextField(
           controller: nameCtrl,
@@ -83,7 +84,7 @@ class _SchoolClassesSectionState extends State<SchoolClassesSection> {
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not create the class — try again.'
+            ? BackendApi.instance.errorOr('Could not create the class — try again.')
             : '"$name" is open for enrolment.')));
     if (res != null) _load();
   }
@@ -101,8 +102,8 @@ class _SchoolClassesSectionState extends State<SchoolClassesSection> {
     if (res == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(klass['joined'] == true
-              ? 'Could not leave the class — try again.'
-              : 'Could not join the class — try again.')));
+              ? BackendApi.instance.errorOr('Could not leave the class — try again.')
+              : BackendApi.instance.errorOr('Could not join the class — try again.'))));
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -396,7 +397,7 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not create the assignment — try again.'
+            ? BackendApi.instance.errorOr('Could not create the assignment — try again.')
             : 'Assignment set for the class.')));
     if (res != null) _load();
   }
@@ -410,8 +411,8 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not update — try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(BackendApi.instance.errorOr('Could not update — try again.'))));
       return;
     }
     _load();
@@ -640,6 +641,7 @@ class _SchoolExamsSectionState extends State<SchoolExamsSection> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialog) => AlertDialog(
+          scrollable: true,
           title: const Text('Schedule an exam'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(
@@ -706,7 +708,7 @@ class _SchoolExamsSectionState extends State<SchoolExamsSection> {
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not schedule — try again.'
+            ? BackendApi.instance.errorOr('Could not schedule — try again.')
             : 'Exam on the calendar — countdown is live.')));
     if (res != null) _load();
   }
@@ -871,7 +873,7 @@ class _GroupReadingListSectionState extends State<GroupReadingListSection> {
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not add it right now — try again.'
+            ? BackendApi.instance.errorOr('Could not add it right now — try again.')
             : '"${book['title']}" added to the reading list.')));
     if (res != null) await state.reload();
     if (mounted) setState(() => _list = _fromDoc());
@@ -889,8 +891,8 @@ class _GroupReadingListSectionState extends State<GroupReadingListSection> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not remove it — try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(BackendApi.instance.errorOr('Could not remove it — try again.'))));
       return;
     }
     await state.reload();
