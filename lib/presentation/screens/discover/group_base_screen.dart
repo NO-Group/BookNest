@@ -476,12 +476,8 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                     _loadAnnouncements();
                     await reload();
                   },
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-                    children: [
-                      _headerPanel(theme, onSurface),
-                      const SizedBox(height: 14),
-                      Row(children: [
+                  child: LayoutBuilder(builder: (context, box) {
+                    final actions = Row(children: [
                         Expanded(
                           child: OutlinedButton.icon(
                             onPressed:
@@ -524,18 +520,61 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                             ),
                           ),
                         ],
-                      ]),
-                      const SizedBox(height: 16),
+                      ]);
+                    final identity = <Widget>[
+                      _headerPanel(theme, onSurface),
+                      const SizedBox(height: 14),
+                      actions,
+                    ];
+                    final activity = <Widget>[
                       _announcementsPanel(theme, onSurface),
                       if (kind == 'organizations') ...[
                         const SizedBox(height: 16),
                         OrgDepartmentsSection(state: this),
                       ],
-                      const SizedBox(height: 16),
-                      _membersPanel(theme, onSurface),
-                      ...?widget.extraSections?.call(this),
-                    ],
-                  ),
+                    ];
+                    final extras = widget.extraSections?.call(this) ??
+                        const <Widget>[];
+                    // PC: who the group is (left) beside what it does
+                    // (right), each scrolling on its own.
+                    if (box.maxWidth >= 1000) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: box.maxWidth >= 1300 ? 420 : 380,
+                            child: ListView(
+                              padding:
+                                  const EdgeInsets.fromLTRB(24, 16, 12, 40),
+                              children: [
+                                ...identity,
+                                const SizedBox(height: 16),
+                                _membersPanel(theme, onSurface),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: ListView(
+                              padding:
+                                  const EdgeInsets.fromLTRB(12, 16, 28, 40),
+                              children: [...activity, ...extras],
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+                      children: [
+                        ...identity,
+                        const SizedBox(height: 16),
+                        ...activity,
+                        const SizedBox(height: 16),
+                        _membersPanel(theme, onSurface),
+                        ...extras,
+                      ],
+                    );
+                  }),
                 ),
     );
   }
