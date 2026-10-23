@@ -1514,9 +1514,9 @@ class _ImageContent extends StatelessWidget {
             maxWidth: MediaQuery.sizeOf(context).width * .72,
             maxHeight: 320,
           ),
-          // CDN-sized + disk-cached: repeat views paint instantly and a
-          // chat photo never downloads heavier than it is shown.
-          child: CachedNetworkImage(
+          // Saved in the BookNest media folder → shown from the phone (no
+          // data, works forever). Otherwise CDN-sized + disk-cached.
+          child: _localPhoto(url) ?? CachedNetworkImage(
             imageUrl: CloudinaryService.transformUrl(url, width: 720),
             fit: BoxFit.cover,
             memCacheWidth: 720,
@@ -1535,6 +1535,29 @@ class _ImageContent extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// The saved copy of a chat photo, painted from the BookNest media folder,
+/// or null when this device does not have it yet.
+Widget? _localPhoto(String url) {
+  try {
+    final file = File(mediaCachePath(url));
+    if (!file.existsSync() || file.lengthSync() == 0) return null;
+    return Image.file(
+      file,
+      fit: BoxFit.cover,
+      cacheWidth: 720,
+      gaplessPlayback: true,
+      errorBuilder: (_, __, ___) => CachedNetworkImage(
+        imageUrl: CloudinaryService.transformUrl(url, width: 720),
+        fit: BoxFit.cover,
+        memCacheWidth: 720,
+        errorWidget: (_, __, ___) => _RecoveredImage(url: url),
+      ),
+    );
+  } catch (_) {
+    return null;
   }
 }
 

@@ -9,6 +9,7 @@ import 'config/router.dart';
 import 'presentation/screens/calls/call_screen.dart';
 import 'config/theme.dart';
 import 'services/home_widgets_service.dart';
+import 'services/media_storage.dart';
 import 'services/push_service.dart';
 import 'services/call_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,6 +29,7 @@ import 'presentation/components/booknest_keyboard.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppSettings.load();
+  await MediaStorage.init();
   await loadKeyboardEnabled();
   await SupabaseService().initialize();
   // Self-heal: guarantee a profiles row exists for returning users whose

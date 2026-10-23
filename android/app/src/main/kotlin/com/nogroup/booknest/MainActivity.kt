@@ -1,6 +1,7 @@
 package com.nogroup.booknest
 
 import android.content.Intent
+import android.media.MediaScannerConnection
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import io.flutter.embedding.android.FlutterActivity
@@ -24,6 +25,26 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         pendingRoute = intent?.getStringExtra(BookNestMessagingService.EXTRA_ROUTE)
+        // BookNest's own media folder (Android/media/<package>), WhatsApp-
+        // style: no storage permission, visible in file managers, photos and
+        // videos indexed by the Gallery.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "booknest/storage")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "mediaDir" -> result.success(mediaDir())
+                    "scan" -> {
+                        val path = call.argument<String>("path")
+                        if (path != null) {
+                            try {
+                                MediaScannerConnection.scanFile(this, arrayOf(path), null, null)
+                            } catch (e: Throwable) {
+                            }
+                        }
+                        result.success(path != null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "booknest/push")
         pushChannel = channel
         channel.setMethodCallHandler { call, result ->
@@ -62,6 +83,16 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun mediaDir(): String? = try {
+        externalMediaDirs.firstOrNull { it != null }?.let { dir ->
+            if (!dir.exists()) dir.mkdirs()
+            dir.absolutePath
+        }
+    } catch (e: Throwable) {
+        null
     }
 
     private fun firebaseReady(): Boolean = try {

@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'backend_api.dart';
 import 'media_backup_service.dart' show mediaCachePath;
+import 'media_storage.dart';
 
 /// Chat files — documents, PDFs, videos and voice notes — travel through a
 /// PRIVATE Cloudflare R2 folder and are deleted from it after 3 days.
@@ -101,11 +102,7 @@ class ChatRelay {
       if (res.statusCode == 200) {
         // The sender already has the file: keep it in the shared media
         // cache so it never downloads again and joins the Drive backup.
-        try {
-          final f = File(mediaCachePath(getUrl));
-          await f.parent.create(recursive: true);
-          await f.writeAsBytes(bytes);
-        } catch (_) {}
+        await MediaStorage.keepSent(getUrl, bytes);
         return getUrl;
       }
       lastError = 'The upload was refused (HTTP ${res.statusCode}) — '
@@ -118,48 +115,14 @@ class ChatRelay {
     return null;
   }
 
-  static final Set<String> _seen = <String>{};
-  static Future<void> _queue = Future.value();
+  /// Saves relay files from [messages] to the BookNest media folder before
+  /// their 3 days run out (see MediaStorage.autoSaveFrom).
+  static void prefetch(Iterable<Map<String, dynamic>> messages) =>
+      MediaStorage.autoSaveFrom(messages);
 
-  /// Downloads relay files from [messages] onto this device before their
-  /// 3 days run out: voice notes and documents up to 40 MB, videos up to
-  /// 25 MB (bigger videos download when opened, or with the Drive backup).
-  static void prefetch(Iterable<Map<String, dynamic>> messages) {
-    for (final m in messages) {
-      final url = m['mediaUrl']?.toString() ?? '';
-      if (!isRelayUrl(url) || !_seen.add(url)) continue;
-      if (m['deletedForEveryone'] == true) continue;
-      final size = (m['fileSize'] as num?)?.toInt() ?? 0;
-      final video = m['type']?.toString() == 'video';
-      if (size > (video ? 25 : 40) * 1024 * 1024) continue;
-      _queue = _queue.then((_) => download(url)).catchError((_) => null);
-    }
-  }
-
-  /// Gets one relay file into the media cache. Null once it has expired.
-  static Future<File?> download(String url) async {
-    final file = File(mediaCachePath(url));
-    try {
-      if (await file.exists() && await file.length() > 0) return file;
-      final client = http.Client();
-      try {
-        final res = await client
-            .send(http.Request('GET', Uri.parse(url)))
-            .timeout(const Duration(seconds: 30));
-        if (res.statusCode != 200) {
-          await res.stream.drain<void>();
-          return null;
-        }
-        await file.parent.create(recursive: true);
-        final part = File('${file.path}.part');
-        await res.stream.pipe(part.openWrite());
-        await part.rename(file.path);
-        return file;
-      } finally {
-        client.close();
-      }
-    } catch (_) {
-      return null;
-    }
+  /// Gets one relay file into the media folder. Null once it has expired.
+  static Future<File?> download(String url) {
+    mediaCachePath(url); // moves an older temp copy over, if any
+    return MediaStorage.save(url);
   }
 }

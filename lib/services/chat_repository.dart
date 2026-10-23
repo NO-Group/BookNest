@@ -3,6 +3,7 @@ import 'dart:typed_data' show Uint8List;
 
 import 'backend_api.dart';
 import 'chat_relay_service.dart';
+import 'media_storage.dart';
 import 'chat_store.dart';
 import 'cloudinary_service.dart';
 import 'dm_crypto.dart';
@@ -452,9 +453,13 @@ class ChatRepository {
               .deleteClubMessage(messageId, forEveryone: forEveryone);
 
   /// Uploads a chat photo and returns the hosted URL (null on failure).
-  Future<String?> uploadImage(Uint8List bytes, String extension) =>
-      CloudinaryService.uploadImage(
-          bytes: bytes, folder: 'chat', extension: extension);
+  Future<String?> uploadImage(Uint8List bytes, String extension) async {
+    final url = await CloudinaryService.uploadImage(
+        bytes: bytes, folder: 'chat', extension: extension);
+    // The sender keeps the original in the BookNest media folder.
+    if (url != null) await MediaStorage.keepSent(url, bytes);
+    return url;
+  }
 
   /// Uploads any chat attachment (documents, PDFs, videos, voice notes)
   /// through the private 3-day R2 relay — never Cloudinary — and returns

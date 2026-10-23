@@ -56,7 +56,12 @@ phone or PC:
 - recently seen lists and screens;
 - other readers' names and avatars;
 - chapters you have read;
-- your chat history (encrypted).
+- your chat history (encrypted);
+- photos, videos, voice notes and files from your chats, saved in BookNest's
+  own media folder (Android: `Android/media/com.n_o_group.booknest/BookNest/Media`;
+  iPhone: Files → On My iPhone → BookNest; PC: `Documents/BookNest/Media`).
+  BookNest never deletes them. You can turn automatic saving off in
+  Settings → Chat backup. Uninstalling the app removes this folder on Android.
 
 Signing out clears the saved lists, profiles and chapters.
 

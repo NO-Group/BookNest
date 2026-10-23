@@ -19,6 +19,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/doc_extract.dart';
 import '../../../services/media_backup_service.dart';
+import '../../../services/media_storage.dart';
 
 /// One piece of media in a conversation — enough for the viewer to
 /// page through an album and label the file.
@@ -137,15 +138,15 @@ Future<File> _downloadToCache(String url, void Function(int, int)? onProgress) a
       // Drive backup has it.
       final recovered = await MediaBackupService.instance.recover(url);
       if (recovered != null) return recovered;
-      throw res.statusCode == 401 || res.statusCode == 403
-          ? 'The file host refused to deliver this file (${res.statusCode}). '
-              'PDF and ZIP files need to be allowed by the BookNest team — '
-              'please try again later.'
-          : res.statusCode == 404
-              ? 'This file is older than 30 days and is no longer on '
-                  'BookNest. Turn on media backup (Settings → Chat backup) to '
-                  'keep chat media in your Google account.'
-              : 'The file could not be loaded (${res.statusCode}).';
+      throw res.statusCode == 401 ||
+              res.statusCode == 403 ||
+              res.statusCode == 404
+          ? 'This file is no longer on BookNest\'s servers (chat files are '
+              'kept 3 days, photos 30 days) and it was not saved on this '
+              'device. Files are saved to the BookNest folder on your phone '
+              'automatically, and media backup (Settings → Chat backup) keeps '
+              'a copy in your Google account.'
+          : 'The file could not be loaded (${res.statusCode}).';
     }
     final total = res.contentLength ?? 0;
     final builder = BytesBuilder(copy: false);
@@ -156,6 +157,7 @@ Future<File> _downloadToCache(String url, void Function(int, int)? onProgress) a
       if (onProgress != null && total > 0) onProgress(received, total);
     }
     await file.writeAsBytes(builder.takeBytes(), flush: true);
+    MediaStorage.announce(file.path);
     return file;
   } finally {
     client.close();

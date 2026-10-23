@@ -13,13 +13,30 @@ import '../config/app_config.dart';
 import 'chat_store.dart';
 import 'doc_extract.dart' show isVideoExtension;
 import 'google_desktop_auth.dart';
+import 'media_storage.dart';
 
-/// Where a chat media file lives on this device once downloaded. The media
-/// viewer, the bubbles and the Google Drive backup all share this cache, so
-/// nothing is downloaded twice.
+/// Where a chat media file lives on this device: BookNest's own media
+/// folder (see MediaStorage) — permanent, never cleaned by BookNest. The
+/// media viewer, the bubbles and the Google Drive backup all share it, so
+/// nothing is downloaded twice. Copies from older versions (temp cache)
+/// move into the folder the first time they are looked up.
 String mediaCachePath(String url) {
-  final safe = url.hashCode.abs().toRadixString(36);
-  return '${Directory.systemTemp.path}/booknest_media/$safe';
+  final path = MediaStorage.pathFor(url);
+  if (!MediaStorage.permanent) return path;
+  try {
+    if (File(path).existsSync()) return path;
+    final legacy = File('${Directory.systemTemp.path}/booknest_media/'
+        '${url.hashCode.abs().toRadixString(36)}');
+    if (legacy.existsSync()) {
+      Directory(File(path).parent.path).createSync(recursive: true);
+      legacy.copySync(path);
+      try {
+        legacy.deleteSync();
+      } catch (_) {}
+      MediaStorage.announce(path);
+    }
+  } catch (_) {}
+  return path;
 }
 
 /// The reader's own Google account (hidden Drive app folder). Shared by the
@@ -388,6 +405,7 @@ class MediaBackupService {
       final part = File('${file.path}.part');
       await res.stream.pipe(part.openWrite());
       await part.rename(file.path);
+      MediaStorage.announce(file.path);
       return file;
     } catch (_) {
       return null;
@@ -472,6 +490,7 @@ class MediaBackupService {
       if (entry is! Map || h == null) return null;
       final ok = await DriveClient.instance
           .downloadTo(h, entry['id'].toString(), file);
+      if (ok) MediaStorage.announce(file.path);
       return ok ? file : null;
     } catch (_) {
       return null;

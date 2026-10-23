@@ -48,6 +48,22 @@
     `ops.mediaSweep`) runs **on the server with its own Supabase secrets**
     `CLOUDINARY_API_KEY`/`CLOUDINARY_API_SECRET` and `R2_*`. No Cloudinary
     keys are in GitHub. Report: `ops/chat-media-sweep.md`.
+- **Everything is saved on the device (2.38.2+).** Every chat photo, video,
+  voice note and file that is sent or received is saved to BookNest's own
+  media folder, WhatsApp-style, and BookNest never deletes it:
+  - Android: `Android/media/com.n_o_group.booknest/BookNest/Media/` with
+    `BookNest Images`, `BookNest Video`, `BookNest Voice Notes`,
+    `BookNest Audio` and `BookNest Documents`. No permission is needed, file
+    managers can see it, and photos and videos show in the Gallery (there's a
+    switch to hide them). Voice notes have `.nomedia`.
+  - iPhone: Files app → On My iPhone → BookNest → BookNest/Media.
+  - PC: `Documents/BookNest/Media`.
+  - Saving happens when a chat opens, and also while the app is open via the
+    inbox watcher, for any chat with new media, opened or not. Senders keep
+    the original they sent. Settings → Chat backup → "Media on this device"
+    shows the folder and space used, with switches for automatic saving,
+    videos, and Gallery.
+  - Copies from older versions (temp cache) move into the folder automatically.
 - **Older media comes back from Drive.** When a chat photo, video, voice note
   or file is gone from Cloudinary, the app fetches the reader's Drive copy
   silently (bubbles and the viewer).

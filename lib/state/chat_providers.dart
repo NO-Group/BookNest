@@ -12,6 +12,7 @@ import '../services/profile_cache.dart';
 import '../services/typing_broadcaster.dart';
 import '../services/chat_store.dart';
 import '../services/chat_relay_service.dart';
+import '../services/media_storage.dart';
 import '../presentation/screens/chat/voice_recorder_sheet.dart'
     show VoiceNoteResult;
 
@@ -250,9 +251,9 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
       conversationId: _conversationId,
       revision: (grew || state.revision == 0) ? state.revision + 1 : state.revision,
     );
-    // Relay files (documents, voice notes, short videos) are deleted from
-    // the server after 3 days — keep them on this device.
-    ChatRelay.prefetch(page.messages);
+    // Every photo, video, voice note and file is saved to the BookNest
+    // media folder on this device (servers keep them 30 days / 3 days).
+    MediaStorage.autoSaveFrom(page.messages);
     _syncWatchers();
   }
 

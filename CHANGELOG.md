@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.38.2+70 — 2026-10-23 · BookNest media folder on the device
+
+- **All chat media saves to the phone by default and is never deleted by
+  BookNest.** BookNest has its own folder, WhatsApp-style:
+  - Android: `Android/media/com.n_o_group.booknest/BookNest/Media/` with
+    BookNest Images, Video, Voice Notes, Audio and Documents. No permission
+    needed, file managers can see it, and photos and videos show in the
+    Gallery.
+  - iPhone: Files → On My iPhone → BookNest.
+  - PC: `Documents/BookNest/Media`.
+- Before this, downloaded media lived in the system **temp** folder, which
+  the OS may wipe at any time. Existing copies move into the new folder
+  automatically.
+- What gets saved:
+  - received photos, voice notes, files and videos, when the chat opens and
+    while the app is open (the inbox watcher picks up new media in chats you
+    haven't opened);
+  - your own sent media (the original).
+  Server cleanup (photos 30 days, files 3 days) never touches the phone copy.
+- Photo bubbles, voice notes and videos play from the saved copy, so they
+  use no data and keep working after the server copy is gone.
+- Settings → Chat backup → **Media on this device**: folder, space used, and
+  switches for automatic saving, videos, and showing in the Gallery.
+- Clearer message when an unsaved file has expired on the server.
+
 ## 2.38.1+69 — 2026-10-23 · Chat files off Cloudinary, Drive backup on PC
 
 - **Chat files no longer go to Cloudinary.** Documents, PDFs, voice notes

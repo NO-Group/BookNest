@@ -7,6 +7,7 @@ import '../../../config/theme.dart';
 import '../../../services/chat_backup_service.dart';
 import '../../../services/chat_store.dart';
 import '../../../services/media_backup_service.dart';
+import '../../../services/media_storage.dart';
 import '../../components/booknest_ui.dart';
 
 /// Chat backup, split by what it costs to keep:
@@ -36,6 +37,7 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
   DateTime? _mediaLastAt;
   int _mediaFiles = 0;
   int _mediaBytes = 0;
+  int _deviceBytes = -1;
 
   final _svc = ChatBackupService.instance;
   final _media = MediaBackupService.instance;
@@ -57,6 +59,7 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
     final videos = await _media.includeVideos;
     final mediaLast = await _media.lastAt;
     final stored = await _media.stored;
+    final deviceBytes = await MediaStorage.usage();
     var local = 0;
     for (final id in ChatStore.instance.conversationIds) {
       final msgs = await ChatStore.instance.load(id);
@@ -77,6 +80,7 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
       _mediaLastAt = mediaLast;
       _mediaFiles = stored.$1;
       _mediaBytes = stored.$2;
+      _deviceBytes = deviceBytes;
     });
   }
 
@@ -509,6 +513,71 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
           ]),
           const SizedBox(height: 16),
 
+          // ── media on this device (BookNest folder, never deleted) ──
+          _card(dark, [
+            _cardTitle(theme, Icons.sd_storage_rounded, 'Media on this device'),
+            const SizedBox(height: 8),
+            Text(
+                'Every chat photo, video, voice note and file is saved to '
+                'BookNest\'s own folder on this device and stays there — '
+                'BookNest never deletes it. (Our servers only pass media on: '
+                'photos for 30 days, files for 3 days.)',
+                style: hint),
+            const SizedBox(height: 6),
+            _StatusRow(
+                icon: Icons.folder_rounded,
+                label: 'Folder',
+                value: Platform.isIOS
+                    ? 'Files → On My iPhone → BookNest'
+                    : MediaStorage.base.contains('/Android/media/')
+                        ? 'Android/media/…/BookNest/Media'
+                        : MediaStorage.base),
+            _StatusRow(
+                icon: Icons.data_usage_rounded,
+                label: 'Used',
+                value: _deviceBytes < 0 ? '…' : _prettySize(_deviceBytes)),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: MediaStorage.autoSave,
+              activeColor: BookNestColors.cyan,
+              title: const Text('Save chat media automatically',
+                  style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Photos, voice notes and files',
+                  style: TextStyle(fontSize: 12)),
+              onChanged: (v) async {
+                await MediaStorage.setAutoSave(v);
+                setState(() {});
+              },
+            ),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: MediaStorage.autoSaveVideos,
+              activeColor: BookNestColors.cyan,
+              title: const Text('Save videos automatically',
+                  style: TextStyle(fontSize: 14.5)),
+              subtitle: const Text('Videos use the most data and space',
+                  style: TextStyle(fontSize: 12)),
+              onChanged: MediaStorage.autoSave
+                  ? (v) async {
+                      await MediaStorage.setAutoSaveVideos(v);
+                      setState(() {});
+                    }
+                  : null,
+            ),
+            if (Platform.isAndroid)
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                value: MediaStorage.showInGallery,
+                activeColor: BookNestColors.cyan,
+                title: const Text('Show photos & videos in Gallery',
+                    style: TextStyle(fontSize: 14.5)),
+                onChanged: (v) async {
+                  await MediaStorage.setShowInGallery(v);
+                  setState(() {});
+                },
+              ),
+          ]),
+          const SizedBox(height: 16),
           // ── media → Google Drive ──
           _card(dark, [
             _cardTitle(theme, Icons.perm_media_rounded,
