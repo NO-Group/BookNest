@@ -981,6 +981,21 @@ async function isGroupManager(
   return !!group && (group.ownerId === uid || group.viceModeratorId === uid);
 }
 
+/** Owner / deputy check that returns the group (null when not a manager).
+ *  Module-level on purpose: declared inside the action switch it was not
+ *  visible to the school cases above it ("groupManager is not defined"). */
+async function groupManager(
+  kind: string, groupId: string, uid: string,
+): Promise<Record<string, unknown> | null> {
+  if (!(GROUP_KINDS as readonly string[]).includes(kind)) return null;
+  const group = await (await dbFor('groups')).collection(kind)
+    .findOne({ _id: groupId } as never,
+      { projection: { ownerId: 1, viceModeratorId: 1, name: 1 } });
+  if (!group) return null;
+  const isManager = group.ownerId === uid || group.viceModeratorId === uid;
+  return isManager ? group as Record<string, unknown> : null;
+}
+
 // ── chat message toolkit: reactions, deletes, read receipts ────────────────
 type MsgRow = Record<string, unknown> & { _id: ObjectId };
 
@@ -1562,7 +1577,7 @@ async function handleRequest(req: Request): Promise<Response> {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.32.0',
+          server: '2.32.1',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -5304,18 +5319,7 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       // ── kind superpowers: POTM, vice mods, school lists, leaderboards ────
-      async function groupManager(
-        kind: string, groupId: string, uid: string,
-      ): Promise<Record<string, unknown> | null> {
-        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return null;
-        const group = await (await dbFor('groups')).collection(kind)
-          .findOne({ _id: groupId } as never,
-            { projection: { ownerId: 1, viceModeratorId: 1, name: 1 } });
-        if (!group) return null;
-        const isManager =
-          group.ownerId === uid || group.viceModeratorId === uid;
-        return isManager ? group as Record<string, unknown> : null;
-      }
+      // groupManager(...) lives at module level (see isGroupManager).
 
       case 'clubs.potm.set': {
         const uid = await currentUserId(req);
