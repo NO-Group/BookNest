@@ -1,5 +1,57 @@
 # Changelog
 
+## 2.39.0+72 — 2026-10-23 · PC layout, profile redesign, groups and UI fixes
+
+Server 2.32.1.
+
+- **PC and tablet layout of their own.** It no longer stretches the phone
+  layout.
+  - PC gets a permanent sidebar: logo, Write a book, Feed, Discover, Books,
+    Messages and Profile, then Library, Notifications, Search, Wallet &
+    store and Settings, with your account at the bottom. Tablets and small
+    windows get a slim icon rail. Phones keep the floating bottom bar.
+  - Messages: two panes, with the chat list on the left and the open chat
+    on the right.
+  - Feed: posts in a centred column, plus a side panel with one-click
+    create, new books and shortcuts.
+  - Books: a grid of cards that now show the real cover art. Phones get it
+    too; before, every book showed the same placeholder icon.
+  - Discover: 2–3 columns.
+  - Book page: two columns, with the book and actions on the left and
+    About, reviews and recommendations on the right.
+  - Settings, notifications, wallet, events, dictionary and other list
+    pages: a centred, readable column.
+- **Profile redesign, same colours.**
+  - Your profile: full-width cover, ringed avatar, a Gems · Mode · Cloud
+    strip, and the Author/Reader card. Actions are a tile grid in sections
+    (Writing, Your BookNest, Account). On PC, a sticky profile card sits
+    beside the grid.
+  - Public profile ("second version"): it no longer overflows on phones.
+    The banner, name, stats and buttons scroll away, the Works/About tabs
+    stay pinned, and the banner collapses into a toolbar with the name. On
+    PC: profile card on the left, works grid on the right. On phones, the
+    call buttons are in the ⋮ menu.
+- **Groups.**
+  - Adding a book to a reading list works: the book picker searches the
+    server, and book ids are accepted in every format.
+  - Owners can delete a group (⋮ → Delete group), along with its channels,
+    events, classes and announcements. The group chat is archived.
+  - Schools: creating classes and scheduling exams returned an error
+    (`groupManager is not defined`). Fixed.
+  - Error messages now show the server's reason instead of a generic
+    "failed".
+  - The smoke test now checks every group feature for all four kinds.
+- **Manuscript studio:** the divider (and any unknown block) no longer turns
+  the editor into a grey screen.
+- **Pop-ups fit every screen:** dialogs are 280–560 px wide and scroll, and
+  sheets are at most 640 px wide and respect the keyboard and safe area.
+- **Show-password eye** on sign-in and sign-up. Enter signs in.
+- **Splash:** BookNest navy (#071A3D) with the logo on a white tile,
+  instead of black, on Android and PC.
+- **Chat header (Android):** the actions are in a ⋮ menu.
+- **Announcement and incoming-call pop-ups never appeared.** The app's
+  navigator key was never connected to the router. Fixed.
+
 ## 2.38.3+71 — 2026-10-23 · BookNest icon on PC
 
 - **The PC apps showed the Flutter logo.** Windows (app, taskbar, title bar,
