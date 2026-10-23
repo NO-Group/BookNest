@@ -249,7 +249,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// The cover band across the top of the profile: the reader's cover
   /// photo, or the BookNest gradient until they add one.
-  Widget _coverBand(bool studio) {
+  Widget _coverBand(bool studio, {double height = _coverHeight}) {
     final url = _coverUrl;
     return GestureDetector(
       onTap: url == null
@@ -262,7 +262,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           bottomRight: Radius.circular(30),
         ),
         child: SizedBox(
-          height: _coverHeight,
+          height: height,
           width: double.infinity,
           child: Stack(
             fit: StackFit.expand,
@@ -484,8 +484,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
+    final dark = Theme.of(context).brightness == Brightness.dark;
 
     if (_loading) {
       return const Scaffold(
@@ -497,416 +496,685 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return ValueListenableBuilder<String>(
       valueListenable: profileLayout,
       builder: (context, layout, __) {
-    final studio = layout == 'studio';
-    return Scaffold(
-      backgroundColor:
-          dark ? BookNestColors.darkChatBackground : BookNestColors.lightSurface,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            _CoverHeader(
-              band: _coverBand(studio),
-              bandHeight: _coverHeight,
-              coverButton: _CoverButton(
-                busy: _coverUploading,
-                hasCover: _coverUrl != null,
-                onTap: _coverMenu,
-              ),
-              avatar: Stack(
+        final studio = layout == 'studio';
+        return Scaffold(
+          backgroundColor: dark
+              ? BookNestColors.darkChatBackground
+              : BookNestColors.lightSurface,
+          body: LayoutBuilder(builder: (context, box) {
+            return box.maxWidth >= 1000
+                ? _wideLayout(context, studio, dark, box.maxWidth)
+                : _phoneLayout(context, studio, dark, box.maxWidth);
+          }),
+        );
+      },
+    );
+  }
+
+  // ── Phone / tablet portrait: one column, cover bleeding to the edges ─
+  Widget _phoneLayout(
+      BuildContext context, bool studio, bool dark, double width) {
+    final topPad = MediaQuery.paddingOf(context).top;
+    final bandH = topPad + (width * .36).clamp(128.0, 200.0);
+    const avatarR = 50.0;
+    // Tablets in portrait keep the column readable.
+    final side = width > 720 ? (width - 680) / 2 : 18.0;
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(bottom: context.isCompact ? 120 : 40),
+      child: Column(
+        children: [
+          SizedBox(
+            height: bandH + avatarR + 8,
+            child: Stack(
+              clipBehavior: Clip.none,
               children: [
-                Column(
-                  children: [
-                    if ((ReaderProfile.instance.countryCode ?? '').isNotEmpty)
-                      Tooltip(
-                        message: countryNameFor(
-                                ReaderProfile.instance.countryCode!) ??
-                            'Country',
-                        triggerMode: TooltipTriggerMode.tap,
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                              flagForCountry(ReaderProfile.instance.countryCode!) ??
-                                  '',
-                              style: const TextStyle(fontSize: 20)),
-                        ),
-                      ),
-                    GestureDetector(
-                      onTap: _avatarUrl == null
-                          ? null
-                          : () => openChatPhoto(context, _avatarUrl!,
-                              album: [
-                                MediaItem(
-                                    url: _avatarUrl!,
-                                    name: _displayName)
-                              ]),
-                      child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [BookNestColors.cyan, BookNestColors.navy],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: CircleAvatar(
-                    radius: 52,
-                    backgroundColor: BookNestColors.navy,
-                    backgroundImage:
-                        _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
-                    child: _avatarUrl == null
-                        ? Text(
-                            _displayName.characters.isEmpty
-                                ? '?'
-                                : _displayName.characters.first.toUpperCase(),
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 34,
-                                fontWeight: FontWeight.w800),
-                          )
-                        : null,
+                Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: bandH,
+                    child: _coverBand(studio, height: bandH)),
+                Positioned(
+                  top: topPad + 10,
+                  right: 14,
+                  child: _CoverButton(
+                    busy: _coverUploading,
+                    hasCover: _coverUrl != null,
+                    onTap: _coverMenu,
                   ),
                 ),
-                      ),
-                    ],
-                  ),
                 Positioned(
+                  left: 0,
                   right: 0,
                   bottom: 0,
-                  child: InkWell(
-                    onTap: _uploading ? null : _changeAvatar,
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: BookNestColors.cyan,
-                        border: Border.all(
-                            color: dark
-                                ? BookNestColors.darkChatBackground
-                                : Colors.white,
-                            width: 2.5),
-                      ),
-                      child: _uploading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.black))
-                          : const Icon(Icons.photo_camera_rounded,
-                              size: 18, color: Colors.black),
-                    ),
-                  ),
+                  child: Center(child: _avatar(dark, avatarR)),
                 ),
               ],
-              ),
             ),
-            const SizedBox(height: 14),
-            InkWell(
-              onTap: _editDisplayName,
-              borderRadius: BorderRadius.circular(10),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        _displayName,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Icon(Icons.edit_rounded,
-                        size: 17, color: BookNestColors.cyan),
-                    if (_mode == 'author') ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
-                          color: BookNestColors.cyan.withOpacity(.14),
-                          border: Border.all(
-                              color: BookNestColors.cyan.withOpacity(.5)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.history_edu_rounded,
-                                size: 13, color: BookNestColors.cyan),
-                            SizedBox(width: 4),
-                            Text('Author',
-                                style: TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: BookNestColors.cyan)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(side, 12, side, 0),
+            child: Column(
+              children: [
+                _identity(context),
+                const SizedBox(height: 16),
+                _statsStrip(context, dark),
+                const SizedBox(height: 12),
+                _modeCard(context, dark),
+                const SizedBox(height: 8),
+                ..._sections(context, dark),
+                _footer(context),
+              ],
             ),
-            if (_profile?['username']?.toString().isNotEmpty == true)
-              Text('@${_profile?['username']}',
-                  style: const TextStyle(
-                      color: BookNestColors.cyan,
-                      fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(_email, style: TextStyle(color: theme.hintColor, fontSize: 13)),
-            if (_isOverallModerator) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: BookNestColors.cyan.withOpacity(.14),
-                  border: Border.all(
-                      color: BookNestColors.cyan.withOpacity(.5)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.shield_rounded,
-                        size: 15, color: BookNestColors.cyan),
-                    const SizedBox(width: 6),
-                    const Text('Overall moderator',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: BookNestColors.cyan)),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 18),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                color: BookNestColors.cyan.withOpacity(.1),
-                border: Border.all(color: BookNestColors.cyan.withOpacity(.3)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.diamond_rounded,
-                      color: BookNestColors.cyan, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${_profile?['gems'] ?? 0} gems',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            // The Author / Reader switch — BookNest's answer to Facebook's
-            // profile-mode toggle.
-            InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: _modeBusy ? null : _switchMode,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── PC: sticky identity card left, everything you can do right ─────
+  Widget _wideLayout(
+      BuildContext context, bool studio, bool dark, double width) {
+    final theme = Theme.of(context);
+    const bandH = 128.0;
+    const avatarR = 46.0;
+    return SafeArea(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: width >= 1300 ? 390 : 350,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 20, 12, 32),
               child: Container(
-                padding: const EdgeInsets.all(16),
+                clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: dark
-                      ? Colors.white.withOpacity(.05)
-                      : BookNestColors.navyDeep.withOpacity(.04),
-                  border:
-                      Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+                  borderRadius: BorderRadius.circular(26),
+                  color: theme.colorScheme.surface,
+                  border: Border.all(color: theme.dividerColor),
                 ),
-                child: Row(
+                child: Column(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: BookNestColors.cyan.withOpacity(.15),
-                      ),
-                      child: Icon(
-                        _mode == 'author'
-                            ? Icons.history_edu_rounded
-                            : Icons.auto_stories_rounded,
-                        color: BookNestColors.cyan,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    SizedBox(
+                      height: bandH + avatarR + 8,
+                      child: Stack(
+                        clipBehavior: Clip.none,
                         children: [
-                          Text(
-                            _mode == 'author'
-                                ? 'Author mode is on'
-                                : 'Reader mode is on',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w800),
+                          Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: bandH,
+                              child: _coverBand(studio, height: bandH)),
+                          Positioned(
+                            top: 10,
+                            right: 10,
+                            child: _CoverButton(
+                              busy: _coverUploading,
+                              hasCover: _coverUrl != null,
+                              onTap: _coverMenu,
+                            ),
                           ),
-                          const SizedBox(height: 3),
-                          Text(
-                            _mode == 'author'
-                                ? 'Writing tools lead your profile — tap to '
-                                    'switch back to Reader'
-                                : 'Switch to Author to put your books, '
-                                    'studio and stats front and centre',
-                            style: TextStyle(
-                                fontSize: 12,
-                                height: 1.35,
-                                color: theme.hintColor),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: Center(child: _avatar(dark, avatarR)),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 7),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        color: BookNestColors.cyan,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+                      child: Column(
+                        children: [
+                          _identity(context),
+                          const SizedBox(height: 16),
+                          _statsStrip(context, dark),
+                          const SizedBox(height: 12),
+                          _modeCard(context, dark),
+                        ],
                       ),
-                      child: _modeBusy
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: BookNestColors.navyDeep))
-                          : Text(
-                              _mode == 'author' ? 'Reader' : 'Author',
-                              style: const TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: BookNestColors.navyDeep),
-                            ),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 26),
-            // Author mode leads with the writing tools.
-            if (_mode == 'author') ...[
-              _ProfileAction(
-                icon: Icons.edit_note_rounded,
-                label: 'New book',
-                subtitle: 'Open the manuscript studio',
-                onTap: () => context.push('/editor'),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(12, 20, 28, 40),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 980),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Your space',
+                        style: theme.textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    Text('Everything you read, write and own on BookNest.',
+                        style: TextStyle(color: theme.hintColor)),
+                    ..._sections(context, dark),
+                    Center(child: _footer(context)),
+                  ],
+                ),
               ),
-              _ProfileAction(
-                icon: Icons.dashboard_rounded,
-                label: 'Writer dashboard',
-                subtitle: 'Your books at a glance',
-                onTap: () => context.push('/dashboard'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Pieces ────────────────────────────────────────────────────────
+
+  Widget _avatar(bool dark, double radius) {
+    return Stack(
+      children: [
+        GestureDetector(
+          onTap: _avatarUrl == null
+              ? _changeAvatar
+              : () => openChatPhoto(context, _avatarUrl!,
+                  album: [MediaItem(url: _avatarUrl!, name: _displayName)]),
+          child: Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [BookNestColors.cyan, BookNestColors.navy],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              _ProfileAction(
-                icon: Icons.insights_rounded,
-                label: 'Reviews hub',
-                subtitle: 'What readers say about your books',
-                onTap: () => context.push('/reviews-hub'),
+              border: Border.all(
+                  color:
+                      dark ? BookNestColors.darkChatBackground : Colors.white,
+                  width: 3),
+            ),
+            child: CircleAvatar(
+              radius: radius,
+              backgroundColor: BookNestColors.navy,
+              backgroundImage:
+                  _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+              child: _avatarUrl == null
+                  ? Text(
+                      _displayName.characters.isEmpty
+                          ? '?'
+                          : _displayName.characters.first.toUpperCase(),
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: radius * .66,
+                          fontWeight: FontWeight.w800),
+                    )
+                  : null,
+            ),
+          ),
+        ),
+        Positioned(
+          right: 2,
+          bottom: 2,
+          child: Tooltip(
+            message: 'Change profile photo',
+            child: InkWell(
+              onTap: _uploading ? null : _changeAvatar,
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: BookNestColors.cyan,
+                  border: Border.all(
+                      color: dark
+                          ? BookNestColors.darkChatBackground
+                          : Colors.white,
+                      width: 2.5),
+                ),
+                child: _uploading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.black))
+                    : const Icon(Icons.photo_camera_rounded,
+                        size: 18, color: Colors.black),
               ),
-            ],
-            _ProfileAction(
-              icon: Icons.forum_rounded,
-              label: 'Messages',
-              subtitle: 'Your conversations',
-              onTap: () => context.go('/dms'),
             ),
-            _ProfileAction(
-              icon: Icons.menu_book_rounded,
-              label: 'My library',
-              subtitle: 'Books you love and write',
-              onTap: () => context.go('/library'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Name (tap to edit), Author mark, flag, handle, email, moderator chip.
+  Widget _identity(BuildContext context) {
+    final theme = Theme.of(context);
+    final code = ReaderProfile.instance.countryCode ?? '';
+    final flag = code.isEmpty ? null : flagForCountry(code);
+    final username = _profile?['username']?.toString() ?? '';
+    return Column(
+      children: [
+        InkWell(
+          onTap: _editDisplayName,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                Text(
+                  _displayName,
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const Icon(Icons.edit_rounded,
+                    size: 17, color: BookNestColors.cyan),
+                if (_mode == 'author') _authorMark(),
+              ],
             ),
-            if (_mode != 'author')
-              _ProfileAction(
-                icon: Icons.dashboard_rounded,
-                label: 'Writer dashboard',
-                subtitle: 'Manage your books and chapters',
-                onTap: () => context.push('/dashboard'),
+          ),
+        ),
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          children: [
+            if (flag != null && flag.isNotEmpty)
+              Tooltip(
+                message: countryNameFor(code) ?? 'Country',
+                triggerMode: TooltipTriggerMode.tap,
+                child: Text(flag, style: const TextStyle(fontSize: 18)),
               ),
-            _ProfileAction(
-              icon: Icons.person_outline_rounded,
-              label: 'My public profile',
-              subtitle: 'See what readers see',
-              onTap: () => context.push('/user/$_viewerId'),
+            if (username.isNotEmpty)
+              Text('@$username',
+                  style: const TextStyle(
+                      color: BookNestColors.cyan,
+                      fontWeight: FontWeight.w600)),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Text(_email,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: theme.hintColor, fontSize: 13)),
+        if (_isOverallModerator) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              color: BookNestColors.cyan.withOpacity(.14),
+              border: Border.all(color: BookNestColors.cyan.withOpacity(.5)),
             ),
-            _ProfileAction(
-              icon: Icons.diamond_outlined,
-              label: 'Gems wallet',
-              subtitle: 'Balance, daily bonus and activity',
-              onTap: () => context.push('/wallet'),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.shield_rounded,
+                    size: 15, color: BookNestColors.cyan),
+                SizedBox(width: 6),
+                Text('Overall moderator',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: BookNestColors.cyan)),
+              ],
             ),
-            if (AppConfig.jennyEnabled)
-              _ProfileAction(
-                icon: Icons.auto_awesome_rounded,
-                label: 'Ask Jenny',
-                subtitle: 'Your AI reading companion',
-                onTap: () => context.push('/jenny'),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _authorMark() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: BookNestColors.cyan.withOpacity(.14),
+          border: Border.all(color: BookNestColors.cyan.withOpacity(.5)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.history_edu_rounded,
+                size: 13, color: BookNestColors.cyan),
+            SizedBox(width: 4),
+            Text('Author',
+                style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: BookNestColors.cyan)),
+          ],
+        ),
+      );
+
+  /// Gems · mode · sync — three tappable cells in one rounded strip.
+  Widget _statsStrip(BuildContext context, bool dark) {
+    final theme = Theme.of(context);
+    final online = _cloudStatus == 'online';
+    Widget cell(IconData icon, String value, String label, VoidCallback onTap,
+        {Color? color}) {
+      return Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 19, color: color ?? BookNestColors.cyan),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(value,
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                ),
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        color: theme.hintColor,
+                        fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: BookNestColors.cyan.withOpacity(.08),
+        border: Border.all(color: BookNestColors.cyan.withOpacity(.28)),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            cell(Icons.diamond_rounded, '${_profile?['gems'] ?? 0}', 'Gems',
+                () => context.push('/wallet')),
+            VerticalDivider(
+                width: 1, color: BookNestColors.cyan.withOpacity(.22)),
+            cell(
+                _mode == 'author'
+                    ? Icons.history_edu_rounded
+                    : Icons.auto_stories_rounded,
+                _mode == 'author' ? 'Author' : 'Reader',
+                'Mode',
+                _modeBusy ? () {} : _switchMode),
+            VerticalDivider(
+                width: 1, color: BookNestColors.cyan.withOpacity(.22)),
+            cell(
+                online
+                    ? Icons.cloud_done_rounded
+                    : Icons.cloud_off_rounded,
+                _cloudStatus == null
+                    ? '…'
+                    : online
+                        ? 'Synced'
+                        : 'Offline',
+                'Cloud',
+                _probeCloud,
+                color: online ? BookNestColors.cyan : theme.hintColor),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The Author / Reader switch — BookNest's answer to Facebook's
+  /// profile-mode toggle.
+  Widget _modeCard(BuildContext context, bool dark) {
+    final theme = Theme.of(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: _modeBusy ? null : _switchMode,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: dark
+              ? Colors.white.withOpacity(.05)
+              : BookNestColors.navyDeep.withOpacity(.04),
+          border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: BookNestColors.cyan.withOpacity(.15),
               ),
-            _ProfileAction(
-              icon: Icons.event_note_rounded,
-              label: 'Events agenda',
-              subtitle: 'Every event, RSVPs and reminders',
-              onTap: () => context.push('/events'),
-            ),
-            _ProfileAction(
-              icon: Icons.local_fire_department_rounded,
-              label: 'Reading streaks',
-              subtitle: 'Log your days, keep the flame alive',
-              onTap: () => context.push('/streaks'),
-            ),
-            _ProfileAction(
-              icon: Icons.notifications_none_rounded,
-              label: 'Notifications',
-              subtitle: 'Messages and activity',
-              onTap: () => context.push('/notifications'),
-            ),
-            if (_isOverallModerator)
-              _ProfileAction(
-                icon: Icons.admin_panel_settings_rounded,
-                label: 'Moderation console',
-                subtitle: 'Reports, deletions, community safety',
-                onTap: () => context.push('/moderation'),
+              child: Icon(
+                _mode == 'author'
+                    ? Icons.history_edu_rounded
+                    : Icons.auto_stories_rounded,
+                color: BookNestColors.cyan,
+                size: 21,
               ),
-            _ProfileAction(
-              icon: Icons.settings_rounded,
-              label: 'Settings',
-              subtitle: 'Theme, privacy and more',
-              onTap: () => context.push('/settings'),
             ),
-            _ProfileAction(
-              icon: Icons.logout_rounded,
-              label: 'Sign out',
-              subtitle: _email,
-              danger: true,
-              onTap: _signOut,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _mode == 'author'
+                        ? 'Author mode is on'
+                        : 'Reader mode is on',
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _mode == 'author'
+                        ? 'Writing tools lead your profile — tap to switch '
+                            'back to Reader'
+                        : 'Switch to Author to put your books, studio and '
+                            'stats front and centre',
+                    style: TextStyle(
+                        fontSize: 12, height: 1.35, color: theme.hintColor),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 18),
-            _CloudStatusChip(
-              status: _cloudStatus,
-              onRetry: _probeCloud,
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'BookNest ${AppConfig.appVersion} · by N.O Group',
-              style: TextStyle(color: theme.hintColor, fontSize: 12),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: BookNestColors.cyan,
+              ),
+              child: _modeBusy
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: BookNestColors.navyDeep))
+                  : Text(
+                      _mode == 'author' ? 'Reader' : 'Author',
+                      style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: BookNestColors.navyDeep),
+                    ),
             ),
           ],
         ),
       ),
-        );
-      },
+    );
+  }
+
+  /// Every destination, grouped. Tiles flow into as many columns as the
+  /// width allows (2 on a phone, 3–4 on PC); Account stays a list.
+  List<Widget> _sections(BuildContext context, bool dark) {
+    final author = _mode == 'author';
+    final writing = <_ProfileTile>[
+      _ProfileTile(Icons.edit_note_rounded, 'New book',
+          'Open the manuscript studio', () => context.push('/editor')),
+      _ProfileTile(Icons.dashboard_rounded, 'Writer dashboard',
+          'Your books at a glance', () => context.push('/dashboard')),
+      _ProfileTile(Icons.insights_rounded, 'Reviews hub',
+          'What readers say about your books',
+          () => context.push('/reviews-hub')),
+    ];
+    final everyday = <_ProfileTile>[
+      _ProfileTile(Icons.forum_rounded, 'Messages', 'Your conversations',
+          () => context.go('/dms')),
+      _ProfileTile(Icons.menu_book_rounded, 'My library',
+          'Books you love and write', () => context.push('/library')),
+      if (!author)
+        _ProfileTile(Icons.dashboard_rounded, 'Writer dashboard',
+            'Manage your books and chapters',
+            () => context.push('/dashboard')),
+      _ProfileTile(Icons.person_outline_rounded, 'Public profile',
+          'See what readers see', () => context.push('/user/$_viewerId')),
+      _ProfileTile(Icons.diamond_outlined, 'Gems wallet',
+          'Balance, daily bonus and activity', () => context.push('/wallet')),
+      if (AppConfig.jennyEnabled)
+        _ProfileTile(Icons.auto_awesome_rounded, 'Ask Jenny',
+            'Your AI reading companion', () => context.push('/jenny')),
+      _ProfileTile(Icons.event_note_rounded, 'Events agenda',
+          'Every event, RSVPs and reminders', () => context.push('/events')),
+      _ProfileTile(Icons.local_fire_department_rounded, 'Reading streaks',
+          'Log your days, keep the flame alive',
+          () => context.push('/streaks')),
+      _ProfileTile(Icons.notifications_none_rounded, 'Notifications',
+          'Messages and activity', () => context.push('/notifications')),
+    ];
+    return [
+      if (author) ...[
+        _sectionLabel(context, 'WRITING'),
+        _tileGrid(writing),
+      ],
+      _sectionLabel(context, 'YOUR BOOKNEST'),
+      _tileGrid(everyday),
+      _sectionLabel(context, 'ACCOUNT'),
+      if (_isOverallModerator)
+        _ProfileAction(
+          icon: Icons.admin_panel_settings_rounded,
+          label: 'Moderation console',
+          subtitle: 'Reports, deletions, community safety',
+          onTap: () => context.push('/moderation'),
+        ),
+      _ProfileAction(
+        icon: Icons.settings_rounded,
+        label: 'Settings',
+        subtitle: 'Theme, privacy and more',
+        onTap: () => context.push('/settings'),
+      ),
+      _ProfileAction(
+        icon: Icons.logout_rounded,
+        label: 'Sign out',
+        subtitle: _email,
+        danger: true,
+        onTap: _signOut,
+      ),
+    ];
+  }
+
+  Widget _sectionLabel(BuildContext context, String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 22, 4, 10),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(text,
+              style: TextStyle(
+                  fontSize: 11.5,
+                  letterSpacing: 1.2,
+                  fontWeight: FontWeight.w800,
+                  color: Theme.of(context).hintColor)),
+        ),
+      );
+
+  Widget _tileGrid(List<_ProfileTile> tiles) {
+    return LayoutBuilder(builder: (context, c) {
+      const gap = 10.0;
+      final cols = c.maxWidth < 290 ? 1 : (c.maxWidth / 220).floor().clamp(2, 4);
+      final w = (c.maxWidth - gap * (cols - 1)) / cols;
+      return Wrap(
+        spacing: gap,
+        runSpacing: gap,
+        children: [for (final t in tiles) SizedBox(width: w, child: t)],
+      );
+    });
+  }
+
+  Widget _footer(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 20),
+        child: Column(
+          children: [
+            _CloudStatusChip(status: _cloudStatus, onRetry: _probeCloud),
+            const SizedBox(height: 12),
+            Text(
+              'BookNest ${AppConfig.appVersion} · by N.O Group',
+              style: TextStyle(
+                  color: Theme.of(context).hintColor, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+}
+
+/// A square-ish destination card for the profile grid.
+class _ProfileTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ProfileTile(this.icon, this.label, this.subtitle, this.onTap);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Container(
+          height: 112,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: theme.dividerColor.withOpacity(.6)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(11),
+                  color: BookNestColors.cyan.withOpacity(.12),
+                ),
+                child: Icon(icon, color: BookNestColors.cyan, size: 20),
+              ),
+              const Spacer(),
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 14)),
+              const SizedBox(height: 2),
+              Text(subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: theme.hintColor, fontSize: 11.5)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1033,44 +1301,6 @@ class _CloudStatusChip extends StatelessWidget {
   }
 }
 
-
-/// Cover photo across the top (bleeding to the screen edges), the profile
-/// photo overlapping its lower edge, and the "Cover" button on top.
-class _CoverHeader extends StatelessWidget {
-  final Widget band;
-  final double bandHeight;
-  final Widget avatar;
-  final Widget coverButton;
-  const _CoverHeader({
-    required this.band,
-    required this.bandHeight,
-    required this.avatar,
-    required this.coverButton,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // The page has 20 px side padding and 24 px top padding — the band
-    // reaches past both so it touches the screen edges and the top.
-    const side = 20.0;
-    const top = 24.0;
-    final visible = bandHeight - top;
-    return SizedBox(
-      width: double.infinity,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(top: -top, left: -side, right: -side, child: band),
-          Padding(
-            padding: EdgeInsets.only(top: visible - 62),
-            child: Center(child: avatar),
-          ),
-          Positioned(top: 8, right: 0, child: coverButton),
-        ],
-      ),
-    );
-  }
-}
 
 class _CoverButton extends StatelessWidget {
   final bool busy;
