@@ -8,7 +8,7 @@
 PRODUCT_NAME = BookNest
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.nogroup.booknest
+PRODUCT_BUNDLE_IDENTIFIER = com.n-o-group.booknest
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 N.O Group. All rights reserved.

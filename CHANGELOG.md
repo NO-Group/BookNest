@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.38.3+71 — 2026-10-23 · BookNest icon on PC
+
+- **The PC apps showed the Flutter logo.** Windows (app, taskbar, title bar,
+  installer, Start menu), macOS (Dock, Finder) and Linux (window, taskbar)
+  now use the BookNest logo. It's the same transparent logo as on Android,
+  with a thin white edge so the navy stays visible on dark taskbars.
+  - Windows `.ico`: 16–256 px.
+  - macOS icon set: 16–1024 px, on Apple's icon grid.
+  - Linux: `data/app_icon.png`, now set as the window icon (before, there
+    was none).
+- The macOS bundle id is now `com.n-o-group.booknest`, the same as iPhone
+  (`com.nogroup.booknest` is not used as an app id anymore).
+
 ## 2.38.2+70 — 2026-10-23 · BookNest media folder on the device
 
 - **All chat media saves to the phone by default and is never deleted by

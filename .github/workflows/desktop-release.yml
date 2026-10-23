@@ -26,6 +26,10 @@ on:
       # The pipeline itself, or a version bump (= a new release).
       - '.github/workflows/desktop-release.yml'
       - 'pubspec.yaml'
+      # Native PC files (icons, runners, installer).
+      - 'windows/**'
+      - 'macos/**'
+      - 'linux/**'
 
 permissions:
   contents: write
