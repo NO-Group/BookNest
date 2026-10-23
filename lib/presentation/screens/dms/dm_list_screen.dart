@@ -74,7 +74,7 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
   Future<void> _scanVault() async {
     try {
       if (ChatStore.instance.conversationIds.isNotEmpty) return;
-      final info = await ChatBackupService.instance.peekDriveBackup();
+      final info = await ChatBackupService.instance.peekServerBackup();
       if (info != null && mounted) {
         setState(() => _restoreAvailable = true);
       }
@@ -124,7 +124,7 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
     if (passphrase == null || passphrase.isEmpty || !mounted) return;
     try {
       final count =
-          await ChatBackupService.instance.restoreFromDrive(passphrase);
+          await ChatBackupService.instance.restoreFromServer(passphrase);
       if (!mounted) return;
       setState(() => _restoreAvailable = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

@@ -18,6 +18,7 @@ import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/doc_extract.dart';
+import '../../../services/media_backup_service.dart';
 
 /// One piece of media in a conversation — enough for the viewer to
 /// page through an album and label the file.
@@ -119,10 +120,7 @@ Future<void> shareMediaFile(BuildContext context, File file, String name) async 
   }
 }
 
-String _mediaCachePath(String url) {
-  final safe = url.hashCode.abs().toRadixString(36);
-  return '${Directory.systemTemp.path}/booknest_media/$safe';
-}
+String _mediaCachePath(String url) => mediaCachePath(url);
 
 /// Streams [url] into the app cache with progress, reusing a previous
 /// download when present. Returns the local file.
@@ -134,11 +132,20 @@ Future<File> _downloadToCache(String url, void Function(int, int)? onProgress) a
   try {
     final res = await client.send(http.Request('GET', Uri.parse(url)));
     if (res.statusCode != 200) {
+      await res.stream.drain<void>();
+      // Chat media leaves BookNest after 30 days — the reader's own Google
+      // Drive backup has it.
+      final recovered = await MediaBackupService.instance.recover(url);
+      if (recovered != null) return recovered;
       throw res.statusCode == 401 || res.statusCode == 403
           ? 'The file host refused to deliver this file (${res.statusCode}). '
               'PDF and ZIP files need to be allowed by the BookNest team — '
               'please try again later.'
-          : 'The file could not be loaded (${res.statusCode}).';
+          : res.statusCode == 404
+              ? 'This file is older than 30 days and is no longer on '
+                  'BookNest. Turn on media backup (Settings → Chat backup) to '
+                  'keep chat media in your Google account.'
+              : 'The file could not be loaded (${res.statusCode}).';
     }
     final total = res.contentLength ?? 0;
     final builder = BytesBuilder(copy: false);

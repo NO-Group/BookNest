@@ -1,4 +1,81 @@
-# Chat Storage & Backup — the BookNest WhatsApp Recipe
+# Chat Storage & Backup
+
+> **Updated in 2.38.0.** Text and media are now backed up to different places.
+
+## The model (2.38+)
+
+```
+┌──────────────────────────┐
+│  On the phone (always)   │  Every conversation = its own encrypted file
+│  chat_vault/*.bnchat     │  (AES-256-GCM, key in the device keystore)
+└──────┬────────────┬──────┘
+       │ TEXT       │ MEDIA (photos, videos, voice notes, files)
+       ▼            ▼
+┌──────────────┐  ┌───────────────────────────────────────────┐
+│ BookNest     │  │ The reader's OWN Google Drive (hidden app │
+│ MongoDB      │  │ folder, their storage). Incremental: an   │
+│ chat_backups │  │ index file lists what is already there.   │
+│ 1 doc/reader │  └───────────────────────────────────────────┘
+│ sealed blob  │
+└──────────────┘
+```
+
+- **Text → MongoDB.** The app takes the text history (media keep only their
+  link), gzips it, seals it with the reader's passphrase (PBKDF2-HMAC-SHA256
+  120k → AES-256-GCM) and uploads it (`backup.put`). BookNest stores
+  ciphertext only, one document per reader in `chats.chat_backups`, replaced
+  each time. Cap: 3 MB per reader (text is ~50–300 KB). Backups stop growing
+  if the chats database passes 350 MB. Restore works on any phone or PC
+  (`backup.get`) with the passphrase. The sealed backup also carries this
+  phone's end-to-end identity key, so a restored phone can still open sealed
+  messages from the last 30 days.
+- **Media → the reader's Google Drive.** Settings → Chat backup → "Back up
+  media to my Google account" (+ "Include videos"). Uploads only new files,
+  streamed from disk (resumable uploads, up to 200 MB per file).
+- **Cloudinary keeps chat media for 30 days only.** The daily workflow
+  `chat-media-sweep.yml` deletes `booknest/chat/` and `booknest/files/`
+  assets older than 30 days (never avatars, covers or book images). Needs
+  GitHub secrets `CLOUDINARY_API_KEY` + `CLOUDINARY_API_SECRET`. Report:
+  `ops/chat-media-sweep.md`.
+- **Older media comes back from Drive.** When a chat photo, video, voice note
+  or file is gone from Cloudinary, the app fetches the reader's Drive copy
+  silently (bubbles and the viewer).
+- **Server messages** are still purged after 30 days (unchanged).
+- Schedules (daily/weekly/monthly) run quietly when the chat list opens:
+  text to BookNest (only with the passphrase already on the device), and new
+  media to Drive (only if switched on and Google is already connected).
+- Account deletion removes the sealed text backup too.
+
+## Platforms
+
+| | Text backup (BookNest) | Media backup (Google Drive) |
+|---|---|---|
+| Android | ✅ | ✅ |
+| iPhone | ✅ | ✅ once secret `GOOGLE_IOS_CLIENT_ID` exists |
+| PC | ✅ | — (no Google sign-in on desktop) |
+
+## Google console (media backup)
+
+1. Google Cloud Console → enable **Google Drive API**.
+2. OAuth consent screen → scope `https://www.googleapis.com/auth/drive.appdata`.
+3. Credentials → OAuth client ID → **Android**: package `com.n_o_group.booknest`
+   plus the SHA-1 of the signing key.
+4. iPhone: OAuth client ID → **iOS**: bundle id `com.n-o-group.booknest` →
+   copy the client id into GitHub secret **`GOOGLE_IOS_CLIENT_ID`**.
+
+## Files
+
+- `lib/services/chat_backup_service.dart` — sealed text backup (server), restore.
+- `lib/services/media_backup_service.dart` — Drive client, media backup, recovery.
+- `lib/services/dm_crypto.dart` — identity keys (restored keys kept as "previous").
+- `lib/presentation/screens/settings/chat_backup_screen.dart` — the screen.
+- Server: `backup.status / put / get / delete` in `supabase/functions/booknest-api/index.ts`.
+- `tools/ops/chat_media_sweep.py`, `.github/workflows/chat-media-sweep.yml`.
+
+---
+
+## Before 2.38 (for reference)
+
 
 From v2.6.0+18, messaging uses the WhatsApp storage model end to end.
 This is the architecture, the reader-facing behavior, and the one-time

@@ -22,7 +22,7 @@
 // ============================================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { MongoClient, ObjectId } from 'npm:mongodb@6.7.0';
+import { Binary, MongoClient, ObjectId } from 'npm:mongodb@6.7.0';
 import { cleanSource, isLibrarySource, resolveSourceText } from './library_text.ts';
 
 const MONGO_URI = Deno.env.get('MONGO_URI') ?? '';
@@ -1560,7 +1560,7 @@ async function handleRequest(req: Request): Promise<Response> {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.29.0',
+          server: '2.30.0',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -6365,6 +6365,84 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       // ── E2EE key directory (public keys only — privates never travel) ──
+      // ── chat text backup (sealed on the phone; we store ciphertext only) ──
+      // Text messages are backed up HERE, in MongoDB: the app compresses the
+      // reader's chat history (text only — photos, videos, voice notes and
+      // files go to the reader's own Google Drive, never to us), seals it
+      // with the reader's backup passphrase (PBKDF2 → AES-256-GCM) and
+      // uploads the envelope. We cannot read it. One document per reader,
+      // replaced on every backup.
+      case 'backup.status': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const row = await (await dbFor('chats')).collection('chat_backups')
+          .findOne({ _id: uid as unknown as ObjectId }, { projection: { blob: 0 } });
+        return ok(row
+          ? { exists: true, size: Number(row.size ?? 0), messages: Number(row.messages ?? 0),
+              updatedAt: row.updatedAt ?? null, appVersion: row.appVersion ?? null }
+          : { exists: false });
+      }
+
+      case 'backup.put': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const b64 = typeof p.blob === 'string' ? p.blob : '';
+        if (!b64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64.slice(0, 64))) return fail('Missing backup');
+        const size = Math.floor(b64.length * 3 / 4);
+        const MAX = 3 * 1024 * 1024; // text only — ~100k+ messages compressed
+        if (size > MAX) {
+          return fail('Your text backup is larger than 3 MB. Clear very old chats and try again.', 413);
+        }
+        const d = await dbFor('chats');
+        const col = d.collection('chat_backups');
+        const prev = await col.findOne({ _id: uid as unknown as ObjectId }, { projection: { updatedAt: 1, size: 1 } });
+        if (prev?.updatedAt && Date.now() - new Date(prev.updatedAt as Date).getTime() < 60_000) {
+          return ok({ saved: true, throttled: true, size: Number(prev.size ?? 0), updatedAt: prev.updatedAt });
+        }
+        // Keep the free database comfortably inside its quota: refuse to
+        // GROW backups once the chats database passes 350 MB.
+        try {
+          const st = await d.command({ dbStats: 1 });
+          const used = Number(st.dataSize ?? 0) + Number(st.indexSize ?? 0);
+          if (used > 350 * 1024 * 1024 && size > Number(prev?.size ?? 0)) {
+            return fail('Backups are paused while BookNest frees up space. Try again later.', 507);
+          }
+        } catch (_) { /* stats are advisory */ }
+        // The 4-byte magic "BNBK" must lead the envelope (base64 "Qk5CSw").
+        if (!b64.startsWith('Qk5CSw')) return fail('Not a BookNest backup');
+        const now = new Date();
+        await col.updateOne(
+          { _id: uid as unknown as ObjectId },
+          { $set: {
+              blob: Binary.createFromBase64(b64), size,
+              messages: Math.max(0, Math.floor(Number(p.messages ?? 0)) || 0),
+              appVersion: String(p.appVersion ?? '').slice(0, 24),
+              updatedAt: now,
+            } },
+          { upsert: true },
+        );
+        return ok({ saved: true, size, updatedAt: now });
+      }
+
+      case 'backup.get': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const row = await (await dbFor('chats')).collection('chat_backups')
+          .findOne({ _id: uid as unknown as ObjectId });
+        if (!row?.blob) return ok({ exists: false });
+        const blob = row.blob as Binary;
+        return ok({ exists: true, blob: blob.toString('base64'), size: Number(row.size ?? 0),
+          messages: Number(row.messages ?? 0), updatedAt: row.updatedAt ?? null });
+      }
+
+      case 'backup.delete': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        await (await dbFor('chats')).collection('chat_backups')
+          .deleteOne({ _id: uid as unknown as ObjectId });
+        return ok({ deleted: true });
+      }
+
       case 'keys.publish': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
@@ -6904,6 +6982,7 @@ async function handleRequest(req: Request): Promise<Response> {
         await counts('review_comments', reviews.collection('comments').deleteMany({ userId: uid }));
         await counts('messages', chats.collection('messages').deleteMany({ senderId: uid }));
         await counts('conversations', chats.collection('conversations').deleteMany({ memberIds: uid }));
+        await counts('chat_backups', chats.collection('chat_backups').deleteMany({ _id: uid as unknown as ObjectId }));
         await counts('gem_ledger', users.collection('gem_ledger').deleteMany({ userId: uid }));
         await counts('push_tokens', users.collection('push_tokens').deleteMany({ userId: uid }));
         await counts('blocks', moderation.collection('blocks').deleteMany({ $or: [{ userId: uid }, { blockedId: uid }] }));

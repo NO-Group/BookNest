@@ -27,6 +27,7 @@ import '../screens/chat/photo_edit_screen.dart';
 import '../screens/chat/video_preview_screen.dart';
 import '../../services/backend_api.dart';
 import '../../services/cloudinary_service.dart';
+import '../../services/media_backup_service.dart';
 import '../../services/supabase_service.dart';
 import 'booknest_ui.dart';
 import 'booknest_emojis.dart';
@@ -1106,10 +1107,22 @@ class _VideoContentState extends State<_VideoContent> {
       _loading = true;
       _failed = false;
     });
-    final controller =
+    var controller =
         VideoPlayerController.networkUrl(Uri.parse(widget.url));
     try {
-      await controller.initialize();
+      try {
+        await controller.initialize();
+      } catch (_) {
+        // Older than 30 days → no longer on BookNest: play the copy from
+        // the reader's own Google Drive backup.
+        try {
+          await controller.dispose();
+        } catch (_) {}
+        final file = await MediaBackupService.instance.recover(widget.url);
+        if (file == null) rethrow;
+        controller = VideoPlayerController.file(file);
+        await controller.initialize();
+      }
       if (!mounted) {
         try {
           await controller.dispose();
@@ -1503,18 +1516,63 @@ class _ImageContent extends StatelessWidget {
                     color: BookNestColors.cyan, strokeWidth: 2),
               ),
             ),
-            errorWidget: (_, __, ___) => Container(
-              width: 220,
-              height: 120,
-              color: Colors.white.withOpacity(.05),
-              child: const Icon(Icons.broken_image_outlined,
-                  color: BookNestColors.cyan),
-            ),
+            errorWidget: (_, __, ___) => _RecoveredImage(url: url),
           ),
         ),
       ),
     );
   }
+}
+
+/// A chat photo that is no longer on BookNest (older than 30 days): shown
+/// from the reader's own Google Drive backup when it is there.
+class _RecoveredImage extends StatefulWidget {
+  final String url;
+  const _RecoveredImage({required this.url});
+
+  @override
+  State<_RecoveredImage> createState() => _RecoveredImageState();
+}
+
+class _RecoveredImageState extends State<_RecoveredImage> {
+  late final Future<File?> _file =
+      MediaBackupService.instance.recover(widget.url);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<File?>(
+      future: _file,
+      builder: (context, snap) {
+        final file = snap.data;
+        if (file != null) {
+          return Image.file(file,
+              fit: BoxFit.cover,
+              cacheWidth: 720,
+              errorBuilder: (_, __, ___) => _broken());
+        }
+        if (snap.connectionState != ConnectionState.done) {
+          return Container(
+            width: 220,
+            height: 160,
+            color: Colors.white.withOpacity(.05),
+            child: const Center(
+              child: CircularProgressIndicator(
+                  color: BookNestColors.cyan, strokeWidth: 2),
+            ),
+          );
+        }
+        return _broken();
+      },
+    );
+  }
+
+  Widget _broken() => Container(
+        width: 220,
+        height: 120,
+        color: Colors.white.withOpacity(.05),
+        child: const Icon(Icons.broken_image_outlined,
+            color: BookNestColors.cyan),
+      );
 }
 
 /// An attachment chip for any file type — tap to open or download.
@@ -1621,6 +1679,17 @@ class _VoiceContentState extends State<_VoiceContent> {
         await _player.setPlaybackRate(_speeds[_speedIndex]);
       }
     } catch (_) {
+      // Older than 30 days → from the reader's Google Drive backup.
+      final file = _ready
+          ? null
+          : await MediaBackupService.instance.recover(widget.url);
+      if (file != null) {
+        try {
+          await _player.play(DeviceFileSource(file.path));
+          await _player.setPlaybackRate(_speeds[_speedIndex]);
+          return;
+        } catch (_) {}
+      }
       if (mounted) {
         setState(() {
           _loading = false;

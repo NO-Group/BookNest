@@ -4,30 +4,38 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pointycastle/export.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'backend_api.dart';
 import 'chat_store.dart';
+import 'dm_crypto.dart';
+import 'media_backup_service.dart';
 import '../config/app_config.dart';
 
-/// WhatsApp-style chat backup: the whole chat vault, sealed with the
-/// reader's own passphrase (PBKDF2 → AES-256-GCM — without the passphrase
-/// the backup is unreadable to anyone, including BookNest), then uploaded
-/// to the reader's own hidden Google Drive app folder. Android gets the
-/// Drive path; every other platform gets the same encrypted file via
-/// share/import so nothing depends on our servers.
+/// Chat backup, split the way storage costs work:
+///
+/// • TEXT messages → BookNest (MongoDB). The app compresses the history,
+///   seals it with the reader's own passphrase (PBKDF2 → AES-256-GCM) and
+///   uploads the envelope. BookNest stores ciphertext only — without the
+///   passphrase nobody can open it, including BookNest. Restores on any
+///   phone or PC, no Google account needed. Text is tiny (~50–300 KB).
+/// • MEDIA (photos, videos, voice notes, files) → the reader's OWN Google
+///   Drive ([MediaBackupService]). Never stored by BookNest beyond the
+///   30-day relay on Cloudinary.
+///
+/// Older Google-Drive text backups and exported .bnbk files still restore.
 class ChatBackupService {
   ChatBackupService._();
   static final ChatBackupService instance = ChatBackupService._();
 
   static const _magic = [0x42, 0x4E, 0x42, 0x4B]; // "BNBK"
-  static const _version = 1;
+  // Envelope v1 = JSON (older Drive backups), v2 = gzip(JSON).
+  static const _version = 2;
   static const _driveFileName = 'booknest-chat-backup.bnbk';
-  static const _driveScope = 'https://www.googleapis.com/auth/drive.appdata';
+  static const _maxServerBytes = 3 * 1024 * 1024;
 
   static const _keyCacheName = 'booknest.backup.pass.key';
   static const _saltCacheName = 'booknest.backup.pass.salt';
@@ -36,7 +44,6 @@ class ChatBackupService {
   static const _lastSizePref = 'booknest.backup.lastSize';
 
   final FlutterSecureStorage _secure = const FlutterSecureStorage();
-  final GoogleSignIn _google = GoogleSignIn(scopes: const [_driveScope]);
 
   // ── status ──────────────────────────────────────────────────────────
 
@@ -114,7 +121,7 @@ class ChatBackupService {
 
   Uint8List _seal(Map<String, dynamic> payload, Uint8List key,
       Uint8List salt) {
-    final json = utf8.encode(jsonEncode(payload));
+    final json = gzip.encode(utf8.encode(jsonEncode(payload)));
     final iv = _random(12);
     final cipher = GCMBlockCipher(AESEngine())
       ..init(true, AEADParameters(KeyParameter(key), 128, iv, Uint8List(0)));
@@ -151,7 +158,8 @@ class ChatBackupService {
       ..init(false, AEADParameters(KeyParameter(derived), 128, iv,
           Uint8List(0)));
     try {
-      final plain = cipher.process(sealed);
+      var plain = cipher.process(sealed);
+      if (blob[4] >= 2) plain = Uint8List.fromList(gzip.decode(plain));
       final decoded = jsonDecode(utf8.decode(plain));
       if (decoded is Map) return Map<String, dynamic>.from(decoded);
       throw ArgumentError('This backup is empty or damaged.');
@@ -169,190 +177,124 @@ class ChatBackupService {
         derivator.process(Uint8List.fromList(utf8.encode(passphrase))));
   }
 
-  // ── payload ─────────────────────────────────────────────────────────
+  // ── payload: text history only ──────────────────────────────────────
 
-  Map<String, dynamic> _payload() => {
+  /// The chats as text: messages keep their media *link* (so the media can
+  /// be found again in the reader's Google Drive), never media bytes.
+  Map<String, dynamic> _textChats() {
+    final all = ChatStore.instance.exportAll();
+    final out = <String, dynamic>{};
+    all.forEach((id, chat) {
+      if (chat is! Map) return;
+      final messages = <Map<String, dynamic>>[];
+      for (final m in (chat['messages'] as List? ?? const [])) {
+        if (m is! Map) continue;
+        final row = <String, dynamic>{};
+        m.forEach((k, v) {
+          final key = '$k';
+          // Device-only fields (local file paths, upload state) stay here.
+          if (key.startsWith('local') || key.startsWith('_') ||
+              key == 'pending' || key == 'uploading') return;
+          row[key] = v;
+        });
+        messages.add(row);
+      }
+      out[id] = {'meta': chat['meta'] ?? const {}, 'messages': messages};
+    });
+    return out;
+  }
+
+  Future<Map<String, dynamic>> _payload() async => {
         'app': 'BookNest',
         'version': _version,
         'appVersion': AppConfig.appVersion,
         'createdAt': DateTime.now().toUtc().toIso8601String(),
-        'chats': ChatStore.instance.exportAll(),
+        'chats': _textChats(),
+        // Lets a restored phone open end-to-end sealed messages that were
+        // sealed to this phone — inside the passphrase envelope only.
+        'dmKeys': await DmCrypto.instance.exportForBackup(),
       };
 
-  // ── Google Drive (hidden app-data folder) ───────────────────────────
-
-  bool get driveSupported => Platform.isAndroid;
-
-  Future<GoogleSignInAccount?> _ensureGoogle({bool interactive = false}) async {
-    try {
-      var account = await _google.signInSilently();
-      if (account == null && interactive) {
-        account = await _google.signIn();
-      }
-      return account;
-    } catch (_) {
-      // Not configured / no Play services — honest failure upstream.
-      return null;
+  static int _countMessages(Map<String, dynamic> chats) {
+    var n = 0;
+    for (final c in chats.values) {
+      if (c is Map && c['messages'] is List) n += (c['messages'] as List).length;
     }
+    return n;
   }
 
-  Future<Map<String, String>?> _driveHeaders(GoogleSignInAccount account) async {
-    try {
-      final auth = await account.authentication;
-      final token = auth.accessToken;
-      if (token == null || token.isEmpty) return null;
-      return {'Authorization': 'Bearer $token'};
-    } catch (_) {
-      return null;
+  // ── where backups go ────────────────────────────────────────────────
+
+  /// Google Drive is used for MEDIA (and to restore older text backups).
+  bool get driveSupported => DriveClient.instance.supported;
+
+  Future<Map<String, String>?> _driveHeaders({bool interactive = false}) =>
+      DriveClient.instance.headers(interactive: interactive);
+
+  /// Uploads the sealed text backup to BookNest. True when stored.
+  Future<bool> _uploadToServer(Uint8List blob, int messages) async {
+    if (blob.length > _maxServerBytes) {
+      throw BackupUnavailable('Your text backup is over 3 MB — that is a lot '
+          'of history! Delete a few very old chats and try again.');
     }
+    final res = await BackendApi.instance.call('backup.put', {
+      'blob': base64Encode(blob),
+      'messages': messages,
+      'appVersion': AppConfig.appVersion,
+    });
+    return res?['saved'] == true;
   }
 
-  /// The existing backup's file id, or null.
-  Future<String?> _driveFileId(Map<String, String> headers) async {
-    final uri = Uri.parse(
-        'https://www.googleapis.com/drive/v3/files'
-        '?spaces=appDataFolder'
-        '&q=${Uri.encodeQueryComponent("name='$_driveFileName'")}'
-        '&fields=${Uri.encodeQueryComponent('files(id,name,size,modifiedTime)')}');
-    final res = await http
-        .get(uri, headers: headers)
-        .timeout(const Duration(seconds: 20));
-    if (res.statusCode != 200) return null;
-    final body = jsonDecode(res.body);
-    final files = body is Map && body['files'] is List
-        ? body['files'] as List
-        : const [];
-    if (files.isEmpty) return null;
-    final first = files.first;
-    return first is Map ? first['id']?.toString() : null;
-  }
-
-  Future<bool> _driveUpload(
-      Map<String, String> headers, Uint8List blob, String? existingId) async {
-    try {
-      if (existingId != null) {
-        final uri = Uri.parse(
-            'https://www.googleapis.com/upload/drive/v3/files/$existingId'
-            '?uploadType=media');
-        final res = await http
-            .patch(uri,
-                headers: {
-                  ...headers,
-                  'Content-Type': 'application/octet-stream',
-                },
-                body: blob)
-            .timeout(const Duration(seconds: 120));
-        return res.statusCode == 200;
-      }
-      // First backup: create the file inside the hidden app folder.
-      final boundary = 'booknest_${DateTime.now().millisecondsSinceEpoch}';
-      final metadata = jsonEncode({
-        'name': _driveFileName,
-        'parents': ['appDataFolder'],
-      });
-      final body = [
-        '--$boundary',
-        'Content-Type: application/json; charset=UTF-8',
-        '',
-        metadata,
-        '--$boundary',
-        'Content-Type: application/octet-stream',
-        'Content-Transfer-Encoding: binary',
-        '',
-        '',
-      ].join('\r\n');
-      final request = http.Request(
-        'POST',
-        Uri.parse('https://www.googleapis.com/upload/drive/v3/files'
-            '?uploadType=multipart'),
-      );
-      request.headers.addAll({
-        ...headers,
-        'Content-Type': 'multipart/related; boundary=$boundary',
-      });
-      request.bodyBytes = Uint8List.fromList([
-        ...utf8.encode(body),
-        ...blob,
-        ...utf8.encode('\r\n--$boundary--'),
-      ]);
-      final res =
-          await request.send().timeout(const Duration(seconds: 120));
-      return res.statusCode == 200 || res.statusCode == 201;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<Uint8List?> _driveDownload(
-      Map<String, String> headers, String fileId) async {
-    try {
-      final uri = Uri.parse(
-          'https://www.googleapis.com/drive/v3/files/$fileId?alt=media');
-      final res = await http
-          .get(uri, headers: headers)
-          .timeout(const Duration(seconds: 120));
-      if (res.statusCode != 200) return null;
-      return Uint8List.fromList(res.bodyBytes);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<bool> _driveDelete(Map<String, String> headers, String fileId) async {
-    try {
-      final uri =
-          Uri.parse('https://www.googleapis.com/drive/v3/files/$fileId');
-      final res = await http
-          .delete(uri, headers: headers)
-          .timeout(const Duration(seconds: 20));
-      return res.statusCode == 204 || res.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
+  Future<void> _remember(int size) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _lastAtPref, DateTime.now().toUtc().toIso8601String());
+    await prefs.setInt(_lastSizePref, size);
   }
 
   // ── public operations ───────────────────────────────────────────────
 
-  /// Whether a Google backup exists (silent sign-in only — no prompts).
-  Future<DriveBackupInfo?> peekDriveBackup({bool interactive = false}) async {
-    if (!driveSupported) return null;
-    final account = await _ensureGoogle(interactive: interactive);
-    if (account == null) return null;
-    final headers = await _driveHeaders(account);
-    if (headers == null) return null;
-    final id = await _driveFileId(headers);
-    if (id == null) return null;
-    return DriveBackupInfo(fileId: id, email: account.email);
+  /// The text backup stored with BookNest, or null when there is none (or
+  /// the server can't be reached).
+  Future<ServerBackupInfo?> peekServerBackup() async {
+    final res = await BackendApi.instance.call('backup.status');
+    if (res == null || res['exists'] != true) return null;
+    return ServerBackupInfo(
+      size: (res['size'] as num?)?.toInt() ?? 0,
+      messages: (res['messages'] as num?)?.toInt() ?? 0,
+      updatedAt: DateTime.tryParse('${res['updatedAt'] ?? ''}')?.toLocal(),
+    );
   }
 
-  /// Runs a backup now with the given passphrase. Returns the backup's
-  /// size in bytes, or -1 when something could not complete.
+  /// Backs up the TEXT history now (sealed with [passphrase]) to BookNest.
+  /// Returns the backup's size in bytes, or -1 when it could not complete.
   Future<int> backupNow(String passphrase) async {
+    await _cacheKey(passphrase);
+    return _backupWithCachedKey();
+  }
+
+  Future<int> _backupWithCachedKey() async {
+    await ChatStore.instance.flush();
+    final cached = await _cachedKey();
+    if (cached == null) return -1;
+    final payload = await _payload();
+    final blob = _seal(payload, cached.key, cached.salt);
+    final ok = await _uploadToServer(
+        blob, _countMessages(payload['chats'] as Map<String, dynamic>));
+    if (!ok) return -1;
+    await _remember(blob.length);
+    return blob.length;
+  }
+
+  /// Also hands the sealed text backup to the reader as a file (share
+  /// sheet) — an extra copy they keep wherever they like.
+  Future<int> exportCopy(String passphrase) async {
     await _cacheKey(passphrase);
     await ChatStore.instance.flush();
     final cached = await _cachedKey();
     if (cached == null) return -1;
-    final blob = _seal(_payload(), cached.key, cached.salt);
-
-    if (driveSupported) {
-      final account = await _ensureGoogle(interactive: true);
-      if (account == null) return -1;
-      final headers = await _driveHeaders(account);
-      if (headers == null) return -1;
-      final existing = await _driveFileId(headers);
-      final ok = await _driveUpload(headers, blob, existing);
-      if (!ok) return -1;
-    } else {
-      // Non-Android: hand the encrypted file to the reader (share sheet —
-      // they can park it in iCloud/Drive/Files themselves).
-      final ok = await _exportBlobLocally(blob);
-      if (!ok) return -1;
-    }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _lastAtPref, DateTime.now().toUtc().toIso8601String());
-    await prefs.setInt(_lastSizePref, blob.length);
-    return blob.length;
+    final blob = _seal(await _payload(), cached.key, cached.salt);
+    return await _exportBlobLocally(blob) ? blob.length : -1;
   }
 
   Future<bool> _exportBlobLocally(Uint8List blob) async {
@@ -363,8 +305,8 @@ class ChatBackupService {
       await file.writeAsBytes(blob, flush: true);
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'Your encrypted BookNest chat backup — keep it somewhere '
-            'safe (Google Drive, iCloud, anywhere you trust).',
+        text: 'Your encrypted BookNest chat backup (text) — keep it '
+            'somewhere safe.',
       );
       return true;
     } catch (_) {
@@ -372,21 +314,31 @@ class ChatBackupService {
     }
   }
 
-  /// Restores from Google Drive. Returns the number of messages restored.
+  /// Restores the text history from BookNest. Returns messages restored.
+  Future<int> restoreFromServer(String passphrase) async {
+    final res = await BackendApi.instance.call('backup.get');
+    if (res == null) {
+      throw BackupUnavailable('Could not reach BookNest — check your '
+          'connection and try again.');
+    }
+    if (res['exists'] != true || res['blob'] is! String) {
+      throw BackupUnavailable('No chat backup is stored for this account yet.');
+    }
+    return _restoreBlob(base64Decode(res['blob'] as String), passphrase);
+  }
+
+  /// Older versions backed text up to Google Drive — still restorable.
   Future<int> restoreFromDrive(String passphrase) async {
-    final account = await _ensureGoogle(interactive: true);
-    if (account == null) throw BackupUnavailable('Google sign-in is not '
-        'available on this phone — restore from a backup file instead.');
-    final headers = await _driveHeaders(account);
+    final headers = await _driveHeaders(interactive: true);
     if (headers == null) {
-      throw BackupUnavailable('Could not reach your Google Drive — check '
-          'your connection and try again.');
+      throw BackupUnavailable('Google sign-in is not available on this '
+          'device — restore from BookNest or a backup file instead.');
     }
-    final id = await _driveFileId(headers);
-    if (id == null) {
-      throw BackupUnavailable('No backup found in your Google account yet.');
+    final found = await DriveClient.instance.find(headers, _driveFileName);
+    if (found == null) {
+      throw BackupUnavailable('No older backup found in your Google account.');
     }
-    final blob = await _driveDownload(headers, id);
+    final blob = await DriveClient.instance.downloadBytes(headers, found.id);
     if (blob == null) {
       throw BackupUnavailable('The backup could not be downloaded — try '
           'again in a moment.');
@@ -404,72 +356,56 @@ class ChatBackupService {
     final payload = _open(blob, passphrase);
     final chats = payload['chats'];
     if (chats is! Map) throw ArgumentError('This backup is empty.');
-    var count = 0;
-    for (final entry in chats.entries) {
-      final value = entry.value;
-      if (value is! Map) continue;
-      final messages = value['messages'];
-      if (messages is List) count += messages.length;
-    }
+    final count = _countMessages(Map<String, dynamic>.from(chats));
     await ChatStore.instance.importAll(Map<String, dynamic>.from(chats));
+    final keys = payload['dmKeys'];
+    if (keys is Map) {
+      await DmCrypto.instance.adoptFromBackup(Map<String, dynamic>.from(keys));
+    }
     // The restored passphrase becomes this device's cache so scheduled
     // backups keep working.
     await _cacheKey(passphrase);
     return count;
   }
 
-  /// Deletes the Google Drive backup (confirm upstream!).
-  Future<bool> deleteDriveBackup() async {
-    final account = await _ensureGoogle(interactive: true);
-    if (account == null) return false;
-    final headers = await _driveHeaders(account);
-    if (headers == null) return false;
-    final id = await _driveFileId(headers);
-    if (id == null) return true;
-    return _driveDelete(headers, id);
+  /// Deletes the text backup stored with BookNest (confirm upstream!).
+  Future<bool> deleteServerBackup() async {
+    final res = await BackendApi.instance.call('backup.delete');
+    if (res?['deleted'] != true) return false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_lastAtPref);
+    await prefs.remove(_lastSizePref);
+    return true;
   }
 
-  /// The signed-in Google account's email, when one is available silently.
-  Future<String?> connectedAccountEmail() async {
-    if (!driveSupported) return null;
-    final account = await _ensureGoogle();
-    return account?.email;
-  }
+  /// The connected Google account's email (media backup), silently.
+  Future<String?> connectedAccountEmail() async =>
+      (await DriveClient.instance.account())?.email;
 
-  /// Silent scheduled backup — daily/weekly/monthly, WhatsApp-style.
+  /// Scheduled backups — daily/weekly/monthly, WhatsApp-style, silent:
+  /// text to BookNest (only with the passphrase key already on this phone)
+  /// and new media to the reader's Google Drive (only when switched on and
+  /// the Google account is already connected).
   Future<void> maybeRunScheduled() async {
     await warmUp();
     final freq = frequency;
     if (freq == BackupFrequency.off) return;
-    if (!await hasPassphraseKey) return;
-    final last = await lastBackupAt;
-    final due = switch (freq) {
-      BackupFrequency.daily =>
-        last == null || DateTime.now().difference(last) >= const Duration(days: 1),
-      BackupFrequency.weekly =>
-        last == null || DateTime.now().difference(last) >= const Duration(days: 7),
-      BackupFrequency.monthly =>
-        last == null || DateTime.now().difference(last) >= const Duration(days: 30),
-      BackupFrequency.off => false,
+    final every = switch (freq) {
+      BackupFrequency.daily => const Duration(days: 1),
+      BackupFrequency.weekly => const Duration(days: 7),
+      BackupFrequency.monthly => const Duration(days: 30),
+      BackupFrequency.off => const Duration(days: 36500),
     };
-    if (!due) return;
-    final cached = await _cachedKey();
-    if (cached == null) return; // never prompt silently
-    await ChatStore.instance.flush();
-    final blob = _seal(_payload(), cached.key, cached.salt);
-    if (!driveSupported) return;
-    final account = await _ensureGoogle();
-    if (account == null) return;
-    final headers = await _driveHeaders(account);
-    if (headers == null) return;
-    final existing = await _driveFileId(headers);
-    final ok = await _driveUpload(headers, blob, existing);
-    if (ok) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-          _lastAtPref, DateTime.now().toUtc().toIso8601String());
-      await prefs.setInt(_lastSizePref, blob.length);
+    final last = await lastBackupAt;
+    if (await hasPassphraseKey &&
+        (last == null || DateTime.now().difference(last) >= every)) {
+      try {
+        await _backupWithCachedKey();
+      } catch (_) {}
     }
+    try {
+      await MediaBackupService.instance.maybeRunScheduled(every);
+    } catch (_) {}
   }
 }
 
@@ -477,10 +413,12 @@ class ChatBackupService {
 
 enum BackupFrequency { off, daily, weekly, monthly }
 
-class DriveBackupInfo {
-  final String fileId;
-  final String email;
-  const DriveBackupInfo({required this.fileId, required this.email});
+class ServerBackupInfo {
+  final int size;
+  final int messages;
+  final DateTime? updatedAt;
+  const ServerBackupInfo(
+      {required this.size, required this.messages, this.updatedAt});
 }
 
 /// The passphrase did not open this backup — exactly like WhatsApp's

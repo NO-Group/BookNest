@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -30,6 +31,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? _profile;
   bool _loading = true;
   bool _uploading = false;
+  bool _coverUploading = false;
 
   String? get _viewerId => SupabaseService().auth.currentUser?.id;
   String get _email => SupabaseService().auth.currentUser?.email ?? '';
@@ -117,10 +119,203 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _profile = row == null ? null : Map<String, dynamic>.from(row);
         _loading = false;
       });
+      _loadCover();
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
   }
+
+  /// Read on its own so the profile still loads if the column is missing.
+  Future<void> _loadCover() async {
+    try {
+      final row = await SupabaseService()
+          .client
+          .from('profiles')
+          .select('cover_url')
+          .eq('id', _viewerId ?? '')
+          .maybeSingle();
+      if (!mounted || row == null) return;
+      setState(() => _profile = {...?_profile, 'cover_url': row['cover_url']});
+    } catch (_) {}
+  }
+
+  String? get _coverUrl {
+    final url = _profile?['cover_url']?.toString();
+    return url != null && url.startsWith('http') ? url : null;
+  }
+
+  Future<void> _saveCover(String? url) async {
+    try {
+      await SupabaseService().updateRow('profiles', {'cover_url': url},
+          column: 'id', equals: _viewerId ?? '');
+      final saved = await SupabaseService()
+          .client
+          .from('profiles')
+          .select('cover_url')
+          .eq('id', _viewerId ?? '')
+          .maybeSingle();
+      final persisted = saved != null && saved['cover_url']?.toString() == url;
+      if (!mounted) return;
+      setState(() {
+        if (persisted) _profile = {...?_profile, 'cover_url': url};
+        _coverUploading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(!persisted
+              ? 'The cover could not be saved — please try again.'
+              : url == null
+                  ? 'Cover photo removed.'
+                  : 'New cover photo saved ✨')));
+    } on WriteException catch (e) {
+      if (!mounted) return;
+      setState(() => _coverUploading = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _coverUploading = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('The cover could not be saved — please try again.')));
+    }
+  }
+
+  Future<void> _changeCover() async {
+    final picked = await _pickImageBytes(maxWidth: 1920, maxHeight: 1080);
+    if (picked == null || !mounted) return;
+    setState(() => _coverUploading = true);
+    final url = await CloudinaryService.uploadImage(
+      bytes: picked.$1,
+      folder: 'profile_covers',
+      publicId:
+          'cover-${_viewerId ?? 'anon'}-${DateTime.now().millisecondsSinceEpoch}',
+      extension: picked.$2,
+    );
+    if (!mounted) return;
+    if (url == null) {
+      setState(() => _coverUploading = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Upload failed — check your connection and try again.')));
+      return;
+    }
+    await _saveCover(url);
+  }
+
+  Future<void> _coverMenu() async {
+    if (_coverUploading) return;
+    if (_coverUrl == null) return _changeCover();
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded,
+                  color: BookNestColors.cyan),
+              title: const Text('Change cover photo'),
+              onTap: () => Navigator.pop(sheet, 'change'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.zoom_out_map_rounded,
+                  color: BookNestColors.cyan),
+              title: const Text('View cover photo'),
+              onTap: () => Navigator.pop(sheet, 'view'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline_rounded,
+                  color: Color(0xFFD06A6A)),
+              title: const Text('Remove cover photo'),
+              onTap: () => Navigator.pop(sheet, 'remove'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'change') return _changeCover();
+    if (choice == 'view') {
+      return openChatPhoto(context, _coverUrl!,
+          album: [MediaItem(url: _coverUrl!, name: 'Cover photo')]);
+    }
+    setState(() => _coverUploading = true);
+    await _saveCover(null);
+  }
+
+  /// The cover band across the top of the profile: the reader's cover
+  /// photo, or the BookNest gradient until they add one.
+  Widget _coverBand(bool studio) {
+    final url = _coverUrl;
+    return GestureDetector(
+      onTap: url == null
+          ? _coverMenu
+          : () => openChatPhoto(context, url,
+              album: [MediaItem(url: url, name: 'Cover photo')]),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
+        ),
+        child: SizedBox(
+          height: _coverHeight,
+          width: double.infinity,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: studio
+                        ? [
+                            BookNestColors.navy,
+                            BookNestColors.navyDeep,
+                            BookNestColors.cyan.withOpacity(.55),
+                          ]
+                        : [
+                            BookNestColors.navyDeep,
+                            BookNestColors.navy,
+                            BookNestColors.cyan.withOpacity(.35),
+                          ],
+                  ),
+                ),
+              ),
+              if (url == null)
+                Positioned(
+                  right: 34,
+                  top: 40,
+                  child: Icon(Icons.auto_stories_rounded,
+                      size: 64, color: Colors.white.withOpacity(.10)),
+                ),
+              if (url != null)
+                CachedNetworkImage(
+                  imageUrl: CloudinaryService.transformUrl(url, width: 1280),
+                  fit: BoxFit.cover,
+                  fadeInDuration: const Duration(milliseconds: 200),
+                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              // Keeps the avatar ring and buttons readable on any photo.
+              if (url != null)
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x33000000), Color(0x00000000), Color(0x55000000)],
+                      stops: [0, .45, 1],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static const double _coverHeight = 176;
 
   String get _displayName {
     final name = (_profile?['display_name'] ?? _profile?['username'])
@@ -191,13 +386,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Returns (bytes, extension). Uses image_picker through a tiny indirection
   /// so the dependency stays isolated to this screen.
-  Future<(Uint8List, String)?> _pickImageBytes() async {
+  Future<(Uint8List, String)?> _pickImageBytes(
+      {double maxWidth = 1024, double maxHeight = 1024}) async {
     try {
       final picker = ImagePicker();
       final file = await picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 1024,
-        maxHeight: 1024,
+        maxWidth: maxWidth,
+        maxHeight: maxHeight,
         imageQuality: 85,
       );
       if (file == null) return null;
@@ -274,73 +470,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// The Studio hero: a navy-to-cyan band that bleeds behind the avatar —
-  /// the alternative profile composition, chosen in Settings.
-  Widget _heroBand(ThemeData theme, bool dark) {
-    return Transform.translate(
-      offset: const Offset(-20, -24),
-      child: Container(
-        width: double.infinity,
-        height: 128,
-        margin: const EdgeInsets.only(bottom: 4),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              BookNestColors.navy,
-              BookNestColors.navyDeep,
-              BookNestColors.cyan.withOpacity(.55),
-            ],
-          ),
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(30),
-            bottomRight: Radius.circular(30),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: BookNestColors.cyan.withOpacity(.18),
-              blurRadius: 26,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: 34,
-              top: 18,
-              child: Icon(Icons.auto_stories_rounded,
-                  size: 64,
-                  color: Colors.white.withOpacity(.10)),
-            ),
-            Positioned(
-              left: 22,
-              bottom: 14,
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('BookNest',
-                        style: TextStyle(
-                            color: Colors.white.withOpacity(.9),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 2.4)),
-                    const SizedBox(height: 3),
-                    Text('Reader studio',
-                        style: TextStyle(
-                            color: BookNestColors.cyan.withOpacity(.9),
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1.2)),
-                  ]),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _signOut() async {
     // This phone stops receiving the account's pushes (needs the session).
     await PushService.instance.tearDown();
@@ -373,10 +502,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            if (studio) _heroBand(theme, dark),
-            Transform.translate(
-              offset: Offset(0, studio ? -62 : 0),
-              child: Stack(
+            _CoverHeader(
+              band: _coverBand(studio),
+              bandHeight: _coverHeight,
+              coverButton: _CoverButton(
+                busy: _coverUploading,
+                hasCover: _coverUrl != null,
+                onTap: _coverMenu,
+              ),
+              avatar: Stack(
               children: [
                 Column(
                   children: [
@@ -465,7 +599,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
               ),
             ),
-            if (studio) const SizedBox(height: 42),
             const SizedBox(height: 14),
             InkWell(
               onTap: _editDisplayName,
@@ -890,6 +1023,88 @@ class _CloudStatusChip extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+
+/// Cover photo across the top (bleeding to the screen edges), the profile
+/// photo overlapping its lower edge, and the "Cover" button on top.
+class _CoverHeader extends StatelessWidget {
+  final Widget band;
+  final double bandHeight;
+  final Widget avatar;
+  final Widget coverButton;
+  const _CoverHeader({
+    required this.band,
+    required this.bandHeight,
+    required this.avatar,
+    required this.coverButton,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // The page has 20 px side padding and 24 px top padding — the band
+    // reaches past both so it touches the screen edges and the top.
+    const side = 20.0;
+    const top = 24.0;
+    final visible = bandHeight - top;
+    return SizedBox(
+      width: double.infinity,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(top: -top, left: -side, right: -side, child: band),
+          Padding(
+            padding: EdgeInsets.only(top: visible - 62),
+            child: Center(child: avatar),
+          ),
+          Positioned(top: 8, right: 0, child: coverButton),
+        ],
+      ),
+    );
+  }
+}
+
+class _CoverButton extends StatelessWidget {
+  final bool busy;
+  final bool hasCover;
+  final VoidCallback onTap;
+  const _CoverButton(
+      {required this.busy, required this.hasCover, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withOpacity(.38),
+      shape: const StadiumBorder(),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: busy ? null : onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (busy)
+                const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
+              else
+                const Icon(Icons.add_photo_alternate_rounded,
+                    size: 16, color: Colors.white),
+              const SizedBox(width: 6),
+              Text(hasCover ? 'Edit cover' : 'Add cover photo',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700)),
+            ],
+          ),
         ),
       ),
     );

@@ -23,6 +23,7 @@ on:
     paths:
       - 'supabase/functions/booknest-api/**'
       - 'supabase/migrations/20261004000001_lock_privileged_columns.sql'
+      - 'supabase/migrations/20261023000001_profile_cover.sql'
       - '.github/workflows/supabase-deploy.yml'
 
 permissions:
@@ -73,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           # Idempotent migrations only — each is safe to run on every deploy.
-          for f in supabase/migrations/20261004000001_lock_privileged_columns.sql; do
+          for f in supabase/migrations/20261004000001_lock_privileged_columns.sql supabase/migrations/20261023000001_profile_cover.sql; do
             echo "applying $f"
             jq -Rs '{query: .}' "$f" > body.json
             code=$(curl -sS -o resp.json -w '%{http_code}' -X POST \
@@ -84,7 +85,7 @@ jobs:
             echo "HTTP $code: $(head -c 400 resp.json)"
             [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || exit 1
           done
-          echo "- Database security migration applied ✅" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Database migrations applied ✅ (column locks, profile cover)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Supabase CLI
         uses: supabase/setup-cli@v1

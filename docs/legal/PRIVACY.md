@@ -1,19 +1,20 @@
 # BookNest Privacy Policy
 
-_Last updated: 22 October 2026 · BookNest by N.O Group · Contact: n.ogroup@yahoo.com_
+_Last updated: 23 October 2026 · BookNest by N.O Group · Contact: n.ogroup@yahoo.com_
 
 BookNest is a reading and writing community. This policy explains what we
 collect, why, who processes it for us, and how you can delete it. It
-applies to the BookNest apps for Android (Google Play and direct download)
-and for PC.
+applies to the BookNest apps for Android (Google Play and direct download),
+for iPhone/iPad, and for PC.
 
 ## What we collect
 
 | Data | Examples | Why |
 |---|---|---|
-| Account details | username, display name, phone number or email used to sign in, country, gender, age range, languages, profile photo | to run your account, recover it, and show your profile |
+| Account details | username, display name, phone number or email used to sign in, country, gender, age range, languages, profile photo, cover photo | to run your account, recover it, and show your profile |
 | Content you create | books, chapters, drafts, posts, comments, reviews, club and group activity, photos, voice notes and videos you send | to publish and show it as you choose |
-| Messages | one-to-one and group chats | to deliver them; current apps seal one-to-one messages end-to-end, so our servers carry only sealed text |
+| Messages | one-to-one and group chats | to deliver them; current apps seal one-to-one messages end-to-end, so our servers carry only sealed text. Messages stay on our servers for 30 days, then are deleted |
+| Chat backup (optional) | your text message history, compressed and sealed on your device with a passphrase only you know | so you can restore your chats on a new phone; we store only the sealed file and cannot read it |
 | Activity | books opened, likes, bookmarks, reading progress, streaks, gems | to keep your place, power streaks and recommendations |
 | Purchases | product bought, amount, currency, payment reference and status | to deliver gems or plans and keep financial records; card or bank details are entered on Paystack and never reach us |
 | Device and diagnostics | app version, notification token, basic error details | to deliver notifications and fix problems |
@@ -35,14 +36,16 @@ These services store or process data only to run BookNest:
 
 - **Supabase:** sign-in and account records.
 - **MongoDB Atlas:** books, social activity and messages.
-- **Cloudinary:** images.
+- **Cloudinary:** images, and photos, videos, voice notes and files sent in
+  chats. Chat media is deleted from Cloudinary after 30 days.
 - **Cloudflare R2:** the texts of the public-domain library.
 - **Cloudflare (call relay):** when two phones cannot connect directly, voice
   and video call traffic passes through Cloudflare's relay. Calls are
   encrypted end to end, so the relay cannot listen, and nothing is recorded.
 - **Paystack:** payments.
-- **Google Drive:** only if you turn on chat backup, and it goes to *your*
-  Drive, sealed with your own passphrase.
+- **Google Drive:** only if you turn on media backup. Your chat photos,
+  videos, voice notes and files are copied to a hidden BookNest folder in
+  *your own* Google Drive. We have no access to your Drive.
 
 ## Stored on your device
 
@@ -68,7 +71,7 @@ to it:
 - your books and chapters
 - likes, bookmarks, follows and reading stats
 - posts, comments and reviews
-- messages and conversations
+- messages and conversations, and your sealed chat backup
 - your gem history
 - your blocks and reports
 - your profile and login

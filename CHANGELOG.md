@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.38.0+68 — 2026-10-23 · Chat backup split (text → BookNest, media → Google), iPhone app, profile cover photos
+
+- **Chat backup, split by storage cost.**
+  - **Text messages are backed up to BookNest (MongoDB),** compressed and
+    sealed on the phone with the reader's passphrase. BookNest stores
+    ciphertext only and can't read it. They restore on any phone or PC.
+    Typically 50–300 KB per reader, with a 3 MB cap.
+  - **Photos, videos, voice notes and files are backed up to the reader's
+    own Google Drive** (a hidden BookNest folder). Only new files upload,
+    and there is an "Include videos" switch.
+  - **Chat media is removed from Cloudinary after 30 days** by a daily
+    sweep of the chat folders only. Older media comes back silently from
+    the reader's Drive copy.
+  - A restored phone can still open end-to-end sealed messages from the
+    last 30 days.
+- **iPhone/iPad app** (bundle id `com.n-o-group.booknest`, iOS 14+).
+  - Every build publishes `BookNest.ipa` on a GitHub Release (`ios-…`), for
+    download from the website.
+  - Permission texts are in place for camera, microphone, photos and
+    dictation, plus background audio and `booknest://` links.
+  - A signed .ipa is also published when Apple signing secrets exist.
+  - Guide: `docs/IOS.md`.
+- **Profile cover photos.** Readers can add, change, view or remove a wide
+  cover photo above their profile photo, and it shows on their public
+  profile. Stored as a Cloudinary link in `profiles.cover_url` (new
+  migration).
+- Server 2.30.0: `backup.status/put/get/delete`, and account deletion removes
+  the sealed backup.
+- Privacy policy updated for the text backup, the 30-day chat media
+  retention, Drive media backup and iPhone.
+
 ## 2.37.2+67 — 2026-10-23 · Accurate message for blocked PDFs
 
 - The document viewer's "file host refused" message no longer promises that

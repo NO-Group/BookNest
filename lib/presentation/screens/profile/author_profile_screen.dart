@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -6,6 +7,8 @@ import '../../../config/theme.dart';
 import '../../../services/call_service.dart';
 import '../calls/call_screen.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/cloudinary_service.dart';
+import '../chat/media_viewer_screen.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 import '../../components/report_sheet.dart';
@@ -132,6 +135,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
             .toList();
       });
     } catch (_) {}
+    _loadCover();
     final stats = await BackendApi.instance.fetchUserStats(widget.userId);
     if (!mounted) return;
     setState(() {
@@ -139,6 +143,39 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
       _loading = false;
     });
   }
+
+  /// Read on its own so the profile still loads if the column is missing.
+  Future<void> _loadCover() async {
+    try {
+      final row = await SupabaseService()
+          .client
+          .from('profiles')
+          .select('cover_url')
+          .eq('id', widget.userId)
+          .maybeSingle();
+      if (!mounted || row == null) return;
+      setState(() => _profile = {...?_profile, 'cover_url': row['cover_url']});
+    } catch (_) {}
+  }
+
+  String? get _coverUrl {
+    final url = _profile?['cover_url']?.toString();
+    return url != null && url.startsWith('http') ? url : null;
+  }
+
+  void _viewCover() {
+    final url = _coverUrl;
+    if (url == null) return;
+    openChatPhoto(context, url,
+        album: [MediaItem(url: url, name: '$_name · cover photo')]);
+  }
+
+  Widget _coverImage() => CachedNetworkImage(
+        imageUrl: CloudinaryService.transformUrl(_coverUrl!, width: 1280),
+        fit: BoxFit.cover,
+        fadeInDuration: const Duration(milliseconds: 200),
+        errorWidget: (_, __, ___) => const SizedBox.shrink(),
+      );
 
   String get _name {
     final name =
@@ -308,6 +345,21 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Cover photo (when the reader has one) ──
+            if (_coverUrl != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: GestureDetector(
+                  onTap: _viewCover,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: SizedBox(
+                        height: 132,
+                        width: double.infinity,
+                        child: _coverImage()),
+                  ),
+                ),
+              ),
             // ── Identity header: avatar left, name + @handle beside it ──
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
@@ -602,6 +654,34 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
             Stack(
               clipBehavior: Clip.none,
               children: [
+                if (_coverUrl != null)
+                  GestureDetector(
+                    onTap: _viewCover,
+                    child: SizedBox(
+                      height: bannerH,
+                      width: double.infinity,
+                      child: Stack(fit: StackFit.expand, children: [
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: _bannerColors),
+                          ),
+                        ),
+                        _coverImage(),
+                        // Back/menu icons stay readable on any photo.
+                        const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Color(0x66000000), Color(0x00000000)],
+                              stops: [0, .55],
+                            ),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  )
+                else
                 SizedBox(
                   height: bannerH,
                   width: double.infinity,
