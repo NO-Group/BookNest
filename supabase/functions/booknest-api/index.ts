@@ -22,7 +22,10 @@
 // ============================================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { MongoClient, ObjectId } from 'npm:mongodb@6.7.0';
+import { Binary, MongoClient, ObjectId } from 'npm:mongodb@6.7.0';
+import { cleanSource, isLibrarySource, resolveSourceText } from './library_text.ts';
+import { AwsClient } from 'npm:aws4fetch@1.0.20';
+import { createHash } from 'node:crypto';
 
 const MONGO_URI = Deno.env.get('MONGO_URI') ?? '';
 const MONGO_DB_NAME = Deno.env.get('MONGO_DB_NAME') ?? 'booknest';
@@ -395,6 +398,17 @@ async function firebaseAccessToken(): Promise<string | null> {
   }
 }
 
+/** Firebase project: FIREBASE_PROJECT_ID, else the service account's own. */
+function firebaseProjectId(): string {
+  const explicit = Deno.env.get('FIREBASE_PROJECT_ID') ?? '';
+  if (explicit) return explicit;
+  try {
+    return String(JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT') ?? '{}').project_id ?? '');
+  } catch (_) {
+    return '';
+  }
+}
+
 /** Sends an FCM push to every device of a reader (fire-and-forget). */
 async function sendPush(
   userId: string, title: string, body: string,
@@ -409,8 +423,7 @@ async function sendPush(
     await Promise.all(tokens.map(async (t) => {
       try {
         const res = await fetch(
-          'https://fcm.googleapis.com/v1/projects/' +
-          `${Deno.env.get('FIREBASE_PROJECT_ID') ?? ''}/messages:send`,
+          `https://fcm.googleapis.com/v1/projects/${firebaseProjectId()}/messages:send`,
           {
             method: 'POST',
             headers: {
@@ -418,11 +431,12 @@ async function sendPush(
               'content-type': 'application/json',
             },
             body: JSON.stringify({
+              // Data-only: the app decides what to show (nothing while
+              // it is on screen, one banner per conversation otherwise).
               message: {
                 token: String(t.token),
-                notification: { title, body },
-                data,
-                android: { priority: 'HIGH' },
+                data: { ...data, title, body, tag: data.route ?? data.kind ?? 'booknest' },
+                android: { priority: 'HIGH', ttl: '86400s' },
               },
             }),
           },
@@ -464,17 +478,49 @@ function serviceClient() {
   );
 }
 
-const WRITABLE_TABLES = new Set([
-  'profiles', 'posts', 'clubs', 'club_members', 'communities',
-  'community_members', 'organizations', 'organization_members', 'schools',
-  'school_members', 'club_books', 'book_chapters', 'announcement_groups',
-]);
-const OWNER_COLUMN: Record<string, string> = {
-  posts: 'created_by', clubs: 'owner_id', communities: 'owner_id',
-  organizations: 'owner_id', schools: 'owner_id', club_books: 'added_by',
-  club_members: 'user_id', community_members: 'user_id',
-  organization_members: 'user_id', school_members: 'user_id', profiles: 'id',
+// ── gems: one honest ledger. Balance lives in profiles, history in Mongo.
+// Module scope on purpose: fulfillOrder() (Paystack purchases) runs outside
+// the action switch, and a function declared inside that switch is
+// block-scoped — purchases used to die with "grantGems is not defined".
+async function grantGems(uid: string, delta: number, reason: string, day: string | null = null) {
+  const prof = await serviceClient().from('profiles')
+    .select('gems').eq('id', uid).single();
+  const current = prof.error ? 0 : Math.max(0, Number(prof.data?.gems ?? 0));
+  const next = Math.max(0, current + delta);
+  await serviceClient().from('profiles').update({ gems: next }).eq('id', uid);
+  await (await dbFor('users')).collection('gem_ledger').insertOne({
+    userId: uid, delta, reason, day,
+    createdAt: new Date(),
+  });
+  return next;
+}
+
+// db.write runs with the SERVICE ROLE (RLS bypassed), so it is a strict
+// allowlist: only the reader's own profile row, and only harmless columns.
+// Everything else (posts, groups, books, chapters, members, announcement
+// groups) has its own Mongo-backed action and is never written here.
+//   ✗ gems / id / created_at — gems are bought with real money; they move
+//     only through grantGems() on the server.
+const WRITABLE_COLUMNS: Record<string, ReadonlySet<string>> = {
+  profiles: new Set([
+    'username', 'display_name', 'avatar_url', 'cover_url', 'phone_number',
+  ]),
 };
+const OWNER_COLUMN: Record<string, string> = { profiles: 'id' };
+
+/** Keeps only allowlisted columns; returns null when nothing is left. */
+function writableValues(
+  table: string,
+  raw: unknown,
+): Record<string, unknown> | null {
+  const allowed = WRITABLE_COLUMNS[table];
+  if (!allowed || !raw || typeof raw !== 'object') return null;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (allowed.has(key)) out[key] = value;
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 // ---------------------------------------------------------------------------
 // Legacy SQL → MongoDB cutover migration (one-time, idempotent, preserving ids)
@@ -724,6 +770,22 @@ async function migrateLegacy(req: Request): Promise<void> {
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
+// Text of a chapter row: inline, or resolved from its pointer (R2 /
+// Standard Ebooks / GITenberg source, or a legacy CDN text file).
+async function pointedChapterText(c: Record<string, unknown>): Promise<string> {
+  const inline = String(c.content ?? '');
+  if (inline) return inline;
+  try {
+    if (isLibrarySource(c.source)) return await resolveSourceText(c.source);
+    const url = typeof c.contentUrl === 'string' ? c.contentUrl : '';
+    if (url.startsWith('https://res.cloudinary.com/')) {
+      const r = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+      if (r.ok) return await r.text();
+    }
+  } catch (_) { /* shown as empty; the reader path retries */ }
+  return '';
+}
+
 function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -778,6 +840,13 @@ const isUuid = (v: unknown): boolean =>
 // One charset covers all three; anything else simply finds no document.
 const isAnyId = (v: unknown): boolean =>
   typeof v === 'string' && /^[\w|-]{1,200}$/.test(v);
+/** Chapter rows key on the book id — ObjectId hex, UUID or bulk slug. */
+const isChapterBookId = isAnyId;
+
+/** Writing-unit labels a book can use. Module scope on purpose: a `const`
+ *  inside the action switch is never initialised for the cases after it
+ *  (temporal dead zone), which made createDraft/publish/update throw. */
+const UNIT_TYPES = ['chapter', 'part', 'act', 'episode', 'volume'];
 const bookOid = (id: string) => (isHexId(id) ? new ObjectId(id) : id);
 const isDupKey = (e: unknown): boolean =>
   e instanceof Error && e.message.includes('E11000');
@@ -910,6 +979,21 @@ async function isGroupManager(
     .findOne({ _id: groupId } as never,
       { projection: { ownerId: 1, viceModeratorId: 1 } });
   return !!group && (group.ownerId === uid || group.viceModeratorId === uid);
+}
+
+/** Owner / deputy check that returns the group (null when not a manager).
+ *  Module-level on purpose: declared inside the action switch it was not
+ *  visible to the school cases above it ("groupManager is not defined"). */
+async function groupManager(
+  kind: string, groupId: string, uid: string,
+): Promise<Record<string, unknown> | null> {
+  if (!(GROUP_KINDS as readonly string[]).includes(kind)) return null;
+  const group = await (await dbFor('groups')).collection(kind)
+    .findOne({ _id: groupId } as never,
+      { projection: { ownerId: 1, viceModeratorId: 1, name: 1 } });
+  if (!group) return null;
+  const isManager = group.ownerId === uid || group.viceModeratorId === uid;
+  return isManager ? group as Record<string, unknown> : null;
 }
 
 // ── chat message toolkit: reactions, deletes, read receipts ────────────────
@@ -1153,7 +1237,105 @@ async function hitLimit(
 // ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
+// ── Calls: Cloudflare TURN credentials (short-lived, cached per isolate).
+// Returns one entry per URL (older apps read `urls` as a single string).
+let cfTurnCache: { at: number; servers: Record<string, string>[] } | null = null;
+async function cloudflareTurnServers(): Promise<Record<string, string>[]> {
+  const keyId = Deno.env.get('CF_TURN_KEY_ID') ?? '';
+  const keyToken = Deno.env.get('CF_TURN_KEY_API_TOKEN') ?? '';
+  if (!keyId || !keyToken) return [];
+  if (cfTurnCache && Date.now() - cfTurnCache.at < 6 * 3600_000) return cfTurnCache.servers;
+  try {
+    const res = await fetch(
+      `https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`,
+      { method: 'POST', signal: AbortSignal.timeout(6000),
+        headers: { Authorization: `Bearer ${keyToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ttl: 86400 }) });
+    if (!res.ok) return cfTurnCache?.servers ?? [];
+    const body = await res.json() as { iceServers?: unknown };
+    const list = (Array.isArray(body.iceServers) ? body.iceServers : [body.iceServers])
+      .filter(Boolean) as { urls?: string | string[]; username?: string; credential?: string }[];
+    const servers: Record<string, string>[] = [];
+    for (const entry of list) {
+      const urls = Array.isArray(entry.urls) ? entry.urls : entry.urls ? [entry.urls] : [];
+      for (const url of urls) {
+        // STUN is already in the list; keep the relays (UDP, TCP, TLS/443).
+        if (!/^turns?:/.test(url)) continue;
+        servers.push({ urls: url, username: String(entry.username ?? ''), credential: String(entry.credential ?? '') });
+      }
+    }
+    if (servers.length) cfTurnCache = { at: Date.now(), servers };
+    return servers;
+  } catch (_) {
+    return cfTurnCache?.servers ?? [];
+  }
+}
+
+// Latency diagnostics for ping: is this isolate warm, and how slow is the
+// database round trip (cold start vs. distance to the cluster)?
+const ISOLATE_BOOT = Date.now();
+let servedRequests = 0;
+
+// ── Response finishing: "unchanged" answers + gzip ─────────────────────────
+// Egress is the scarce resource, so every successful JSON answer can be
+//  · fingerprinted: when the app sends {wantRev:true, ifRev} next to
+//    {action, payload} and the answer's fingerprint equals ifRev, only
+//    {"ok":true,"data":{"unchanged":true},"rev":…} goes back (a few bytes
+//    instead of a whole chat page, list or chapter);
+//  · gzip-compressed when the client accepts it (the app's HTTP client and
+//    browsers do; JSON and book text shrink 3–6×).
+async function fingerprint(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(text));
+  return btoa(String.fromCharCode(...new Uint8Array(digest).slice(0, 12)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function finishResponse(req: Request, res: Response, revWanted: boolean, ifRev: string): Promise<Response> {
+  try {
+    if (res.status !== 200) return res;
+    if (!(res.headers.get('Content-Type') ?? '').includes('application/json')) return res;
+    let text = await res.text();
+    if (revWanted && text.startsWith('{"ok":true') && text.endsWith('}')) {
+      const rev = await fingerprint(text);
+      text = ifRev && ifRev === rev
+        ? JSON.stringify({ ok: true, data: { unchanged: true }, rev })
+        : `${text.slice(0, -1)},"rev":"${rev}"}`;
+    }
+    const headers = new Headers(res.headers);
+    headers.set('Vary', 'Accept-Encoding');
+    const accepts = (req.headers.get('Accept-Encoding') ?? '').toLowerCase();
+    if (text.length >= 1400 && /\bgzip\b/.test(accepts)) {
+      const zipped = await new Response(
+        new Blob([text]).stream().pipeThrough(new CompressionStream('gzip')),
+      ).arrayBuffer();
+      headers.set('Content-Encoding', 'gzip');
+      headers.set('Content-Length', String(zipped.byteLength));
+      return new Response(zipped, { status: res.status, headers });
+    }
+    headers.delete('Content-Length');
+    return new Response(text, { status: res.status, headers });
+  } catch (_) {
+    return res; // never let finishing break an answer
+  }
+}
+
 Deno.serve(async (req: Request) => {
+  let revWanted = false;
+  let ifRev = '';
+  if (req.method === 'POST' && !req.headers.get('x-paystack-signature')) {
+    try {
+      const peek = JSON.parse(await req.clone().text());
+      revWanted = peek?.wantRev === true;
+      ifRev = typeof peek?.ifRev === 'string' ? peek.ifRev.slice(0, 64) : '';
+    } catch (_) { /* the handler reports bad JSON */ }
+  }
+  const res = await handleRequest(req);
+  if (req.method === 'OPTIONS' || req.headers.get('x-paystack-signature')) return res;
+  return finishResponse(req, res, revWanted, ifRev);
+});
+
+async function handleRequest(req: Request): Promise<Response> {
+  servedRequests++;
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
   if (req.method === 'GET') {
@@ -1395,13 +1577,28 @@ Deno.serve(async (req: Request) => {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.24',
+          server: '2.32.1',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
+          const t0 = Date.now();
           const d = await dbFor('books');
+          const t1 = Date.now();
           await d.command({ ping: 1 });
-          return ok({ ...base, db: d.databaseName, mongo: 'ready' });
+          const t2 = Date.now();
+          // Where the function ran vs. where the database lives (Atlas tags
+          // every replica-set member with its cloud region).
+          let dbRegion: unknown = null;
+          try {
+            const hello = await d.command({ hello: 1 }) as Record<string, unknown>;
+            const tags = (hello.tags ?? {}) as Record<string, unknown>;
+            dbRegion = tags.region ? `${tags.provider ?? ''}:${tags.region}` : null;
+          } catch (_) { /* optional */ }
+          return ok({ ...base, db: d.databaseName, mongo: 'ready',
+            timing: { connectMs: t1 - t0, mongoPingMs: t2 - t1,
+              isolateAgeMs: t0 - ISOLATE_BOOT, served: servedRequests,
+              fnRegion: Deno.env.get('SB_REGION') ?? Deno.env.get('DENO_REGION') ?? null,
+              dbRegion } });
         } catch (_) {
           return ok({ ...base, db: null, mongo: 'unreachable' });
         }
@@ -1578,6 +1775,7 @@ Deno.serve(async (req: Request) => {
         const chaptersCol = d.collection('chapters');
         let imported = 0;
         let skipped = 0;
+        const errors: string[] = [];
         for (const row of rows) {
           try {
             const title = String(row.title ?? '').trim().slice(0, 200);
@@ -1585,21 +1783,36 @@ Deno.serve(async (req: Request) => {
             if (!title) { skipped += 1; continue; }
             const slug = (title + '|' + author).toLowerCase()
               .replace(/[^a-z0-9|]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 90);
-            const id = 'bulk-' + slug;
+            // The importer may pin an existing library id (same book, better
+            // edition) so likes, views and reading progress carry over.
+            const id = typeof row.id === 'string' && /^bulk-[a-z0-9|-]{1,90}$/.test(row.id)
+              ? row.id
+              : 'bulk-' + slug;
             const chaptersRaw = Array.isArray(row.chapters) ? row.chapters : [];
             const chapters = chaptersRaw.slice(0, 300).map((c, i) => ({
               chapterNumber: Number(c.chapterNumber ?? i + 1) || i + 1,
               title: String(c.title ?? `Chapter ${i + 1}`).slice(0, 160),
               content: String(c.content ?? '').slice(0, 400_000),
-            })).filter((c) => c.content.length > 0);
+              // Library editions: a pinned pointer instead of the text.
+              source: cleanSource(c.source),
+            })).filter((c) => c.content.length > 0 || c.source !== null);
             if (chapters.length === 0) { skipped += 1; continue; }
+            const edition = row.edition === 'se' || row.edition === 'gt'
+              ? String(row.edition) : '';
             const crypto_ = globalThis.crypto;
             const digest = await crypto_.subtle.digest('SHA-256',
-              new TextEncoder().encode(chapters.map((c) => c.content).join('\u0000')));
+              new TextEncoder().encode(chapters.map((c) =>
+                c.content || `${c.title}\u0001${JSON.stringify(c.source)}`).join('\u0000')));
             const contentHash = [...new Uint8Array(digest)].slice(0, 16)
               .map((b) => b.toString(16).padStart(2, '0')).join('');
             const existing = await booksCol.findOne({ _id: id });
             if (existing && existing.contentHash === contentHash) {
+              skipped += 1;
+              continue;
+            }
+            // A Standard Ebooks edition is the better text: a Gutenberg
+            // pass never downgrades it.
+            if (existing && existing.edition === 'se' && edition === 'gt') {
               skipped += 1;
               continue;
             }
@@ -1614,7 +1827,10 @@ Deno.serve(async (req: Request) => {
                   title,
                   authorName: author,
                   authorId: existing?.authorId ?? null,
-                  description: String(row.description ?? '').slice(0, 1200),
+                  // No description sent = keep the current (often hand-written) one.
+                  description: row.description == null && existing
+                    ? String(existing.description ?? '')
+                    : String(row.description ?? '').slice(0, 1200),
                   genre: String(row.genre ?? 'Classics').slice(0, 40),
                   coverUrl: cover,
                   contentFormat: 'markdown',
@@ -1622,6 +1838,10 @@ Deno.serve(async (req: Request) => {
                   status: 'published',
                   contentHash,
                   chaptersCount: chapters.length,
+                  ...(edition ? { edition } : {}),
+                  ...(Array.isArray(row.subjects)
+                    ? { subjects: row.subjects.slice(0, 8).map((x: unknown) => String(x).slice(0, 80)) }
+                    : {}),
                   updatedAt: now,
                 },
                 $setOnInsert: {
@@ -1631,21 +1851,380 @@ Deno.serve(async (req: Request) => {
                   createdAt: now,
                 } } as never,
               { upsert: true });
+            // Old chapters go only after the book row was written, so a
+            // failed write (e.g. storage quota) never leaves a book empty.
             if (existing && existing.contentHash !== contentHash) {
               await chaptersCol.deleteMany({ bookId: id });
             }
-            for (const c of chapters) {
-              await chaptersCol.updateOne(
-                { bookId: id, chapterNumber: c.chapterNumber },
-                { $set: { title: c.title, content: c.content } },
-                { upsert: true });
-            }
+            // One round trip per book (a 300-chapter book used to be 300).
+            await chaptersCol.bulkWrite(chapters.map((c) => ({
+              replaceOne: {
+                filter: { bookId: id, chapterNumber: c.chapterNumber },
+                replacement: c.source
+                  ? { bookId: id, chapterNumber: c.chapterNumber, title: c.title, content: '', source: c.source }
+                  : { bookId: id, chapterNumber: c.chapterNumber, title: c.title, content: c.content },
+                upsert: true,
+              },
+            })) as never, { ordered: false });
             imported += 1;
-          } catch (_) {
+          } catch (e) {
             skipped += 1;
+            if (errors.length < 5) errors.push(String((e as Error)?.message ?? e).slice(0, 300));
           }
         }
-        return ok({ imported, skipped });
+        return ok({ imported, skipped, errors });
+      }
+
+      // ── library covers: one unique AI cover per library book ─────────────
+      // The cover job reads the index, paints a cover per book, hosts it
+      // on the media CDN and records it here. Author-owned books are
+      // never touched (authorId set = a member's own book and cover).
+      // Storage report: what fills the free 512 MB cluster.
+      case 'admin.dbStats': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const out: Record<string, unknown>[] = [];
+        for (const domain of Object.keys(DB_NAMES) as Domain[]) {
+          try {
+            const d = await dbFor(domain);
+            const cols = await d.listCollections({}, { nameOnly: true }).toArray();
+            for (const c of cols) {
+              try {
+                const [st] = await d.collection(c.name).aggregate([
+                  { $collStats: { storageStats: {} } },
+                ]).toArray();
+                const ss = (st?.storageStats ?? {}) as Record<string, number>;
+                out.push({ db: domain, collection: c.name, count: ss.count ?? 0,
+                  dataMB: +((ss.size ?? 0) / 1048576).toFixed(2),
+                  storageMB: +((ss.storageSize ?? 0) / 1048576).toFixed(2),
+                  indexMB: +((ss.totalIndexSize ?? 0) / 1048576).toFixed(2) });
+              } catch (e) {
+                out.push({ db: domain, collection: c.name, error: String((e as Error)?.message ?? e).slice(0, 120) });
+              }
+            }
+          } catch (e) {
+            out.push({ db: domain, error: String((e as Error)?.message ?? e).slice(0, 120) });
+          }
+        }
+        let chapters: Record<string, unknown> = {};
+        try {
+          const d = await dbFor('books');
+          const [agg] = await d.collection('chapters').aggregate([
+            { $group: {
+                _id: null,
+                total: { $sum: 1 },
+                inline: { $sum: { $cond: [{ $gt: [{ $strLenBytes: { $ifNull: ['$content', ''] } }, 0] }, 1, 0] } },
+                inlineBytes: { $sum: { $strLenBytes: { $ifNull: ['$content', ''] } } },
+                cdn: { $sum: { $cond: [{ $gt: ['$contentUrl', null] }, 1, 0] } },
+                pointers: { $sum: { $cond: [{ $gt: ['$source', null] }, 1, 0] } },
+              } },
+          ]).toArray();
+          const inlineBooks = await d.collection('chapters').distinct('bookId', { content: { $type: 'string', $ne: '' } });
+          chapters = { ...(agg ?? {}), inlineMB: +(((agg?.inlineBytes as number) ?? 0) / 1048576).toFixed(1),
+            inlineBookCount: inlineBooks.length,
+            inlineLibraryBooks: inlineBooks.filter((b) => String(b).startsWith('bulk-')).length };
+        } catch (e) {
+          chapters = { error: String((e as Error)?.message ?? e).slice(0, 200) };
+        }
+        return ok({ collections: out, chapters });
+      }
+
+      // ── book texts → R2: read-only scan of every chapter row ───────────
+      case 'admin.chapterScan': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const d = await dbFor('books');
+        const limit = Math.min(Math.max(Number(p.limit ?? 1000) || 1000, 1), 2000);
+        const after = typeof p.after === 'string' && /^[0-9a-f]{24}$/.test(p.after)
+          ? { _id: { $gt: new ObjectId(p.after) } } : {};
+        const rows = await d.collection('chapters').aggregate([
+          { $match: after },
+          { $sort: { _id: 1 } },
+          { $limit: limit },
+          { $project: {
+              bookId: 1, chapterNumber: 1, title: 1, contentUrl: 1, contentBytes: 1, source: 1,
+              bytes: { $strLenBytes: { $ifNull: ['$content', ''] } },
+            } },
+        ]).toArray();
+        return ok({
+          chapters: rows.map((r) => ({
+            id: String(r._id),
+            bookId: String(r.bookId ?? ''),
+            chapterNumber: Number(r.chapterNumber ?? 0),
+            title: String(r.title ?? ''),
+            inlineBytes: Number(r.bytes ?? 0),
+            contentUrl: typeof r.contentUrl === 'string' ? r.contentUrl : null,
+            source: r.source ?? null,
+          })),
+          next: rows.length === limit ? String(rows[rows.length - 1]._id) : null,
+        });
+      }
+
+      // Batch read of chapter texts by row id (for the R2 copy job).
+      case 'admin.dumpChapters': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const ids = (Array.isArray(p.ids) ? p.ids : []).slice(0, 200)
+          .filter((x: unknown) => typeof x === 'string' && /^[0-9a-f]{24}$/.test(x as string))
+          .map((x: string) => new ObjectId(x));
+        if (ids.length === 0) return fail('No chapter ids');
+        const d = await dbFor('books');
+        const rows = await d.collection('chapters').find({ _id: { $in: ids } },
+          { projection: { content: 1 } }).toArray();
+        const out: { id: string; content: string }[] = [];
+        let total = 0;
+        for (const r of rows) {
+          const content = String(r.content ?? '');
+          if (total + content.length > 8_000_000 && out.length) break;
+          total += content.length;
+          out.push({ id: String(r._id), content });
+        }
+        return ok({ chapters: out });
+      }
+
+      // Points library chapters at their verified R2 copy. 'reinsert' deletes
+      // first (allowed even when the cluster is over quota) and then writes
+      // the tiny pointer rows; 'replace' updates in place. Library books only
+      // (no member author) — members' manuscripts are never moved.
+      case 'admin.repointChapters': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const items = (Array.isArray(p.items) ? p.items : []).slice(0, 500);
+        if (items.length === 0) return fail('No chapters in the batch');
+        const mode = p.mode === 'reinsert' ? 'reinsert' : 'replace';
+        const d = await dbFor('books');
+        const bookIds = [...new Set(items.map((i: Record<string, unknown>) => String(i?.bookId ?? '')))];
+        const library = new Set((await d.collection('books').find(
+          { _id: { $in: bookIds as never[] }, authorId: null }, { projection: { _id: 1 } }).toArray())
+          .map((b) => String(b._id)));
+        const clean = [];
+        for (const i of items) {
+          const bookId = String(i?.bookId ?? '');
+          const chapterNumber = Number(i?.chapterNumber ?? 0);
+          const source = cleanSource({ kind: 'r2', key: i?.key });
+          if (!library.has(bookId) || !Number.isInteger(chapterNumber) || chapterNumber < 1 || !source) continue;
+          clean.push({ bookId, chapterNumber, source,
+            title: String(i?.title ?? `Chapter ${chapterNumber}`).slice(0, 160),
+            contentBytes: Math.max(0, Number(i?.bytes ?? 0) || 0) });
+        }
+        const col = d.collection('chapters');
+        const errors: string[] = [];
+        let deleted = 0, written = 0;
+        const failed: { bookId: string; chapterNumber: number }[] = [];
+        // Bulk operations: one round trip per step instead of one per row.
+        const failedIdx = (e: unknown): Set<number> | null => {
+          const we = (e as { writeErrors?: unknown })?.writeErrors;
+          const list = Array.isArray(we) ? we : we ? [we] : [];
+          if (!list.length) return null;
+          return new Set(list.map((w: { index?: number; err?: { index?: number } }) =>
+            Number(w?.index ?? w?.err?.index ?? -1)));
+        };
+        if (clean.length && mode === 'reinsert') {
+          const r = await col.deleteMany({ $or: clean.map((c) => ({ bookId: c.bookId, chapterNumber: c.chapterNumber })) });
+          deleted += r.deletedCount ?? 0;
+          const docs = clean.map((c) => ({ bookId: c.bookId, chapterNumber: c.chapterNumber, title: c.title,
+            content: '', source: c.source, contentBytes: c.contentBytes }));
+          try {
+            const ins = await col.insertMany(docs, { ordered: false });
+            written += ins.insertedCount ?? docs.length;
+          } catch (e) {
+            const bad = failedIdx(e);
+            errors.push(String((e as Error)?.message ?? e).slice(0, 200));
+            clean.forEach((c, i) => {
+              if (!bad || bad.has(i)) failed.push({ bookId: c.bookId, chapterNumber: c.chapterNumber });
+            });
+            written += clean.length - failed.length;
+          }
+        } else if (clean.length) {
+          try {
+            const r = await col.bulkWrite(clean.map((c) => ({ updateOne: {
+              filter: { bookId: c.bookId, chapterNumber: c.chapterNumber },
+              update: { $set: { title: c.title, content: '', source: c.source, contentBytes: c.contentBytes },
+                $unset: { contentUrl: '' } },
+              upsert: true } })), { ordered: false });
+            written += (r.modifiedCount ?? 0) + (r.upsertedCount ?? 0);
+          } catch (e) {
+            const bad = failedIdx(e);
+            errors.push(String((e as Error)?.message ?? e).slice(0, 200));
+            clean.forEach((c, i) => {
+              if (!bad || bad.has(i)) failed.push({ bookId: c.bookId, chapterNumber: c.chapterNumber });
+            });
+          }
+        }
+        return ok({ mode, accepted: clean.length, rejected: items.length - clean.length,
+          deleted, written, failed, errors });
+      }
+
+      // Releases the disk space the old inline book texts still occupy
+      // (MongoDB keeps freed space inside a collection). Step 'copy' writes
+      // every chapter row into chapters_rebuild and verifies the count;
+      // step 'swap' replaces chapters with the copy. Re-running either
+      // step is safe: an interrupted swap resumes from the full copy.
+      case 'admin.rebuildChapters': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        if (!(importToken.length > 0 && importToken === given)) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const d = await dbFor('books');
+        const step = String(p.step ?? '');
+        const offset = Math.max(0, Number(p.offset ?? 0) || 0);
+        const pageSize = Math.min(Math.max(Number(p.limit ?? 2000) || 2000, 100), 5000);
+        // Copies one page (sorted by _id, so pages are stable) and tolerates
+        // rows that are already there — every page can be re-run.
+        const copyPage = async (from: string, to: string) => {
+          const rows = await d.collection(from).find({}).sort({ _id: 1 })
+            .skip(offset).limit(pageSize).toArray();
+          let written = 0;
+          if (rows.length) {
+            try {
+              const r = await d.collection(to).insertMany(rows as never[], { ordered: false });
+              written = r.insertedCount ?? rows.length;
+            } catch (e) {
+              const errs = (e as { writeErrors?: { code?: number }[] }).writeErrors;
+              const list = Array.isArray(errs) ? errs : [];
+              if (!list.length || list.some((w) => w?.code !== 11000)) throw e;
+              written = rows.length - list.length;
+            }
+          }
+          return { read: rows.length, written, nextOffset: rows.length < pageSize ? null : offset + rows.length };
+        };
+        const counts = async () => ({
+          chapters: await d.collection('chapters').countDocuments({}),
+          copy: await d.collection('chapters_rebuild').countDocuments({}),
+        });
+        switch (step) {
+          case 'reset': // start a fresh copy
+            try { await d.collection('chapters_rebuild').drop(); } catch (_) { /* none */ }
+            return ok({ step, ...(await counts()) });
+          case 'copy': // chapters → chapters_rebuild, one page
+            return ok({ step, offset, ...(await copyPage('chapters', 'chapters_rebuild')) });
+          case 'swap': { // atomic replace when the copy is complete
+            const c = await counts();
+            if (c.copy === 0 || c.copy !== c.chapters) {
+              return fail(`Copy incomplete (${c.copy} of ${c.chapters}) — nothing replaced`, 409);
+            }
+            try {
+              await d.collection('chapters_rebuild').rename('chapters', { dropTarget: true });
+              return ok({ step, mode: 'rename', ...(await counts()) });
+            } catch (e) {
+              return ok({ step, mode: 'rename-unavailable', reason: String(e).slice(0, 160), ...c });
+            }
+          }
+          case 'drop-original': { // fallback path when rename is not allowed
+            const c = await counts();
+            if (c.copy === 0 || c.copy < c.chapters) {
+              return fail(`Copy incomplete (${c.copy} of ${c.chapters}) — original kept`, 409);
+            }
+            await d.collection('chapters').drop();
+            return ok({ step, ...(await counts()) });
+          }
+          case 'copy-back': // chapters_rebuild → chapters, one page
+            return ok({ step, offset, ...(await copyPage('chapters_rebuild', 'chapters')) });
+          case 'finish': {
+            await d.collection('chapters').createIndex({ bookId: 1, chapterNumber: 1 }, { unique: true });
+            const c = await counts();
+            let dropped = false;
+            if (c.copy > 0 && c.chapters >= c.copy) {
+              await d.collection('chapters_rebuild').drop();
+              dropped = true;
+            }
+            return ok({ step, ...c, copyDropped: dropped, complete: c.copy === 0 || dropped });
+          }
+        }
+        return fail('step must be reset, copy, swap, drop-original, copy-back or finish');
+      }
+
+      case 'admin.libraryIndex': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const d = await dbFor('books');
+        const limit = Math.min(Math.max(Number(p.limit ?? 500) || 500, 1), 1000);
+        // Library books carry string ids (bulk-…); members' books use ObjectIds.
+        const query: Record<string, unknown> = { authorId: null, _id: { $type: 'string' } };
+        if (typeof p.after === 'string' && p.after) query._id = { $type: 'string', $gt: p.after };
+        const rows = await d.collection('books').find(query as never).project({
+          _id: 1, title: 1, authorName: 1, genre: 1, description: 1,
+          coverUrl: 1, coverStyle: 1, coverHash: 1, edition: 1,
+          subjects: 1, chaptersCount: 1,
+        }).sort({ _id: 1 }).limit(limit).toArray();
+        return ok({
+          books: rows.map((b) => ({
+            id: String(b._id),
+            title: b.title ?? '',
+            authorName: b.authorName ?? '',
+            genre: b.genre ?? '',
+            description: String(b.description ?? '').slice(0, 600),
+            coverUrl: b.coverUrl ?? null,
+            coverStyle: b.coverStyle ?? null,
+            coverHash: b.coverHash ?? null,
+            edition: b.edition ?? null,
+            subjects: Array.isArray(b.subjects) ? b.subjects : [],
+            chaptersCount: b.chaptersCount ?? 0,
+          })),
+          next: rows.length === limit ? String(rows[rows.length - 1]._id) : null,
+        });
+      }
+
+      case 'admin.setCovers': {
+        const importToken = Deno.env.get('IMPORT_TOKEN') ?? '';
+        const given = String(p.importToken ?? '');
+        const tokenOk = importToken.length > 0 && importToken === given;
+        if (!tokenOk) {
+          const uid = await adminUserId(req);
+          if (!uid) return fail('Import unavailable', 403);
+        }
+        const rows = Array.isArray(p.covers) ? p.covers : [];
+        if (rows.length === 0) return fail('No covers in the batch');
+        if (rows.length > 100) return fail('Batch too large — send 100 or fewer');
+        const ops = [];
+        for (const row of rows) {
+          const id = String(row?.id ?? '');
+          const url = String(row?.coverUrl ?? '');
+          if (!id || id.length > 140) continue;
+          if (!/^https:\/\/res\.cloudinary\.com\/[\w-]+\/image\/upload\/[\w./%-]+$/.test(url)) continue;
+          ops.push({
+            updateOne: {
+              filter: { _id: id, authorId: null },
+              update: { $set: {
+                coverUrl: url.slice(0, 500),
+                coverStyle: String(row?.coverStyle ?? 'ai-v1').slice(0, 20),
+                coverHash: String(row?.coverHash ?? '').slice(0, 40),
+                coverUpdatedAt: new Date(),
+              } },
+            },
+          });
+        }
+        if (ops.length === 0) return ok({ updated: 0, skipped: rows.length });
+        const d = await dbFor('books');
+        const res = await d.collection('books').bulkWrite(ops as never, { ordered: false });
+        return ok({ updated: res.modifiedCount, matched: res.matchedCount, skipped: rows.length - ops.length });
       }
 
       // ── dictionary: Word Nest server edition (WordNet 3.1) ─────────────
@@ -1737,6 +2316,10 @@ Deno.serve(async (req: Request) => {
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
         ];
+        // Preferred relay: Cloudflare TURN (anycast, incl. TURN over TLS on
+        // 443, which gets through strict mobile/office networks).
+        const cfTurn = await cloudflareTurnServers();
+        if (cfTurn.length) return ok({ iceServers: [...stun, ...cfTurn], turn: true, relay: 'cloudflare' });
         const turnUrl = Deno.env.get('TURN_URL');
         const turnSecret = Deno.env.get('TURN_SECRET');
         if (!turnUrl || !turnSecret) return ok({ iceServers: stun, turn: false });
@@ -1763,31 +2346,27 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in to make changes.', 401);
         const table = String(p.table ?? '');
         const op = String(p.op ?? 'insert');
-        if (!WRITABLE_TABLES.has(table)) return fail('Table not writable.', 400);
+        if (!WRITABLE_COLUMNS[table]) return fail('Table not writable.', 400);
         const ownerCol = OWNER_COLUMN[table];
+        const values = writableValues(table, p.values);
+        if (!values) return fail('Nothing writable in that change.', 400);
         const db = serviceClient().from(table);
         if (op === 'insert') {
-          const values = { ...(p.values as Record<string, unknown> ?? {}) };
-          if (ownerCol) values[ownerCol] = uid;
-          const { data, error } = await db.insert(values).select().single();
-          if (error) return fail(error.message, 400);
-          return ok({ row: data });
-        }
-        if (op === 'update') {
-          const match = { ...(p.match as Record<string, unknown> ?? {}) };
-          if (ownerCol) match[ownerCol] = uid;
-          const { data, error } = await db.update(p.values ?? {}).match(match)
+          // Insert only ever creates the caller's OWN row.
+          const { data, error } = await db.upsert({ ...values, [ownerCol]: uid })
             .select().single();
           if (error) return fail(error.message, 400);
           return ok({ row: data });
         }
-        if (op === 'delete') {
-          const match = { ...(p.match as Record<string, unknown> ?? {}) };
-          if (ownerCol) match[ownerCol] = uid;
-          const { error } = await db.delete().match(match);
+        if (op === 'update') {
+          // The match is always pinned to the caller's own row — whatever
+          // else the client sent is ignored.
+          const { data, error } = await db.update(values).eq(ownerCol, uid)
+            .select().single();
           if (error) return fail(error.message, 400);
-          return ok({ deleted: true });
+          return ok({ row: data });
         }
+        // No deletes through the generic path — account.delete owns that.
         return fail('Unsupported op.', 400);
       }
 
@@ -1795,7 +2374,7 @@ Deno.serve(async (req: Request) => {
       case 'wallet.summary': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const col = dbFor('users').collection('gem_ledger');
+        const col = (await dbFor('users')).collection('gem_ledger');
         const ledger = await col.find({ userId: uid })
           .sort({ createdAt: -1 }).limit(50).toArray();
         const prof = await serviceClient().from('profiles')
@@ -1813,7 +2392,7 @@ Deno.serve(async (req: Request) => {
       case 'wallet.claim': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const col = dbFor('users').collection('gem_ledger');
+        const col = (await dbFor('users')).collection('gem_ledger');
         const day = todayUtc();
         const existing = await col.findOne({ userId: uid, reason: 'daily', day });
         if (existing) {
@@ -1831,7 +2410,7 @@ Deno.serve(async (req: Request) => {
       case 'wallet.history': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const col = dbFor('users').collection('gem_ledger');
+        const col = (await dbFor('users')).collection('gem_ledger');
         const rows = await col.find({ userId: uid })
           .sort({ createdAt: -1 }).limit(30).toArray();
         return ok({
@@ -2008,7 +2587,7 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in required', 401);
         const message = String(p.message ?? '').trim();
         if (!message) return fail('Say something to Jenny first.');
-        const col = dbFor('chats').collection('jenny_messages');
+        const col = (await dbFor('chats')).collection('jenny_messages');
         const recent = await col.find({ userId: uid })
           .sort({ createdAt: -1 }).limit(10).toArray();
         const history = recent.reverse().map((d: any) => ({
@@ -2077,22 +2656,8 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── books: draft + chapter append (editor flow, Mongo-first) ─────────
-      // ── gems: one honest ledger. Balance lives in profiles, history in Mongo.
-      async function grantGems(uid: string, delta: number, reason: string, day: string | null = null) {
-        const prof = await serviceClient().from('profiles')
-          .select('gems').eq('id', uid).single();
-        const current = prof.error ? 0 : Math.max(0, Number(prof.data?.gems ?? 0));
-        const next = Math.max(0, current + delta);
-        await serviceClient().from('profiles').update({ gems: next }).eq('id', uid);
-        await (await dbFor('users')).collection('gem_ledger').insertOne({
-          userId: uid, delta, reason, day,
-          createdAt: new Date(),
-        });
-        return next;
-      }
-
       // ── book identity: unique Book IDs, drafts, sequels, units ───────────
-      const UNIT_TYPES = ['chapter', 'part', 'act', 'episode', 'volume'];
+      // (grantGems + UNIT_TYPES live at module scope — see above the handler.)
 
       function cleanBookCode(raw: unknown): string | null {
         if (typeof raw !== 'string') return null;
@@ -2406,6 +2971,51 @@ Deno.serve(async (req: Request) => {
         return ok({ member: action === 'groups.join', count: await members.countDocuments({ groupId: id }) });
       }
 
+      // Owner (or the overall moderator) closes a group for good: the group,
+      // its members, forum, channels, events, departments, classes and the
+      // group chat rooms' membership. Chat messages already sent stay with
+      // the people who received them.
+      case 'groups.delete': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const kind = String(p.kind ?? 'clubs');
+        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return fail('Unknown group kind');
+        const id = String(p.groupId ?? '');
+        if (!id) return fail('A valid groupId is required');
+        const g = await (await dbFor('groups')).collection(kind)
+          .findOne({ _id: id } as never, { projection: { ownerId: 1, name: 1 } });
+        if (!g) return fail('Not found', 404);
+        const isAdmin = g.ownerId !== uid ? Boolean(await adminUserId(req)) : false;
+        if (g.ownerId !== uid && !isAdmin) return fail('Only the owner can delete this group', 403);
+        const gdb = await dbFor('groups');
+        const unitIds = (await gdb.collection('units').find({ groupId: id }, { projection: { _id: 1 } })
+          .toArray()).map((u) => String(u._id));
+        const eventIds = (await gdb.collection('events').find({ groupId: id }, { projection: { _id: 1 } })
+          .toArray()).map((e) => String(e._id));
+        const classIds = (await gdb.collection('school_classes').find({ schoolId: id }, { projection: { _id: 1 } })
+          .toArray()).map((c) => String(c._id));
+        await Promise.all([
+          gdb.collection(`${kind}_members`).deleteMany({ groupId: id }),
+          gdb.collection('announcements').deleteMany({ groupId: id }),
+          gdb.collection('channels').deleteMany({ groupId: id }),
+          gdb.collection('events').deleteMany({ groupId: id }),
+          eventIds.length ? gdb.collection('event_rsvps').deleteMany({ eventId: { $in: eventIds } }) : null,
+          gdb.collection('units').deleteMany({ groupId: id }),
+          unitIds.length ? gdb.collection('unit_members').deleteMany({ unitId: { $in: unitIds } }) : null,
+          gdb.collection('school_classes').deleteMany({ schoolId: id }),
+          classIds.length ? gdb.collection('school_class_members').deleteMany({ classId: { $in: classIds } }) : null,
+          gdb.collection('school_assignments').deleteMany({ schoolId: id }),
+          gdb.collection('school_exams').deleteMany({ schoolId: id }),
+        ]);
+        try {
+          await (await dbFor('chats')).collection('conversations')
+            .updateMany({ type: 'club', clubId: id, kind }, { $set: { archived: true, memberIds: [] } });
+        } catch { /* no rooms */ }
+        await gdb.collection(kind).deleteOne({ _id: id } as never);
+        if (isAdmin) await logAdmin(uid, 'deleteGroup', { kind, id, name: g.name ?? '' });
+        return ok({ deleted: true });
+      }
+
       case 'groups.create': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
@@ -2607,7 +3217,7 @@ Deno.serve(async (req: Request) => {
           for (const pr of profs.data ?? []) authors.set(String(pr.id), pr as Record<string, unknown>);
         }
         const ids = rows.map((r) => String(r._id));
-        const col = dbFor('social').collection('event_rsvps');
+        const col = (await dbFor('social')).collection('event_rsvps');
         const counts = ids.length
           ? await col.aggregate([
               { $match: { postId: { $in: ids } } },
@@ -2642,7 +3252,7 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in required', 401);
         const postId = String(p.postId ?? '');
         if (!postId) return fail('postId is required');
-        const col = dbFor('social').collection('event_rsvps');
+        const col = (await dbFor('social')).collection('event_rsvps');
         const existing = await col.findOne({ userId: uid, postId });
         if (existing) {
           await col.deleteOne({ _id: existing._id });
@@ -2657,7 +3267,7 @@ Deno.serve(async (req: Request) => {
       case 'streak.get': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const col = dbFor('social').collection('reading_logs');
+        const col = (await dbFor('social')).collection('reading_logs');
         const days = await col.distinct('day', { userId: uid });
         return ok({
           ...(computeStreaks(days.map(String))),
@@ -2670,7 +3280,7 @@ Deno.serve(async (req: Request) => {
         if (!uid) return fail('Sign in required', 401);
         const day = todayUtc();
         const minutes = Math.max(0, Math.min(600, Number(p.minutes ?? 0) || 0));
-        const col = dbFor('social').collection('reading_logs');
+        const col = (await dbFor('social')).collection('reading_logs');
         const existing = await col.findOne({ userId: uid, day });
         let created = false;
         if (!existing) {
@@ -2693,7 +3303,7 @@ Deno.serve(async (req: Request) => {
           const current = prof.error ? 0 : Number(prof.data?.gems ?? 0);
           await serviceClient().from('profiles')
             .update({ gems: current + gemsAwarded }).eq('id', uid);
-          await dbFor('users').collection('gem_ledger').insertOne({
+          await (await dbFor('users')).collection('gem_ledger').insertOne({
             userId: uid, delta: gemsAwarded, reason: 'reading_streak', day,
             createdAt: new Date(),
           });
@@ -2759,7 +3369,7 @@ Deno.serve(async (req: Request) => {
           const current = prof.error ? 0 : Number(prof.data?.gems ?? 0);
           await supa.from('profiles')
             .update({ gems: current + gemsAwarded }).eq('id', authorId);
-          await dbFor('users').collection('gem_ledger').insertOne({
+          await (await dbFor('users')).collection('gem_ledger').insertOne({
             userId: authorId, delta: gemsAwarded, reason: 'book_publish',
             day: todayUtc(), createdAt: new Date(),
           });
@@ -2834,10 +3444,20 @@ Deno.serve(async (req: Request) => {
         const chapter = await d.collection('chapters')
           .findOne({ bookId: p.bookId as string, chapterNumber });
         if (!chapter) return fail('Chapter not found', 404);
+        let content = String(chapter.content ?? '');
+        if (!content && isLibrarySource(chapter.source)) {
+          // Library classics are read through from their pinned public
+          // source (Standard Ebooks / GITenberg) — nothing is stored.
+          try {
+            content = await resolveSourceText(chapter.source);
+          } catch (_) {
+            return fail('This chapter is temporarily unavailable — please try again in a moment', 503);
+          }
+        }
         return ok({
           chapterNumber: chapter.chapterNumber,
           title: chapter.title,
-          content: chapter.content ?? '',
+          content,
           // Heavy full texts live on the media CDN (MongoDB free-tier
           // friendly). The reader fetches the URL directly when given.
           contentUrl: chapter.contentUrl ?? null,
@@ -3926,7 +4546,8 @@ Deno.serve(async (req: Request) => {
       case 'users.profile.get': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
-        const target = typeof p.userId === 'string' && isHexId(p.userId) ? p.userId : uid;
+        // User ids are Supabase UUIDs (hex-only always fell back to *you*).
+        const target = typeof p.userId === 'string' && (isUuid(p.userId) || isHexId(p.userId)) ? p.userId : uid;
         const row = await (await dbFor('users')).collection('user_prefs')
           .findOne({ userId: target });
         const isSelf = target === uid;
@@ -4079,7 +4700,9 @@ Deno.serve(async (req: Request) => {
         if (typeof p.content === 'string') set.content = p.content.slice(0, 500_000);
         const res = await d.collection('chapters').updateOne(
           { bookId, chapterNumber } as never,
-          { $set: set },
+          typeof p.content === 'string'
+            ? { $set: set, $unset: { source: '', contentUrl: '', contentBytes: '' } }
+            : { $set: set },
         );
         if (res.matchedCount === 0) return fail('Chapter not found', 404);
         return ok({ updated: true });
@@ -4094,11 +4717,21 @@ Deno.serve(async (req: Request) => {
           .sort({ chapterNumber: 1 })
           .limit(300)
           .toArray();
+        // Chapters carried over from a library classic (remix / sequel) only
+        // point at their text; resolve it so the editor shows real words.
+        const texts: string[] = new Array(rows.length).fill('');
+        let next = 0;
+        await Promise.all(Array.from({ length: Math.min(8, rows.length) }, async () => {
+          while (next < rows.length) {
+            const i = next++;
+            texts[i] = await pointedChapterText(rows[i]);
+          }
+        }));
         return ok({
-          chapters: rows.map((c) => ({
+          chapters: rows.map((c, i) => ({
             chapterNumber: c.chapterNumber,
             title: c.title ?? '',
-            content: c.content ?? '',
+            content: texts[i],
           })),
         });
       }
@@ -4162,6 +4795,10 @@ Deno.serve(async (req: Request) => {
             chapterNumber: c.chapterNumber,
             title: c.title ?? '',
             content: c.content ?? '',
+            // Library classics keep pointing at their stored text.
+            ...(isLibrarySource(c.source) ? { source: cleanSource(c.source) } : {}),
+            ...(typeof c.contentUrl === 'string' && c.contentUrl ? { contentUrl: c.contentUrl } : {}),
+            ...(c.contentBytes ? { contentBytes: c.contentBytes } : {}),
             createdAt: now,
           })));
         }
@@ -4575,9 +5212,9 @@ Deno.serve(async (req: Request) => {
           if (!isNaN(parsed.getTime())) dueAt = parsed;
         }
         let book: Record<string, unknown> | null = null;
-        if (typeof p.bookId === 'string' && isHexId(p.bookId)) {
+        if (typeof p.bookId === 'string' && isAnyId(p.bookId)) {
           const b = await (await dbFor('books')).collection('books')
-            .findOne({ _id: new ObjectId(p.bookId) },
+            .findOne({ _id: bookOid(p.bookId) },
               { projection: { title: 1, authorName: 1, coverUrl: 1 } });
           if (b) {
             book = {
@@ -4682,18 +5319,7 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── kind superpowers: POTM, vice mods, school lists, leaderboards ────
-      async function groupManager(
-        kind: string, groupId: string, uid: string,
-      ): Promise<Record<string, unknown> | null> {
-        if (!(GROUP_KINDS as readonly string[]).includes(kind)) return null;
-        const group = await (await dbFor('groups')).collection(kind)
-          .findOne({ _id: groupId } as never,
-            { projection: { ownerId: 1, viceModeratorId: 1, name: 1 } });
-        if (!group) return null;
-        const isManager =
-          group.ownerId === uid || group.viceModeratorId === uid;
-        return isManager ? group as Record<string, unknown> : null;
-      }
+      // groupManager(...) lives at module level (see isGroupManager).
 
       case 'clubs.potm.set': {
         const uid = await currentUserId(req);
@@ -4703,9 +5329,11 @@ Deno.serve(async (req: Request) => {
         const group = await groupManager(kind, groupId, uid);
         if (!group) return fail('Only the group owner can pick the read', 403);
         const bookId = String(p.bookId ?? '');
-        if (!isHexId(bookId)) return fail('A valid bookId is required');
+        // Book ids are ObjectId hex, UUIDs or imported slugs ('bulk-…') —
+        // hex-only here rejected nearly every book ("Could not add it").
+        if (!isAnyId(bookId)) return fail('A valid bookId is required');
         const book = await (await dbFor('books')).collection('books')
-          .findOne({ _id: new ObjectId(bookId) },
+          .findOne({ _id: bookOid(bookId) },
             { projection: { title: 1, authorName: 1, coverUrl: 1 } });
         if (!book) return fail('That book does not exist', 404);
         const potm = {
@@ -4781,9 +5409,11 @@ Deno.serve(async (req: Request) => {
         const group = await groupManager(kind, groupId, uid);
         if (!group) return fail('Only the school owner can curate the list', 403);
         const bookId = String(p.bookId ?? '');
-        if (!isHexId(bookId)) return fail('A valid bookId is required');
+        // Book ids are ObjectId hex, UUIDs or imported slugs ('bulk-…') —
+        // hex-only here rejected nearly every book ("Could not add it").
+        if (!isAnyId(bookId)) return fail('A valid bookId is required');
         const book = await (await dbFor('books')).collection('books')
-          .findOne({ _id: new ObjectId(bookId) },
+          .findOne({ _id: bookOid(bookId) },
             { projection: { title: 1, authorName: 1, coverUrl: 1 } });
         if (!book) return fail('That book does not exist', 404);
         const doc = await (await dbFor('groups')).collection(kind)
@@ -4851,6 +5481,10 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'groups.announcements.list': {
+        // Signed-out readers may browse; the viewer id only decides whether
+        // the manager controls show. (It was referenced but never defined,
+        // so every announcements list failed with "uid is not defined".)
+        const uid = await currentUserId(req);
         const groupId = typeof p.groupId === 'string' ? p.groupId : '';
         if (!groupId) return fail('A valid groupId is required');
         const rows = await (await dbFor('groups')).collection('announcements')
@@ -5647,7 +6281,8 @@ Deno.serve(async (req: Request) => {
         if (book.authorId !== uid) return fail('Only the author can edit chapters', 403);
         await d.collection('chapters').updateOne(
           { bookId, chapterNumber },
-          { $set: { title, content, updatedAt: new Date() }, $setOnInsert: { bookId, chapterNumber, createdAt: new Date() } },
+          { $set: { title, content, updatedAt: new Date() }, $setOnInsert: { bookId, chapterNumber, createdAt: new Date() },
+            $unset: { source: '', contentUrl: '', contentBytes: '' } },
           { upsert: true },
         );
         const total = await d.collection('chapters').countDocuments({ bookId });
@@ -5747,6 +6382,16 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── FCM device tokens ──────────────────────────────────────────────
+      // Is push wired on the server? (no secrets in the answer)
+      case 'push.status': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const configured = Boolean(Deno.env.get('FIREBASE_SERVICE_ACCOUNT'));
+        const auth = configured ? (await firebaseAccessToken()) !== null : false;
+        const devices = await (await dbFor('users')).collection('push_tokens').countDocuments({ userId: uid });
+        return ok({ configured, auth, project: firebaseProjectId() || null, devices });
+      }
+
       case 'push.register': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
@@ -5776,6 +6421,157 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── E2EE key directory (public keys only — privates never travel) ──
+      // ── chat text backup (sealed on the phone; we store ciphertext only) ──
+      // Text messages are backed up HERE, in MongoDB: the app compresses the
+      // reader's chat history (text only — photos, videos, voice notes and
+      // files go to the reader's own Google Drive, never to us), seals it
+      // with the reader's backup passphrase (PBKDF2 → AES-256-GCM) and
+      // uploads the envelope. We cannot read it. One document per reader,
+      // replaced on every backup.
+      // ── Chat file relay: documents, PDFs, videos and voice notes travel
+      // through a PRIVATE Cloudflare R2 folder and are deleted after 3 days
+      // (bucket lifecycle + the daily ops.mediaSweep). Readers keep them on
+      // their devices and in their own Google Drive. Cloudinary keeps images
+      // only. The message stores a signed download link that expires with
+      // the file — the bucket itself is never public.
+      case 'relay.sign': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const r = relayR2();
+        if (!r) return fail('File sharing is not configured on the server', 503);
+        const size = Math.floor(Number(p.size ?? 0));
+        if (!(size > 0)) return fail('The file is empty');
+        if (size > RELAY_MAX_BYTES) {
+          return fail(`Files up to ${Math.round(RELAY_MAX_BYTES / 1048576)} MB can be sent`, 413);
+        }
+        const day = new Date().toISOString().slice(0, 10);
+        try {
+          const q = (await dbFor('chats')).collection<{ _id: string; n: number; bytes: number; at: Date }>('relay_quota');
+          if (!relayQuotaIndexed) {
+            relayQuotaIndexed = true;
+            q.createIndex({ at: 1 }, { expireAfterSeconds: 3 * 86400 }).catch(() => { relayQuotaIndexed = false; });
+          }
+          const doc = await q.findOneAndUpdate(
+            { _id: `${uid}:${day}` },
+            { $inc: { n: 1, bytes: size }, $setOnInsert: { at: new Date() } },
+            { upsert: true, returnDocument: 'after' },
+          );
+          if (doc && (doc.n > RELAY_DAILY_FILES || doc.bytes > RELAY_DAILY_BYTES)) {
+            return fail('Daily file sharing limit reached — try again tomorrow.', 429);
+          }
+        } catch (_) { /* quota bookkeeping must never block sending */ }
+        const raw = String(p.name ?? 'file').split(/[\\/]/).pop() ?? 'file';
+        const dot = raw.lastIndexOf('.');
+        const ext = dot > 0 ? raw.slice(dot + 1).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) : '';
+        const stem = (dot > 0 ? raw.slice(0, dot) : raw).replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+/, '').slice(0, 60) || 'file';
+        const rand = crypto.randomUUID().replace(/-/g, '');
+        const key = `relay/${day}/${rand}/${stem}${ext ? '.' + ext : ''}`;
+        const url = r.base + key.split('/').map(encodeURIComponent).join('/');
+        const putUrl = await relayPresign(r.client, url, 'PUT', 15 * 60);
+        // Valid a little longer than the file lives (lifecycle runs daily).
+        const getUrl = await relayPresign(r.client, url, 'GET', (RELAY_DAYS + 1) * 86400);
+        return ok({
+          putUrl, getUrl, key, maxBytes: RELAY_MAX_BYTES,
+          expiresAt: new Date(Date.now() + RELAY_DAYS * 86400_000).toISOString(),
+        });
+      }
+
+      // Daily housekeeping (GitHub cron → service key, or an admin):
+      //  • Cloudinary: chat photos (and pre-2.38 chat files) older than 30
+      //    days — uses the server's CLOUDINARY_API_KEY/SECRET.
+      //  • R2 relay: files older than 3 days (backs up the lifecycle rule).
+      case 'ops.mediaSweep': {
+        const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+        const svc = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+        let allowed = svc.length > 20 && bearer.length === svc.length;
+        if (allowed) {
+          let diff = 0;
+          for (let i = 0; i < svc.length; i++) diff |= svc.charCodeAt(i) ^ bearer.charCodeAt(i);
+          allowed = diff === 0;
+        }
+        // Authoritative fallback: only a genuine service key may list users
+        // on the Auth admin endpoint (works with legacy and new API keys).
+        if (!allowed && bearer) allowed = await isServiceToken(bearer);
+        if (!allowed) allowed = !!(await adminUserId(req));
+        if (!allowed) return fail('Not allowed', 403);
+        const dryRun = p.dryRun === true;
+        const deadline = Date.now() + 110_000;
+        const relay = await sweepRelay(dryRun, deadline);
+        const cloudinary = await sweepCloudinary(dryRun, deadline);
+        return ok({ dryRun, relay, cloudinary, at: new Date().toISOString() });
+      }
+
+      case 'backup.status': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const row = await (await dbFor('chats')).collection('chat_backups')
+          .findOne({ _id: uid as unknown as ObjectId }, { projection: { blob: 0 } });
+        return ok(row
+          ? { exists: true, size: Number(row.size ?? 0), messages: Number(row.messages ?? 0),
+              updatedAt: row.updatedAt ?? null, appVersion: row.appVersion ?? null }
+          : { exists: false });
+      }
+
+      case 'backup.put': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const b64 = typeof p.blob === 'string' ? p.blob : '';
+        if (!b64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64.slice(0, 64))) return fail('Missing backup');
+        const size = Math.floor(b64.length * 3 / 4);
+        const MAX = 3 * 1024 * 1024; // text only — ~100k+ messages compressed
+        if (size > MAX) {
+          return fail('Your text backup is larger than 3 MB. Clear very old chats and try again.', 413);
+        }
+        const d = await dbFor('chats');
+        const col = d.collection('chat_backups');
+        const prev = await col.findOne({ _id: uid as unknown as ObjectId }, { projection: { updatedAt: 1, size: 1 } });
+        if (prev?.updatedAt && Date.now() - new Date(prev.updatedAt as Date).getTime() < 60_000) {
+          return ok({ saved: true, throttled: true, size: Number(prev.size ?? 0), updatedAt: prev.updatedAt });
+        }
+        // Keep the free database comfortably inside its quota: refuse to
+        // GROW backups once the chats database passes 350 MB.
+        try {
+          const st = await d.command({ dbStats: 1 });
+          const used = Number(st.dataSize ?? 0) + Number(st.indexSize ?? 0);
+          if (used > 350 * 1024 * 1024 && size > Number(prev?.size ?? 0)) {
+            return fail('Backups are paused while BookNest frees up space. Try again later.', 507);
+          }
+        } catch (_) { /* stats are advisory */ }
+        // The 4-byte magic "BNBK" must lead the envelope (base64 "Qk5CSw").
+        if (!b64.startsWith('Qk5CSw')) return fail('Not a BookNest backup');
+        const now = new Date();
+        await col.updateOne(
+          { _id: uid as unknown as ObjectId },
+          { $set: {
+              blob: Binary.createFromBase64(b64), size,
+              messages: Math.max(0, Math.floor(Number(p.messages ?? 0)) || 0),
+              appVersion: String(p.appVersion ?? '').slice(0, 24),
+              updatedAt: now,
+            } },
+          { upsert: true },
+        );
+        return ok({ saved: true, size, updatedAt: now });
+      }
+
+      case 'backup.get': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const row = await (await dbFor('chats')).collection('chat_backups')
+          .findOne({ _id: uid as unknown as ObjectId });
+        if (!row?.blob) return ok({ exists: false });
+        const blob = row.blob as Binary;
+        return ok({ exists: true, blob: blob.toString('base64'), size: Number(row.size ?? 0),
+          messages: Number(row.messages ?? 0), updatedAt: row.updatedAt ?? null });
+      }
+
+      case 'backup.delete': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        await (await dbFor('chats')).collection('chat_backups')
+          .deleteOne({ _id: uid as unknown as ObjectId });
+        return ok({ deleted: true });
+      }
+
       case 'keys.publish': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
@@ -5984,13 +6780,13 @@ Deno.serve(async (req: Request) => {
         const uid = await adminUserId(req);
         if (!uid) return fail('Only the overall moderator can delete books', 403);
         const id = String(p.bookId ?? '');
-        if (!isHexId(id)) return fail('A valid bookId is required');
+        if (!isAnyId(id)) return fail('A valid bookId is required');
         const booksDb = await dbFor('books');
         const book = await booksDb.collection('books')
-          .findOne({ _id: new ObjectId(id) });
+          .findOne({ _id: bookOid(id) });
         if (!book) return fail('Book not found', 404);
         await booksDb.collection('chapters').deleteMany({ bookId: id });
-        await booksDb.collection('books').deleteOne({ _id: new ObjectId(id) });
+        await booksDb.collection('books').deleteOne({ _id: bookOid(id) });
         await logAdmin(uid, 'deleteBook', { id, title: book.title ?? '' });
         return ok({ deleted: true });
       }
@@ -5999,10 +6795,10 @@ Deno.serve(async (req: Request) => {
         const uid = await adminUserId(req);
         if (!uid) return fail('Only the overall moderator can feature books', 403);
         const id = String(p.bookId ?? '');
-        if (!isHexId(id)) return fail('A valid bookId is required');
+        if (!isAnyId(id)) return fail('A valid bookId is required');
         const on = p.on !== false;
         await (await dbFor('books')).collection('books').updateOne(
-          { _id: new ObjectId(id) },
+          { _id: bookOid(id) },
           { $set: { featuredAt: on ? new Date() : null } },
         );
         await logAdmin(uid, on ? 'feature' : 'unfeature', { id });
@@ -6315,7 +7111,9 @@ Deno.serve(async (req: Request) => {
         await counts('review_comments', reviews.collection('comments').deleteMany({ userId: uid }));
         await counts('messages', chats.collection('messages').deleteMany({ senderId: uid }));
         await counts('conversations', chats.collection('conversations').deleteMany({ memberIds: uid }));
+        await counts('chat_backups', chats.collection('chat_backups').deleteMany({ _id: uid as unknown as ObjectId }));
         await counts('gem_ledger', users.collection('gem_ledger').deleteMany({ userId: uid }));
+        await counts('push_tokens', users.collection('push_tokens').deleteMany({ userId: uid }));
         await counts('blocks', moderation.collection('blocks').deleteMany({ $or: [{ userId: uid }, { blockedId: uid }] }));
         await counts('reports', moderation.collection('reports').deleteMany({ reporterId: uid }));
         // The profile row and the auth account itself.
@@ -6342,4 +7140,184 @@ Deno.serve(async (req: Request) => {
     console.error(`action ${action} failed:`, error);
     return fail(error instanceof Error ? error.message : 'Server error', 500);
   }
-});
+}
+
+
+// ── Chat file relay (Cloudflare R2, private) ─────────────────────────────────
+const RELAY_DAYS = 3;
+const RELAY_MAX_BYTES = 150 * 1024 * 1024;
+const RELAY_DAILY_FILES = 400;
+const RELAY_DAILY_BYTES = 3 * 1024 * 1024 * 1024;
+let relayQuotaIndexed = false;
+let relayAws: AwsClient | null = null;
+
+function relayR2(): { client: AwsClient; base: string; bucketUrl: string } | null {
+  const account = Deno.env.get('R2_ACCOUNT_ID') ?? '';
+  const bucket = Deno.env.get('R2_BUCKET') || Deno.env.get('R2_BUCKET_NAME') || '';
+  const accessKeyId = Deno.env.get('R2_ACCESS_KEY_ID') ?? '';
+  const secretAccessKey = Deno.env.get('R2_SECRET_ACCESS_KEY') ?? '';
+  if (!account || !bucket || !accessKeyId || !secretAccessKey) return null;
+  relayAws ??= new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' });
+  const bucketUrl = `https://${account}.r2.cloudflarestorage.com/${bucket}`;
+  return { client: relayAws, base: bucketUrl + '/', bucketUrl };
+}
+
+async function relayPresign(client: AwsClient, url: string, method: string, seconds: number): Promise<string> {
+  const u = new URL(url);
+  u.searchParams.set('X-Amz-Expires', String(Math.min(seconds, 604800)));
+  const signed = await client.sign(u.toString(), { method, aws: { signQuery: true } });
+  return signed.url;
+}
+
+function xmlUnescape(t: string): string {
+  return t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+}
+
+/** Makes sure the bucket deletes relay/ objects after RELAY_DAYS. */
+async function ensureRelayLifecycle(r: { client: AwsClient; bucketUrl: string }): Promise<string> {
+  const ruleId = `booknest-chat-relay-${RELAY_DAYS}d`;
+  const rule = `<Rule><ID>${ruleId}</ID><Filter><Prefix>relay/</Prefix></Filter><Status>Enabled</Status>` +
+    `<Expiration><Days>${RELAY_DAYS}</Days></Expiration></Rule>`;
+  const cur = await r.client.fetch(`${r.bucketUrl}?lifecycle`, { signal: AbortSignal.timeout(15_000) });
+  const curXml = cur.ok ? await cur.text() : '';
+  if (!cur.ok) await cur.body?.cancel();
+  if (curXml.includes(`<ID>${ruleId}</ID>`)) return 'already set';
+  let body: string;
+  if (curXml.includes('</LifecycleConfiguration>')) {
+    // Keep the owner's rules; replace an older relay rule if present.
+    const kept = curXml.replace(/<Rule>(?:(?!<\/Rule>)[\s\S])*?<ID>booknest-chat-relay-[^<]*<\/ID>[\s\S]*?<\/Rule>/g, '');
+    body = kept.replace('</LifecycleConfiguration>', rule + '</LifecycleConfiguration>');
+  } else {
+    body = `<?xml version="1.0" encoding="UTF-8"?><LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">${rule}</LifecycleConfiguration>`;
+  }
+  const md5 = createHash('md5').update(body).digest('base64');
+  const put = await r.client.fetch(`${r.bucketUrl}?lifecycle`, {
+    method: 'PUT', body,
+    headers: { 'Content-Type': 'application/xml', 'Content-MD5': md5 },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const txt = await put.text();
+  return put.ok ? 'set now' : `could not set (HTTP ${put.status}: ${txt.replace(/\s+/g, ' ').slice(0, 160)})`;
+}
+
+async function sweepRelay(dryRun: boolean, deadline: number) {
+  const r = relayR2();
+  if (!r) return { configured: false };
+  const out: Record<string, unknown> = { configured: true, scanned: 0, expired: 0, deleted: 0, bytesLive: 0 };
+  try { out.lifecycle = await ensureRelayLifecycle(r); } catch (e) { out.lifecycle = `error: ${String(e).slice(0, 120)}`; }
+  const cutoff = Date.now() - RELAY_DAYS * 86400_000;
+  const expired: string[] = [];
+  let token = '';
+  try {
+    do {
+      if (Date.now() > deadline) { out.partial = true; break; }
+      const u = new URL(r.bucketUrl);
+      u.searchParams.set('list-type', '2');
+      u.searchParams.set('prefix', 'relay/');
+      u.searchParams.set('max-keys', '1000');
+      if (token) u.searchParams.set('continuation-token', token);
+      const res = await r.client.fetch(u.toString(), { signal: AbortSignal.timeout(20_000) });
+      const xml = await res.text();
+      if (!res.ok) { out.error = `list HTTP ${res.status}`; break; }
+      for (const m of xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
+        const key = xmlUnescape(/<Key>([\s\S]*?)<\/Key>/.exec(m[1])?.[1] ?? '');
+        const at = Date.parse(/<LastModified>([^<]+)<\/LastModified>/.exec(m[1])?.[1] ?? '');
+        const size = Number(/<Size>(\d+)<\/Size>/.exec(m[1])?.[1] ?? 0);
+        (out.scanned as number)++;
+        if (!key.startsWith('relay/')) continue;
+        if ((Number.isFinite(at) && at < cutoff) || size > RELAY_MAX_BYTES) expired.push(key);
+        else out.bytesLive = (out.bytesLive as number) + size;
+      }
+      token = /<IsTruncated>true<\/IsTruncated>/.test(xml)
+        ? xmlUnescape(/<NextContinuationToken>([\s\S]*?)<\/NextContinuationToken>/.exec(xml)?.[1] ?? '')
+        : '';
+    } while (token);
+  } catch (e) { out.error = String(e).slice(0, 160); }
+  out.expired = expired.length;
+  if (!dryRun) {
+    for (let i = 0; i < expired.length; i += 8) {
+      if (Date.now() > deadline) { out.partial = true; break; }
+      const results = await Promise.all(expired.slice(i, i + 8).map(async (key) => {
+        try {
+          const res = await r.client.fetch(r.base + key.split('/').map(encodeURIComponent).join('/'),
+            { method: 'DELETE', signal: AbortSignal.timeout(15_000) });
+          await res.body?.cancel();
+          return res.ok || res.status === 404;
+        } catch (_) { return false; }
+      }));
+      out.deleted = (out.deleted as number) + results.filter(Boolean).length;
+    }
+  }
+  return out;
+}
+
+/** Chat photos (and pre-2.38 chat files) older than 30 days leave Cloudinary. */
+async function sweepCloudinary(dryRun: boolean, deadline: number) {
+  const key = Deno.env.get('CLOUDINARY_API_KEY') ?? '';
+  const secret = Deno.env.get('CLOUDINARY_API_SECRET') ?? '';
+  const cloud = Deno.env.get('CLOUDINARY_CLOUD_NAME') || 'deqdmwlt7';
+  if (!key || !secret) return { configured: false };
+  const auth = 'Basic ' + btoa(`${key}:${secret}`);
+  const cutoff = Date.now() - 30 * 86400_000;
+  // Chat folders ONLY — avatars, covers, profile covers and book images
+  // live in other folders and are never touched.
+  const targets: [string, string][] = [
+    ['image', 'booknest/chat/'],
+    ['image', 'booknest/files/'], ['video', 'booknest/files/'], ['raw', 'booknest/files/'],
+  ];
+  const folders: Record<string, Record<string, unknown>> = {};
+  for (const [type, prefix] of targets) {
+    const s: Record<string, unknown> = { scanned: 0, old: 0, deleted: 0 };
+    folders[`${type} ${prefix}`] = s;
+    const old: string[] = [];
+    let cursor = '';
+    try {
+      do {
+        if (Date.now() > deadline) { s.partial = true; break; }
+        const u = new URL(`https://api.cloudinary.com/v1_1/${cloud}/resources/${type}/upload`);
+        u.searchParams.set('prefix', prefix);
+        u.searchParams.set('max_results', '500');
+        if (cursor) u.searchParams.set('next_cursor', cursor);
+        const res = await fetch(u, { headers: { Authorization: auth }, signal: AbortSignal.timeout(20_000) });
+        if (!res.ok) { s.error = `list HTTP ${res.status}: ${(await res.text()).slice(0, 120)}`; break; }
+        const j = await res.json() as { resources?: { public_id: string; created_at: string }[]; next_cursor?: string };
+        for (const it of j.resources ?? []) {
+          s.scanned = (s.scanned as number) + 1;
+          if (Date.parse(it.created_at) < cutoff) old.push(it.public_id);
+        }
+        cursor = j.next_cursor ?? '';
+      } while (cursor);
+    } catch (e) { s.error = String(e).slice(0, 160); }
+    s.old = old.length;
+    if (dryRun) continue;
+    for (let i = 0; i < old.length; i += 100) {
+      if (Date.now() > deadline) { s.partial = true; break; }
+      const u = new URL(`https://api.cloudinary.com/v1_1/${cloud}/resources/${type}/upload`);
+      for (const id of old.slice(i, i + 100)) u.searchParams.append('public_ids[]', id);
+      try {
+        const res = await fetch(u, { method: 'DELETE', headers: { Authorization: auth }, signal: AbortSignal.timeout(30_000) });
+        if (!res.ok) { s.error = `delete HTTP ${res.status}`; await res.body?.cancel(); continue; }
+        const j = await res.json() as { deleted?: Record<string, string> };
+        s.deleted = (s.deleted as number) + Object.values(j.deleted ?? {}).filter((v) => v === 'deleted').length;
+      } catch (e) { s.error = String(e).slice(0, 160); }
+    }
+  }
+  return { configured: true, cloud, folders };
+}
+
+/** True when [token] is a Supabase service key (Auth admin accepts it). */
+async function isServiceToken(token: string): Promise<boolean> {
+  const base = Deno.env.get('SUPABASE_URL') ?? '';
+  if (!base || token.length < 20) return false;
+  try {
+    const r = await fetch(`${base}/auth/v1/admin/users?page=1&per_page=1`, {
+      headers: { apikey: token, Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8_000),
+    });
+    await r.body?.cancel();
+    return r.ok;
+  } catch {
+    return false;
+  }
+}

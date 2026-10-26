@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 
 import '../../../config/theme.dart';
-import '../../../services/cloudinary_service.dart';
+import '../../../services/chat_relay_service.dart';
 
 /// ─────────────────────────────────────────────────────────────────────────────
 /// Hold-to-record voice notes, BookNest-styled — record, preview, send.
@@ -141,16 +141,14 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
     try {
       final Uint8List bytes = await File(_path!).readAsBytes();
       final seconds = _elapsed.inSeconds.clamp(1, 120);
-      final url = await CloudinaryService.uploadRaw(
-        bytes: bytes,
-        filename: 'voice_$seconds.m4a',
-      );
+      final url = await ChatRelay.upload(bytes, 'voice_$seconds.m4a');
       if (!mounted) return;
       if (url == null) {
         setState(() {
           _stage = _VrStage.recorded;
-          _notice = 'The voice message could not be uploaded — '
-              'check your connection and try again.';
+          _notice = ChatRelay.lastError ??
+              'The voice message could not be uploaded — '
+                  'check your connection and try again.';
         });
         return;
       }

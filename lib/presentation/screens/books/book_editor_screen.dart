@@ -190,6 +190,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Remove this chapter?'),
         content: Text(
           '“${_chapters[index].title.text.trim().isNotEmpty ? _chapters[index].title.text.trim() : 'Chapter ${index + 1}'}” '
@@ -487,6 +488,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
         await showDialog<void>(
           context: context,
           builder: (dialogContext) => AlertDialog(
+            scrollable: true,
             title: const Text('Saved ✓'),
             content: Text(
                 '"$title" now carries every change — readers see it instantly.'),
@@ -536,6 +538,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
+          scrollable: true,
           title: Text(asDraft
               ? 'Draft saved 🌱'
               : (part > 1 ? 'Part $part is live 🎉' : 'Your book is live 🎉')),
@@ -583,6 +586,175 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    return LayoutBuilder(builder: (context, box) {
+      if (box.maxWidth >= 1100) return _buildDesk(theme, box.maxWidth);
+      return _buildTabbed(theme);
+    });
+  }
+
+  Widget _publishAction() => Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: TextButton.icon(
+          onPressed: _publishing ? null : _publish,
+          icon: _publishing
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: BookNestColors.cyan))
+              : const Icon(Icons.rocket_launch_rounded, size: 18),
+          label: Text(
+            _publishedBookId == null ? 'Publish' : 'Finish',
+            style: const TextStyle(
+                color: BookNestColors.cyan,
+                fontWeight: FontWeight.bold,
+                fontSize: 15),
+          ),
+        ),
+      );
+
+  /// PC: a writing desk. Chapters on the left, the page in the middle,
+  /// the book's details always open on the right. No tabs to flip.
+  Widget _buildDesk(ThemeData theme, double width) {
+    return Scaffold(
+      appBar: AppBar(
+        elevation: 1,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => context.pop(),
+        ),
+        title: const Text('Manuscript studio',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+        actions: [_publishAction()],
+      ),
+      body: SafeArea(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(width: 250, child: _chapterNavigator(theme)),
+            VerticalDivider(width: 1, color: theme.dividerColor),
+            Expanded(
+              child: ColoredBox(
+                color: theme.brightness == Brightness.dark
+                    ? const Color(0xFF050B18)
+                    : const Color(0xFFEFF3F8),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 880),
+                    child: Material(
+                      color: theme.colorScheme.surface,
+                      child: _buildWriteView(theme, chips: false),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            VerticalDivider(width: 1, color: theme.dividerColor),
+            SizedBox(
+              width: width >= 1400 ? 400 : 340,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                    child: Row(children: [
+                      const Icon(Icons.menu_book_rounded,
+                          size: 18, color: BookNestColors.cyan),
+                      const SizedBox(width: 8),
+                      Text('Book details',
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800)),
+                    ]),
+                  ),
+                  Expanded(child: _buildDetailsView(theme)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The PC chapter list: titles update live, add/remove in place.
+  Widget _chapterNavigator(ThemeData theme) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([for (final c in _chapters) c.title]),
+      builder: (context, _) => ListView(
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 24),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            child: Text('CHAPTERS',
+                style: TextStyle(
+                    fontSize: 11.5,
+                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w800,
+                    color: theme.hintColor)),
+          ),
+          for (var i = 0; i < _chapters.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Material(
+                color: i == _currentChapter
+                    ? BookNestColors.cyan.withOpacity(.16)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                child: ListTile(
+                  dense: true,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  leading: CircleAvatar(
+                    radius: 13,
+                    backgroundColor: i == _currentChapter
+                        ? BookNestColors.cyan
+                        : BookNestColors.cyan.withOpacity(.14),
+                    child: Text('${i + 1}',
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: i == _currentChapter
+                                ? BookNestColors.navyDeep
+                                : BookNestColors.cyan)),
+                  ),
+                  title: Text(
+                    _chapters[i].title.text.trim().isEmpty
+                        ? 'Chapter ${i + 1}'
+                        : _chapters[i].title.text.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontWeight: i == _currentChapter
+                            ? FontWeight.w800
+                            : FontWeight.w600),
+                  ),
+                  trailing: _chapters.length > 1
+                      ? IconButton(
+                          tooltip: 'Remove chapter',
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(Icons.close_rounded,
+                              size: 16, color: theme.hintColor),
+                          onPressed: () => _removeChapter(i),
+                        )
+                      : null,
+                  onTap: () => setState(() => _currentChapter = i),
+                ),
+              ),
+            ),
+          const SizedBox(height: 6),
+          OutlinedButton.icon(
+            onPressed: _addChapter,
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Add chapter'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Phones and small windows: Book details / Write tabs.
+  Widget _buildTabbed(ThemeData theme) {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -608,28 +780,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                   text: 'Write'),
             ],
           ),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: TextButton.icon(
-                onPressed: _publishing ? null : _publish,
-                icon: _publishing
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: BookNestColors.cyan))
-                    : const Icon(Icons.rocket_launch_rounded, size: 18),
-                label: Text(
-                  _publishedBookId == null ? 'Publish' : 'Finish',
-                  style: const TextStyle(
-                      color: BookNestColors.cyan,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15),
-                ),
-              ),
-            ),
-          ],
+          actions: [_publishAction()],
         ),
         body: SafeArea(
           child: TabBarView(
@@ -735,14 +886,14 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
 
   // ── Write view ───────────────────────────────────────────────────────
 
-  Widget _buildWriteView(ThemeData theme) {
+  Widget _buildWriteView(ThemeData theme, {bool chips = true}) {
     final words = chapter.wordCount;
     final minutes = (words / 220).ceil();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Chapter chips
-        SizedBox(
+        // Chapter chips (phones — PC has the chapter navigator)
+        if (chips) SizedBox(
           height: 46,
           child: ListView(
             scrollDirection: Axis.horizontal,
@@ -783,7 +934,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
             ],
           ),
         ),
-        Divider(color: theme.dividerColor, height: 1),
+        if (chips) Divider(color: theme.dividerColor, height: 1),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: TextField(
@@ -896,6 +1047,10 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
             config: quill.QuillEditorConfig(
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 40),
               placeholder: 'Once upon a time…',
+              // Pictures, dividers and formulas. Missing builders made
+              // Quill throw (grey screen) the moment a Divider was added.
+              embedBuilders: manuscriptEmbedBuilders,
+              unknownEmbedBuilder: manuscriptUnknownEmbedBuilder,
             ),
           ),
         ),

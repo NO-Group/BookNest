@@ -1,0 +1,64 @@
+name: Library Import (GitHub sources)
+
+# Fills the shelf from GitHub-hosted public-domain editions:
+#   • every Standard Ebooks title (github.com/standardebooks)
+#   • the most-read Project Gutenberg texts via GITenberg (github.com/GITenberg)
+# MongoDB keeps only chapter pointers pinned to commits; the edge function
+# reads the text from GitHub when a chapter opens. Nothing is uploaded and
+# no text goes to Cloudinary. Existing Gutenberg books move to pointers
+# too (same ids, so likes and progress stay). Life + 70 copyright filter.
+# Run settings live in tools/library/import.env (pushing it starts a run).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a106c8-booknest
+    paths:
+      - 'tools/library/import.env'
+      - '.github/workflows/library-github-import.yml'
+
+concurrency:
+  group: library-import-token # import + covers share the server import key
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — the owner's access token must exist
+        env:
+          HAS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+        run: |
+          [ "$HAS_TOKEN" = "true" ] || { echo "SUPABASE_ACCESS_TOKEN missing" >&2; exit 1; }
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.121.0
+
+      - name: Wait for the server, mint the import key
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: bash .github/scripts/library-token.sh
+
+      - name: Import
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT_DIR: tools/library/reports
+        run: |
+          set -a; . tools/library/import.env; set +a
+          python3 tools/library/import_github.py 2>&1 | tee import.log
+          cat tools/library/reports/import-report.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Publish the report to the branch
+        if: always()
+        run: |
+          mkdir -p tools/library/reports
+          tail -c 20000 import.log > tools/library/reports/import-log-tail.txt 2>/dev/null || true
+          bash .github/scripts/commit-library-output.sh "Library import report" tools/library/reports

@@ -393,6 +393,7 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 placeholder: 'Once upon a chapter…',
                 embedBuilders: manuscriptEmbedBuilders,
+                unknownEmbedBuilder: manuscriptUnknownEmbedBuilder,
               ),
             ),
           ),
@@ -424,6 +425,7 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
                           padding:
                               const EdgeInsets.fromLTRB(20, 8, 20, 24),
                           embedBuilders: manuscriptEmbedBuilders,
+                          unknownEmbedBuilder: manuscriptUnknownEmbedBuilder,
                         ),
                       ),
                     ),

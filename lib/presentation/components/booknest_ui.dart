@@ -274,17 +274,35 @@ class SectionHeader extends StatelessWidget {
           child: Text(title,
               style: Theme.of(context)
                   .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800)),
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800, fontSize: 19, letterSpacing: -.4)),
         ),
         if (actionLabel != null)
-          GestureDetector(
+          InkWell(
             onTap: onAction,
-            child: Text(actionLabel!,
-                style: const TextStyle(
-                    color: BookNestColors.cyan,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13)),
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: BookNestColors.cyan.withValues(alpha: .1),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(actionLabel!,
+                    style: TextStyle(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? BookNestColors.cyan
+                            : const Color(0xFF007C90),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5)),
+                const SizedBox(width: 2),
+                Icon(Icons.chevron_right_rounded,
+                    size: 16,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? BookNestColors.cyan
+                        : const Color(0xFF007C90)),
+              ]),
+            ),
           ),
       ],
     );
@@ -460,7 +478,7 @@ class GradientButton extends StatelessWidget {
       height: 52,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(26),
           gradient: const LinearGradient(
             colors: [BookNestColors.cyanSoft, BookNestColors.cyan],
             begin: Alignment.centerLeft,
@@ -479,8 +497,7 @@ class GradientButton extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.transparent,
             shadowColor: Colors.transparent,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
+            shape: const StadiumBorder(),
           ),
           icon: busy
               ? const SizedBox(

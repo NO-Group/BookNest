@@ -71,6 +71,7 @@ class _GroupChannelsSectionState extends State<GroupChannelsSection> {
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('New channel',
@@ -105,7 +106,7 @@ class _GroupChannelsSectionState extends State<GroupChannelsSection> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? 'Channel "$name" created.'
-            : 'Could not create the channel — try again.')));
+            : BackendApi.instance.errorOr('Could not create the channel — try again.'))));
     if (res != null) _load();
   }
 
@@ -113,6 +114,7 @@ class _GroupChannelsSectionState extends State<GroupChannelsSection> {
     final sure = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Remove channel?',
             style: TextStyle(fontWeight: FontWeight.w800)),
@@ -424,7 +426,7 @@ class _GroupEventsSectionState extends State<GroupEventsSection> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? 'Event scheduled ✓'
-            : 'Could not schedule the event — try again.')));
+            : BackendApi.instance.errorOr('Could not schedule the event — try again.'))));
     if (res != null) _load();
   }
 
@@ -469,6 +471,7 @@ class _GroupEventsSectionState extends State<GroupEventsSection> {
     final sure = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Remove event?',
             style: TextStyle(fontWeight: FontWeight.w800)),
@@ -694,6 +697,7 @@ class GroupRulesSection extends StatelessWidget {
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Group rules',
             style: TextStyle(fontWeight: FontWeight.w800)),
@@ -733,7 +737,7 @@ class GroupRulesSection extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? 'Rules saved ✓'
-            : 'Could not save the rules — try again.')));
+            : BackendApi.instance.errorOr('Could not save the rules — try again.'))));
     if (res != null) state.reload();
   }
 

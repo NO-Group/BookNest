@@ -49,9 +49,11 @@ class PrivacyScreen extends StatelessWidget {
                   'reviewed by humans.'),
           _Card(theme: theme, icon: Icons.cleaning_services_outlined, title: 'Deleting things',
               body:
-                  'You can delete your own reviews and comments anytime. Account '
-                  'deletion arrives with the community update — until then, '
-                  'contact the team and it will be handled manually.'),
+                  'You can delete your own books, reviews and comments anytime. '
+                  'Settings → Delete my account removes your account and '
+                  'everything you created — books, posts, reviews, messages and '
+                  'your profile. Payment receipts are kept only as the law '
+                  'requires for financial records.'),
         ],
       ),
     );

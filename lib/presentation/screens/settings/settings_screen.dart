@@ -127,6 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Change password'),
         content: TextField(
           controller: controller,
@@ -399,7 +400,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 value: 'classic',
                 title: 'Classic',
-                subtitle: 'The centered reader card — calm and familiar',
+                subtitle: 'Deep navy cover band — calm and familiar',
                 icon: Icons.person_outline_rounded,
                 selected: layout == 'classic',
               ),
@@ -407,7 +408,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 value: 'studio',
                 title: 'Studio',
-                subtitle: 'Hero band, overlapping avatar — bold and unique',
+                subtitle: 'Brighter cyan-lit cover band — bold and unique',
                 icon: Icons.auto_awesome_rounded,
                 selected: layout == 'studio',
               ),
@@ -453,9 +454,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 24),
 
-          const _SectionLabel('CONNECTION'),
-          const SizedBox(height: 10),
-          _SettingsGroup(children: [
+          if (LinkService.instance.supported) const _SectionLabel('CONNECTION'),
+          if (LinkService.instance.supported) const SizedBox(height: 10),
+          if (LinkService.instance.supported) _SettingsGroup(children: [
             SwitchListTile(
               secondary: const Icon(Icons.link_rounded,
                   size: 21, color: BookNestColors.cyan),
@@ -845,6 +846,7 @@ class _SignOutButton extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Sign out?'),
         content: const Text('You can sign back in anytime.'),
         actions: [
@@ -858,6 +860,8 @@ class _SignOutButton extends StatelessWidget {
       ),
     );
     if (confirmed != true || !context.mounted) return;
+    // This phone stops receiving the account's pushes (needs the session).
+    await PushService.instance.tearDown();
     await SupabaseService().auth.signOut();
     if (!context.mounted) return;
     context.go('/login');
@@ -905,6 +909,7 @@ class _DeleteAccountButtonState extends State<_DeleteAccountButton> {
     final first = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Delete your account?'),
         content: const Text(
             'This permanently removes your profile, books, drafts, posts, '
@@ -928,6 +933,7 @@ class _DeleteAccountButtonState extends State<_DeleteAccountButton> {
     final typed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Type DELETE to confirm'),
         content: TextField(
           controller: controller,

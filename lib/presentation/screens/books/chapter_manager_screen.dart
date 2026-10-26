@@ -32,6 +32,7 @@ class _ChapterManagerScreenState extends ConsumerState<ChapterManagerScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Delete chapter?'),
         content: Text(
             'Chapter $number (${chapter['title'] ?? ''}) will be removed for '

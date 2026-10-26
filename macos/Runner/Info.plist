@@ -28,5 +28,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Take photos for chats, your profile and your cover photo, and join video calls.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record voice notes, join calls and dictate text.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Dictation turns your speech into text while you write.</string>
 </dict>
 </plist>

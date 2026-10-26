@@ -27,11 +27,14 @@ import '../screens/chat/photo_edit_screen.dart';
 import '../screens/chat/video_preview_screen.dart';
 import '../../services/backend_api.dart';
 import '../../services/cloudinary_service.dart';
+import '../../services/media_backup_service.dart';
+import '../../services/chat_relay_service.dart';
 import '../../services/supabase_service.dart';
 import 'booknest_ui.dart';
 import 'booknest_emojis.dart';
 import 'booknest_keyboard.dart';
 import 'watermark_background.dart';
+import 'adaptive.dart';
 
 /// Shared chat kit — one messaging language across 1:1 and club chats.
 /// Original BookNest styling: navy/cyan glass bubbles on the watermark
@@ -302,6 +305,22 @@ class _ChatBubbleState extends State<ChatBubble>
       _deletedForEveryone ? 'deleted' : (widget.message['type']?.toString() ?? 'text');
   String get _text => widget.message['text']?.toString() ?? '';
   String get _mediaUrl => widget.message['mediaUrl']?.toString() ?? '';
+  String get _fileName {
+    final n = widget.message['fileName']?.toString() ?? '';
+    return n.isNotEmpty ? n : _text;
+  }
+
+  /// A "file" that is really a video, song or picture plays/shows right in
+  /// the bubble instead of appearing as a file name: 'video', 'audio',
+  /// 'image' or '' for real documents.
+  String get _fileMediaKind {
+    if (_type != 'file' || !_mediaUrl.startsWith('http')) return '';
+    final item = MediaItem(url: _mediaUrl, name: _fileName);
+    if (item.isVideo) return 'video';
+    if (item.isAudio) return 'audio';
+    if (item.isImage) return 'image';
+    return '';
+  }
   bool get _isMine => widget.mine;
 
   /// The blue ticks. True only when someone OTHER than the sender has
@@ -361,9 +380,11 @@ class _ChatBubbleState extends State<ChatBubble>
     final canAct = !_pending && !_failed && !_deletedForEveryone;
     HapticFeedback.mediumImpact();
     showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -586,6 +607,19 @@ class _ChatBubbleState extends State<ChatBubble>
         _mediaUrl.startsWith('http') &&
         !_deletedForEveryone) {
       content = _ImageContent(url: _mediaUrl, onTap: widget.onOpenImage);
+    } else if (_fileMediaKind.isNotEmpty && !_deletedForEveryone) {
+      final kind = _fileMediaKind;
+      content = kind == 'video'
+          ? _VideoContent(url: _mediaUrl, dark: dark, onOpen: widget.onOpenFile)
+          : kind == 'audio'
+              ? _VoiceContent(
+                  url: _mediaUrl,
+                  durationLabel: '',
+                  dark: dark,
+                  mine: mine,
+                  title: _fileName,
+                )
+              : _ImageContent(url: _mediaUrl, onTap: widget.onOpenFile);
     } else if (_type == 'file' &&
         _mediaUrl.startsWith('http') &&
         !_deletedForEveryone) {
@@ -628,9 +662,12 @@ class _ChatBubbleState extends State<ChatBubble>
         left: mine ? 48 : 0,
         right: mine ? 0 : 48,
       ),
-      padding: (_type == 'book_share' || _type == 'file')
+      padding: (_type == 'book_share' || (_type == 'file' && _fileMediaKind.isEmpty))
           ? const EdgeInsets.all(10)
-          : (_type == 'image' || _type == 'video'
+          : (_type == 'image' ||
+                  _type == 'video' ||
+                  _fileMediaKind == 'video' ||
+                  _fileMediaKind == 'image'
               ? const EdgeInsets.all(4)
               : const EdgeInsets.fromLTRB(13, 8, 13, 6)),
       constraints:
@@ -1074,10 +1111,27 @@ class _VideoContentState extends State<_VideoContent> {
       _loading = true;
       _failed = false;
     });
-    final controller =
-        VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    // Already on this device (sent from here, or downloaded): no data spent,
+    // and it still plays after the 3-day relay copy is gone.
+    final cached = File(mediaCachePath(widget.url));
+    final local = cached.existsSync() && cached.lengthSync() > 0;
+    var controller = local
+        ? VideoPlayerController.file(cached)
+        : VideoPlayerController.networkUrl(Uri.parse(widget.url));
     try {
-      await controller.initialize();
+      try {
+        await controller.initialize();
+      } catch (_) {
+        // Older than 30 days → no longer on BookNest: play the copy from
+        // the reader's own Google Drive backup.
+        try {
+          await controller.dispose();
+        } catch (_) {}
+        final file = await MediaBackupService.instance.recover(widget.url);
+        if (file == null) rethrow;
+        controller = VideoPlayerController.file(file);
+        await controller.initialize();
+      }
       if (!mounted) {
         try {
           await controller.dispose();
@@ -1148,7 +1202,15 @@ class _VideoContentState extends State<_VideoContent> {
               alignment: Alignment.center,
               children: [
                 if (_ready) VideoPlayer(c!),
-                if (!_ready)
+                if (!_ready && CloudinaryService.videoThumb(widget.url).isEmpty)
+                  Positioned.fill(
+                    child: Container(
+                      color: BookNestColors.navyDeep,
+                      child: const Icon(Icons.movie_rounded,
+                          color: Colors.white24, size: 40),
+                    ),
+                  ),
+                if (!_ready && CloudinaryService.videoThumb(widget.url).isNotEmpty)
                   Positioned.fill(
                     child: CachedNetworkImage(
                       imageUrl: CloudinaryService.videoThumb(widget.url),
@@ -1455,9 +1517,9 @@ class _ImageContent extends StatelessWidget {
             maxWidth: MediaQuery.sizeOf(context).width * .72,
             maxHeight: 320,
           ),
-          // CDN-sized + disk-cached: repeat views paint instantly and a
-          // chat photo never downloads heavier than it is shown.
-          child: CachedNetworkImage(
+          // Saved in the BookNest media folder → shown from the phone (no
+          // data, works forever). Otherwise CDN-sized + disk-cached.
+          child: _localPhoto(url) ?? CachedNetworkImage(
             imageUrl: CloudinaryService.transformUrl(url, width: 720),
             fit: BoxFit.cover,
             memCacheWidth: 720,
@@ -1471,18 +1533,86 @@ class _ImageContent extends StatelessWidget {
                     color: BookNestColors.cyan, strokeWidth: 2),
               ),
             ),
-            errorWidget: (_, __, ___) => Container(
-              width: 220,
-              height: 120,
-              color: Colors.white.withOpacity(.05),
-              child: const Icon(Icons.broken_image_outlined,
-                  color: BookNestColors.cyan),
-            ),
+            errorWidget: (_, __, ___) => _RecoveredImage(url: url),
           ),
         ),
       ),
     );
   }
+}
+
+/// The saved copy of a chat photo, painted from the BookNest media folder,
+/// or null when this device does not have it yet.
+Widget? _localPhoto(String url) {
+  try {
+    final file = File(mediaCachePath(url));
+    if (!file.existsSync() || file.lengthSync() == 0) return null;
+    return Image.file(
+      file,
+      fit: BoxFit.cover,
+      cacheWidth: 720,
+      gaplessPlayback: true,
+      errorBuilder: (_, __, ___) => CachedNetworkImage(
+        imageUrl: CloudinaryService.transformUrl(url, width: 720),
+        fit: BoxFit.cover,
+        memCacheWidth: 720,
+        errorWidget: (_, __, ___) => _RecoveredImage(url: url),
+      ),
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+/// A chat photo that is no longer on BookNest (older than 30 days): shown
+/// from the reader's own Google Drive backup when it is there.
+class _RecoveredImage extends StatefulWidget {
+  final String url;
+  const _RecoveredImage({required this.url});
+
+  @override
+  State<_RecoveredImage> createState() => _RecoveredImageState();
+}
+
+class _RecoveredImageState extends State<_RecoveredImage> {
+  late final Future<File?> _file =
+      MediaBackupService.instance.recover(widget.url);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<File?>(
+      future: _file,
+      builder: (context, snap) {
+        final file = snap.data;
+        if (file != null) {
+          return Image.file(file,
+              fit: BoxFit.cover,
+              cacheWidth: 720,
+              errorBuilder: (_, __, ___) => _broken());
+        }
+        if (snap.connectionState != ConnectionState.done) {
+          return Container(
+            width: 220,
+            height: 160,
+            color: Colors.white.withOpacity(.05),
+            child: const Center(
+              child: CircularProgressIndicator(
+                  color: BookNestColors.cyan, strokeWidth: 2),
+            ),
+          );
+        }
+        return _broken();
+      },
+    );
+  }
+
+  Widget _broken() => Container(
+        width: 220,
+        height: 120,
+        color: Colors.white.withOpacity(.05),
+        child: const Icon(Icons.broken_image_outlined,
+            color: BookNestColors.cyan),
+      );
 }
 
 /// An attachment chip for any file type — tap to open or download.
@@ -1494,12 +1624,16 @@ class _VoiceContent extends StatefulWidget {
     required this.durationLabel,
     required this.dark,
     required this.mine,
+    this.title,
   });
 
   final String url;
   final String durationLabel;
   final bool dark;
   final bool mine;
+
+  /// Shown above the waveform for audio files (songs, recordings).
+  final String? title;
 
   @override
   State<_VoiceContent> createState() => _VoiceContentState();
@@ -1578,13 +1712,27 @@ class _VoiceContentState extends State<_VoiceContent> {
     });
     try {
       if (!_ready) {
-        await _player.play(UrlSource(widget.url));
+        final cached = File(mediaCachePath(widget.url));
+        await _player.play(cached.existsSync() && cached.lengthSync() > 0
+            ? DeviceFileSource(cached.path)
+            : UrlSource(widget.url));
         await _player.setPlaybackRate(_speeds[_speedIndex]);
       } else {
         await _player.resume();
         await _player.setPlaybackRate(_speeds[_speedIndex]);
       }
     } catch (_) {
+      // Older than 30 days → from the reader's Google Drive backup.
+      final file = _ready
+          ? null
+          : await MediaBackupService.instance.recover(widget.url);
+      if (file != null) {
+        try {
+          await _player.play(DeviceFileSource(file.path));
+          await _player.setPlaybackRate(_speeds[_speedIndex]);
+          return;
+        } catch (_) {}
+      }
       if (mounted) {
         setState(() {
           _loading = false;
@@ -1619,13 +1767,30 @@ class _VoiceContentState extends State<_VoiceContent> {
     final progress =
         total > Duration.zero ? played / total.inMilliseconds : 0.0;
     final onMySide = widget.mine;
+    // Received bubbles are white in light mode — draw in navy there.
+    final fg = onMySide || widget.dark ? Colors.white : BookNestColors.navyDeep;
     final tint = onMySide ? Colors.white : BookNestColors.cyan;
+    final title = widget.title?.trim() ?? '';
     return Container(
       width: 248,
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (title.isNotEmpty) ...[
+            Row(children: [
+              Icon(Icons.audiotrack_rounded, size: 14, color: tint),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
+              ),
+            ]),
+            const SizedBox(height: 6),
+          ],
           Row(children: [
             GestureDetector(
               onTap: _loading ? null : _toggle,
@@ -1638,60 +1803,64 @@ class _VoiceContentState extends State<_VoiceContent> {
                   border: Border.all(color: tint.withOpacity(.5)),
                 ),
                 child: _loading
-                    ? const Padding(
-                        padding: EdgeInsets.all(10),
+                    ? Padding(
+                        padding: const EdgeInsets.all(10),
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white70),
+                            strokeWidth: 2, color: fg.withOpacity(.7)),
                       )
                     : Icon(
                         _playing
                             ? Icons.pause_rounded
                             : Icons.play_arrow_rounded,
                         size: 22,
-                        color: Colors.white,
+                        color: fg,
                       ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: (details) async {
-                  if (total <= Duration.zero) return;
-                  final box = context.findRenderObject() as RenderBox;
-                  final ratio =
-                      (details.localPosition.dx / box.size.width)
-                          .clamp(0.0, 1.0);
-                  try {
-                    await _player
-                        .seek(Duration(milliseconds: (ratio * total.inMilliseconds).round()));
-                    setState(() =>
-                        _position = Duration(milliseconds: (ratio * total.inMilliseconds).round()));
-                  } catch (_) {}
-                },
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Waveform: fixed bars, filled by progress.
-                    SizedBox(
-                      height: 26,
-                      child: CustomPaint(
-                        size: const Size(double.infinity, 26),
-                        painter: _VoiceWavePainter(
-                          progress: progress,
-                          played: Colors.white,
-                          rest: Colors.white.withOpacity(.38),
+              child: LayoutBuilder(
+                builder: (context, box) => GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (details) async {
+                    // Not loaded yet: a tap on the wave starts playing.
+                    if (!_ready) {
+                      if (!_loading && !_playing) await _toggle();
+                      return;
+                    }
+                    if (total <= Duration.zero || box.maxWidth <= 0) return;
+                    final ratio =
+                        (details.localPosition.dx / box.maxWidth).clamp(0.0, 1.0);
+                    final to = Duration(
+                        milliseconds: (ratio * total.inMilliseconds).round());
+                    try {
+                      await _player.seek(to);
+                      if (mounted) setState(() => _position = to);
+                    } catch (_) {}
+                  },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Waveform: fixed bars, filled by progress.
+                      SizedBox(
+                        height: 26,
+                        child: CustomPaint(
+                          size: const Size(double.infinity, 26),
+                          painter: _VoiceWavePainter(
+                            progress: progress,
+                            played: onMySide ? Colors.white : BookNestColors.cyan,
+                            rest: fg.withOpacity(.32),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${_clock(_playing || _position > Duration.zero ? _position : Duration.zero)}'
-                      ' · ${_clock(total)}',
-                      style: TextStyle(
-                          fontSize: 10.5, color: Colors.white.withOpacity(.75)),
-                    ),
-                  ],
+                      const SizedBox(height: 3),
+                      Text(
+                        '${_clock(_playing || _position > Duration.zero ? _position : Duration.zero)}'
+                        ' · ${total > Duration.zero ? _clock(total) : '--:--'}',
+                        style: TextStyle(fontSize: 10.5, color: fg.withOpacity(.75)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1703,14 +1872,14 @@ class _VoiceContentState extends State<_VoiceContent> {
                     const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  color: Colors.white.withOpacity(.14),
+                  color: fg.withOpacity(.12),
                 ),
                 child: Text(
                   '${_speeds[_speedIndex].toStringAsFixed(_speeds[_speedIndex] == 2.0 ? 0 : 1)}×',
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
-                      color: Colors.white),
+                      color: fg),
                 ),
               ),
             ),
@@ -1718,8 +1887,7 @@ class _VoiceContentState extends State<_VoiceContent> {
           if (_error != null) ...[
             const SizedBox(height: 4),
             Text(_error!,
-                style: TextStyle(
-                    fontSize: 10.5, color: Colors.white.withOpacity(.7))),
+                style: TextStyle(fontSize: 10.5, color: fg.withOpacity(.7))),
           ],
         ],
       ),
@@ -2013,10 +2181,12 @@ Future<void> showMessageTranslation(
     return;
   }
   showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
     context: context,
     showDragHandle: true,
     builder: (sheetContext) {
-      return SafeArea(
+      return SheetBody(
         child: FutureBuilder<Map<String, dynamic>?>(
           future: BackendApi.instance.translateText(text, target),
           builder: (context, snap) {
@@ -2380,11 +2550,13 @@ void showMessageInfo(
     }
   }
   showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
     context: context,
     showDragHandle: true,
     builder: (sheetContext) {
       String labelOf(String uid) => nameOf?.call(uid) ?? 'Reader';
-      return SafeArea(
+      return SheetBody(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
           child: Column(
@@ -2784,9 +2956,11 @@ class _ChatComposerState extends State<ChatComposer> {
 
   void _openAttachSheet() {
     showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -3046,10 +3220,10 @@ class ChatAvatar extends StatelessWidget {
   }
 }
 
-/// Uploads any chat attachment (documents, audio, PDFs…) and returns the
-/// hosted URL, or null when the upload could not complete.
+/// Uploads any chat attachment (documents, audio, PDFs, videos) through the
+/// private 3-day R2 relay and returns its link, or null on failure.
 Future<String?> uploadChatFile(String filename, Uint8List bytes) {
-  return CloudinaryService.uploadRaw(bytes: bytes, filename: filename);
+  return ChatRelay.upload(bytes, filename);
 }
 
 /// Uploads chat photos to Cloudinary under the chat folder and returns the

@@ -140,6 +140,7 @@ class _ReportsTabState extends State<_ReportsTab>
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(title),
         content: Text(body),
         actions: [
@@ -225,6 +226,7 @@ class _ReportsTabState extends State<_ReportsTab>
     return showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(title),
         content: TextField(
           controller: controller,
@@ -536,6 +538,7 @@ class _ReadersTabState extends State<_ReadersTab>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(banned
             ? 'Lift the suspension?'
             : 'Suspend @${person['username'] ?? 'reader'}?'),
@@ -580,6 +583,7 @@ class _ReadersTabState extends State<_ReadersTab>
     final delta = await showDialog<int>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text('Gems for @${person['username'] ?? 'reader'}'),
         content: TextField(
           controller: controller,
@@ -993,6 +997,7 @@ class _GenresTabState extends State<_GenresTab>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Remove genre?'),
         content: Text(
             '"$name" disappears from the pickers and shelves. Books already '

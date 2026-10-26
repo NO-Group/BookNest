@@ -137,9 +137,9 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
     if (!mounted) return;
     setState(() => _deciding.remove(bookId));
     if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content:
-              Text('Could not reach the moderation service — try again.')));
+              Text(BackendApi.instance.errorOr('Could not reach the moderation service — try again.'))));
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -362,7 +362,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
     setState(() => _potmBusy = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not set the club read — try again.'
+            ? BackendApi.instance.errorOr('Could not set the club read — try again.')
             : '"${book['title']}" is this month\'s read. 📖')));
     if (res != null) _load();
   }
@@ -377,8 +377,8 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
     if (!mounted) return;
     setState(() => _potmBusy = false);
     if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not clear it — try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(BackendApi.instance.errorOr('Could not clear it — try again.'))));
       return;
     }
     _load();
@@ -429,9 +429,8 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
               : RefreshIndicator(
                   color: BookNestColors.cyan,
                   onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-                    children: [
+                  child: LayoutBuilder(builder: (context, box) {
+                    final activity = <Widget>[
                       _AnnouncementsSection(
                         announcements: _announcements,
                         isOwner: _isOwner,
@@ -471,6 +470,8 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                           reload: _load,
                         ),
                       ),
+                    ];
+                    final identity = <Widget>[
                       // ── glass header ──
                       GlassPanel(
                         radius: 24,
@@ -674,6 +675,8 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                         const SizedBox(height: 20),
                       ],
 
+                    ];
+                    final shelf = <Widget>[
                       // ── club shelf ──
                       const SectionHeader(title: 'Club shelf'),
                       const SizedBox(height: 10),
@@ -717,8 +720,40 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                                 ),
                               ),
                             )),
-                    ],
-                  ),
+                    ];
+                    // PC: the club itself (header, club read, moderation)
+                    // on the left; conversation and shelf on the right.
+                    if (box.maxWidth >= 1000) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: box.maxWidth >= 1300 ? 420 : 380,
+                            child: ListView(
+                              padding:
+                                  const EdgeInsets.fromLTRB(24, 16, 12, 40),
+                              children: identity,
+                            ),
+                          ),
+                          Expanded(
+                            child: ListView(
+                              padding:
+                                  const EdgeInsets.fromLTRB(12, 16, 28, 40),
+                              children: [
+                                ...activity,
+                                const SizedBox(height: 20),
+                                ...shelf,
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+                      children: [...activity, ...identity, ...shelf],
+                    );
+                  }),
                 ),
     );
   }

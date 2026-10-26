@@ -7,8 +7,10 @@ import '../../../services/notification_service.dart';
 import '../../components/booknest_ui.dart';
 
 /// One friendly place where BookNest asks for everything it needs:
-/// notifications (daily word + streak reminders) and photo access
-/// (book covers & avatars). Shown once, always reachable from Settings.
+/// notifications (daily word + streak reminders). Photos need no
+/// permission — Android's system photo picker hands over only the picture
+/// the reader chooses (Google Play's photo policy). Shown once, always
+/// reachable from Settings.
 class PermissionsScreen extends StatefulWidget {
   const PermissionsScreen({super.key});
 
@@ -18,7 +20,6 @@ class PermissionsScreen extends StatefulWidget {
 
 class _PermissionsScreenState extends State<PermissionsScreen> {
   bool? _notifications;
-  bool? _photos;
 
   @override
   void initState() {
@@ -29,28 +30,14 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
   Future<void> _refresh() async {
     final n = await NotificationService.instance.dailyWordEnabled() ||
         await Permission.notification.isGranted;
-    final photos = await Permission.photos.isGranted ||
-        await Permission.storage.isGranted;
     if (mounted) {
-      setState(() {
-        _notifications = n;
-        _photos = photos;
-      });
+      setState(() => _notifications = n);
     }
   }
 
   Future<void> _askNotifications() async {
     await NotificationService.instance.init();
     await Permission.notification.request();
-    await _refresh();
-  }
-
-  Future<void> _askPhotos() async {
-    // Android 13+ uses the photo permission; older versions use storage.
-    final photos = await Permission.photos.request();
-    if (photos.isDenied || photos.isPermanentlyDenied) {
-      await Permission.storage.request();
-    }
     await _refresh();
   }
 
@@ -85,16 +72,26 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
             state: _notifications,
             onRequest: _askNotifications,
           ),
-          _PermissionCard(
-            icon: Icons.photo_library_rounded,
-            title: 'Photos',
-            subtitle:
-                'So you can set a profile picture and add cover art to the '
-                'books you publish.',
-            state: _photos,
-            onRequest: _askPhotos,
+          GlassPanel(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.photo_library_rounded,
+                    size: 24, color: BookNestColors.cyan),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Photos need no permission: when you add a profile '
+                    'picture or cover art, you choose the picture in the '
+                    "system photo picker and BookNest only sees that one.",
+                    style: TextStyle(
+                        color: theme.hintColor, fontSize: 12.5, height: 1.35),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 20),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: BookNestColors.cyan,

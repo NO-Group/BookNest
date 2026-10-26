@@ -1,0 +1,60 @@
+# Daily chat media housekeeping, done BY THE SERVER (ops.mediaSweep) with
+# its own Supabase secrets (CLOUDINARY_API_KEY/SECRET, R2_*):
+#   • chat photos on Cloudinary older than 30 days are deleted;
+#   • chat files / voice notes / videos on the private R2 relay older than
+#     3 days are deleted (plus the bucket's 3-day lifecycle rule).
+# Only the Supabase access token is needed here (to read the service key).
+name: Chat media sweep (photos 30 days, files 3 days)
+
+on:
+  schedule:
+    - cron: '17 3 * * *' # daily 03:17 UTC (runs from the default branch)
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a106c8-booknest
+    paths:
+      - 'tools/ops/chat_media_sweep.py'
+      - '.github/workflows/chat-media-sweep.yml'
+      - 'ops/sweep.trigger'
+
+permissions:
+  contents: write # commits ops/chat-media-sweep.md (counts only)
+
+concurrency:
+  group: chat-media-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Service key (masked, never stored)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          KEY="$(curl -s --max-time 30 "https://api.supabase.com/v1/projects/ekgbbbbjwgfixqarlnil/api-keys?reveal=true" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            | python3 -c 'import json,sys; print(next((k.get("api_key","") for k in json.load(sys.stdin) if k.get("name")=="service_role"),""))')"
+          [ -n "$KEY" ] || { echo "could not read the service key" >&2; exit 1; }
+          echo "::add-mask::$KEY"
+          echo "SERVICE_KEY=$KEY" >> "$GITHUB_ENV"
+      - name: Sweep (on the server)
+        env:
+          FN_URL: https://ekgbbbbjwgfixqarlnil.supabase.co/functions/v1/booknest-api
+          ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrZ2JiYmJqd2dmaXhxYXJsbmlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3MDAzODEsImV4cCI6MjEwMzI3NjM4MX0.DTTcX2DOxME72qF0fJzcAPJAWPd64LmhYKtT2SOlRy0
+          DRY_RUN: ${{ github.event_name == 'push' && '1' || '' }}
+        run: python3 tools/ops/chat_media_sweep.py
+      - name: Commit report
+        if: always()
+        run: |
+          set +e
+          git config user.name "booknest-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add ops/chat-media-sweep.md
+          git diff --cached --quiet && exit 0
+          git commit -m "Chat media sweep report [skip ci]"
+          for i in 1 2 3; do git pull --rebase -q && git push -q && break; sleep 5; done
+          exit 0

@@ -1,5 +1,453 @@
 # Changelog
 
+## 2.39.1+73 — 2026-10-23 · PC: studio desk, group pages
+
+- **Manuscript studio on PC:** a three-pane writing desk. Chapters are on
+  the left (titles update as you type; add or remove in place), the page is
+  in the middle, and Book details stay open on the right. No flipping
+  between tabs. Phones keep the Book details / Write tabs.
+- **Clubs, communities, organizations and schools on PC:** two columns.
+  The group itself (header, Join / Group chat, members, club read,
+  moderation) is on the left; announcements, channels, events, reading
+  list, classes and the shelf are on the right. Each column scrolls on
+  its own.
+
+## 2.39.0+72 — 2026-10-23 · PC layout, profile redesign, groups and UI fixes
+
+Server 2.32.1.
+
+- **PC and tablet layout of their own.** It no longer stretches the phone
+  layout.
+  - PC gets a permanent sidebar: logo, Write a book, Feed, Discover, Books,
+    Messages and Profile, then Library, Notifications, Search, Wallet &
+    store and Settings, with your account at the bottom. Tablets and small
+    windows get a slim icon rail. Phones keep the floating bottom bar.
+  - Messages: two panes, with the chat list on the left and the open chat
+    on the right.
+  - Feed: posts in a centred column, plus a side panel with one-click
+    create, new books and shortcuts.
+  - Books: a grid of cards that now show the real cover art. Phones get it
+    too; before, every book showed the same placeholder icon.
+  - Discover: 2–3 columns.
+  - Book page: two columns, with the book and actions on the left and
+    About, reviews and recommendations on the right.
+  - Settings, notifications, wallet, events, dictionary and other list
+    pages: a centred, readable column.
+- **Profile redesign, same colours.**
+  - Your profile: full-width cover, ringed avatar, a Gems · Mode · Cloud
+    strip, and the Author/Reader card. Actions are a tile grid in sections
+    (Writing, Your BookNest, Account). On PC, a sticky profile card sits
+    beside the grid.
+  - Public profile ("second version"): it no longer overflows on phones.
+    The banner, name, stats and buttons scroll away, the Works/About tabs
+    stay pinned, and the banner collapses into a toolbar with the name. On
+    PC: profile card on the left, works grid on the right. On phones, the
+    call buttons are in the ⋮ menu.
+- **Groups.**
+  - Adding a book to a reading list works: the book picker searches the
+    server, and book ids are accepted in every format.
+  - Owners can delete a group (⋮ → Delete group), along with its channels,
+    events, classes and announcements. The group chat is archived.
+  - Schools: creating classes and scheduling exams returned an error
+    (`groupManager is not defined`). Fixed.
+  - Error messages now show the server's reason instead of a generic
+    "failed".
+  - The smoke test now checks every group feature for all four kinds.
+- **Manuscript studio:** the divider (and any unknown block) no longer turns
+  the editor into a grey screen.
+- **Pop-ups fit every screen:** dialogs are 280–560 px wide and scroll, and
+  sheets are at most 640 px wide and respect the keyboard and safe area.
+- **Show-password eye** on sign-in and sign-up. Enter signs in.
+- **Splash:** BookNest navy (#071A3D) with the logo on a white tile,
+  instead of black, on Android and PC.
+- **Chat header (Android):** the actions are in a ⋮ menu.
+- **Announcement and incoming-call pop-ups never appeared.** The app's
+  navigator key was never connected to the router. Fixed.
+
+## 2.38.3+71 — 2026-10-23 · BookNest icon on PC
+
+- **The PC apps showed the Flutter logo.** Windows (app, taskbar, title bar,
+  installer, Start menu), macOS (Dock, Finder) and Linux (window, taskbar)
+  now use the BookNest logo. It's the same transparent logo as on Android,
+  with a thin white edge so the navy stays visible on dark taskbars.
+  - Windows `.ico`: 16–256 px.
+  - macOS icon set: 16–1024 px, on Apple's icon grid.
+  - Linux: `data/app_icon.png`, now set as the window icon (before, there
+    was none).
+- The macOS bundle id is now `com.n-o-group.booknest`, the same as iPhone
+  (`com.nogroup.booknest` is not used as an app id anymore).
+
+## 2.38.2+70 — 2026-10-23 · BookNest media folder on the device
+
+- **All chat media saves to the phone by default and is never deleted by
+  BookNest.** BookNest has its own folder, WhatsApp-style:
+  - Android: `Android/media/com.n_o_group.booknest/BookNest/Media/` with
+    BookNest Images, Video, Voice Notes, Audio and Documents. No permission
+    needed, file managers can see it, and photos and videos show in the
+    Gallery.
+  - iPhone: Files → On My iPhone → BookNest.
+  - PC: `Documents/BookNest/Media`.
+- Before this, downloaded media lived in the system **temp** folder, which
+  the OS may wipe at any time. Existing copies move into the new folder
+  automatically.
+- What gets saved:
+  - received photos, voice notes, files and videos, when the chat opens and
+    while the app is open (the inbox watcher picks up new media in chats you
+    haven't opened);
+  - your own sent media (the original).
+  Server cleanup (photos 30 days, files 3 days) never touches the phone copy.
+- Photo bubbles, voice notes and videos play from the saved copy, so they
+  use no data and keep working after the server copy is gone.
+- Settings → Chat backup → **Media on this device**: folder, space used, and
+  switches for automatic saving, videos, and showing in the Gallery.
+- Clearer message when an unsaved file has expired on the server.
+
+## 2.38.1+69 — 2026-10-23 · Chat files off Cloudinary, Drive backup on PC
+
+- **Chat files no longer go to Cloudinary.** Documents, PDFs, voice notes
+  and videos travel through a **private Cloudflare R2 relay** and are
+  **deleted after 3 days**: a bucket lifecycle rule plus a daily server
+  sweep. Messages carry signed links that expire with the file. Receivers'
+  apps download voice notes and documents up to 40 MB, and videos up to
+  25 MB, when the chat opens. Then the files live on the device and in the
+  reader's own Google Drive backup. Limit: 150 MB per file. Cloudinary now
+  holds images only, and chat photos are kept 30 days.
+- **The daily sweep runs on the server** with the Supabase secrets
+  `CLOUDINARY_API_KEY`/`CLOUDINARY_API_SECRET`, which were there all along.
+  No GitHub Cloudinary secrets are needed.
+- **Google Drive media backup on PC** (Windows, macOS, Linux): Google
+  sign-in opens in the browser, and the token is kept in the OS keychain.
+  Needs a Desktop OAuth client (secrets `GOOGLE_DESKTOP_CLIENT_ID` /
+  `GOOGLE_DESKTOP_CLIENT_SECRET`).
+- Players use the copy already on the device first (no data spent, and it
+  works after the relay copy is gone). Chat videos outside Cloudinary show
+  a placeholder instead of being downloaded whole as a "poster".
+- **macOS app fix:** the release build was sandboxed with no network access.
+  Network, camera, microphone and file-picker entitlements were added, plus
+  usage texts.
+- Smoke test: chat files are checked end to end through the R2 relay.
+- Server 2.31.0: `relay.sign`, `ops.mediaSweep`.
+- `ops/google-setup.md` check: Firebase has **no Android OAuth client**
+  yet, so Google sign-in (Drive backup) can't work on Android until the
+  SHA-1 is added.
+
+## 2.38.0+68 — 2026-10-23 · Chat backup split (text → BookNest, media → Google), iPhone app, profile cover photos
+
+- **Chat backup, split by storage cost.**
+  - **Text messages are backed up to BookNest (MongoDB),** compressed and
+    sealed on the phone with the reader's passphrase. BookNest stores
+    ciphertext only and can't read it. They restore on any phone or PC.
+    Typically 50–300 KB per reader, with a 3 MB cap.
+  - **Photos, videos, voice notes and files are backed up to the reader's
+    own Google Drive** (a hidden BookNest folder). Only new files upload,
+    and there is an "Include videos" switch.
+  - **Chat media is removed from Cloudinary after 30 days** by a daily
+    sweep of the chat folders only. Older media comes back silently from
+    the reader's Drive copy.
+  - A restored phone can still open end-to-end sealed messages from the
+    last 30 days.
+- **iPhone/iPad app** (bundle id `com.n-o-group.booknest`, iOS 14+).
+  - Every build publishes `BookNest.ipa` on a GitHub Release (`ios-…`), for
+    download from the website.
+  - Permission texts are in place for camera, microphone, photos and
+    dictation, plus background audio and `booknest://` links.
+  - A signed .ipa is also published when Apple signing secrets exist.
+  - Guide: `docs/IOS.md`.
+- **Profile cover photos.** Readers can add, change, view or remove a wide
+  cover photo above their profile photo, and it shows on their public
+  profile. Stored as a Cloudinary link in `profiles.cover_url` (new
+  migration).
+- Server 2.30.0: `backup.status/put/get/delete`, and account deletion removes
+  the sealed backup.
+- Privacy policy updated for the text backup, the 30-day chat media
+  retention, Drive media backup and iPhone.
+
+## 2.37.2+67 — 2026-10-23 · Accurate message for blocked PDFs
+
+- The document viewer's "file host refused" message no longer promises that
+  re-sending helps; it says PDF/ZIP delivery has to be allowed (see 2.37.1).
+
+## 2.37.1+66 — 2026-10-23 · Chat documents stored raw; PDF delivery check
+
+- Documents sent in chat (PDF, ZIP, Office, SVG — everything that isn't a
+  photo, video or audio) are stored on Cloudinary as raw files, served
+  byte-for-byte to the BookNest document viewer.
+- The production smoke test found that this Cloudinary account refuses to
+  deliver **PDF** files (HTTP 401), whichever way they're uploaded — a
+  free-account security default. DOCX and other documents download fine.
+  **Owner action:** Cloudinary → Settings → Security → tick
+  **Allow delivery of PDF and ZIP files** → Save. That also fixes PDFs sent
+  earlier. Until then the viewer explains the 401 instead of failing silently.
+
+## 2.37.0+65 — 2026-10-23 · Chat media plays and opens inside BookNest
+
+- **Videos play in a real video player.** Videos sent as files (mp4, mov,
+  mkv, webm, 3gp, avi …) now show as a playable video in the chat bubble
+  instead of a file name, and they start playing right away (streamed, no
+  waiting for a full download). The PC app plays them too (Windows Media
+  Foundation).
+- **Voice notes and audio files play inline.** Tap play in the bubble: no
+  full-screen page. Tap anywhere on the waveform to jump; speed 1×/1.5×/2×.
+  Songs and recordings sent as files get the same player, with their title.
+- **Every document opens in the BookNest document viewer.** It works on
+  any extension: PDF; Word (.docx, .doc 97-2003, .odt, .rtf); Excel (.xlsx,
+  .xls, .ods, .csv/.tsv shown as a real grid with column letters and long-press
+  to copy a cell); PowerPoint (.pptx, .ppt, .odp, slide by slide); e-books
+  (.epub, .fb2); web pages, Markdown, code and logs; Outlook .msg and .eml
+  e-mails; SVG and images; ZIP/JAR/APK-style archives (browse and open files
+  inside). Unknown types are sniffed by content, so a mislabelled file still
+  opens. Headings, bold/italic, lists, tables and pictures are kept; adjustable
+  text size; page picker for long files.
+- Save / share button on every opened file.
+- Chat list previews say 🎬 Video, 🎵 Audio or 📷 Photo for media sent as files.
+- Production smoke test now proves chat PDFs and documents download from
+  Cloudinary (free accounts can block PDF/ZIP delivery).
+- CI: `Document viewer check` opens 24 real sample files in every format
+  on each change to the reader (`ops/doc-viewer-check.md`).
+
+## 2.36.0+64 — 2026-10-23 · Push notifications, package com.n_o_group.booknest
+
+- **Android package is now `com.n_o_group.booknest`** — the same id as the
+  Play listing, Firebase and Drive chat backup. Because the id changed, this
+  APK installs as a separate app next to older direct-download copies
+  (`com.nogroup.booknest`): back up chats there (Settings → Chat backup),
+  sign in on the new app, restore, then uninstall the old one.
+- **Push notifications (Firebase Cloud Messaging).** New messages and club
+  messages reach the phone even when BookNest is closed. One banner per
+  conversation, tapping opens that chat; nothing is shown while BookNest is
+  on screen (the in-app banners cover that), so nothing appears twice.
+  Firebase runs natively on Android only — the PC build has no Firebase.
+- Sign-out and account deletion remove this phone's push token, so a
+  signed-out phone no longer receives the account's messages.
+- Server 2.29.0: data-only high-priority pushes, Firebase project read from
+  the service account, `push.status` health check, push tokens removed on
+  account deletion.
+- CI: `GOOGLE_SERVICES_JSON` is built in only when it holds the
+  `com.n_o_group.booknest` app (report in `ops/play-check.md` → Push);
+  `FIREBASE_SERVICE_ACCOUNT` is copied to the server and tested with a
+  real Google sign-in + FCM test send (`ops/push-setup.md`, no secrets).
+  The production smoke test now checks push too.
+- Play Console Data safety: tick **Device or other IDs** (notification token).
+
+## 2.35.0+63 — 2026-10-22 · Faster screens, far less data
+
+- **Screens open instantly.** Lists you have seen are now kept on the device
+  per account, so they still show right away after a restart: feed, books,
+  inbox, rooms, groups, brainstorm and others. The app shows them at once,
+  then refreshes quietly in the background and repaints if anything changed.
+  Signing out clears them.
+- **Chats open instantly.** A conversation first shows what this device
+  already has (from the encrypted chat vault), then the server's latest.
+- **Much less data (egress).**
+  - The server compresses every answer with gzip (JSON and book text shrink
+    3–6×).
+  - Refreshes send a fingerprint of what the app already has. When nothing
+    changed, the server answers in a few bytes instead of resending the list.
+  - An open chat used to download its last 50 messages every 4 seconds and
+    send a read receipt each time. Now it checks the fingerprint (3 s while
+    active, slowing to 15 s when quiet), pauses in the background, and sends
+    receipts only when a new message arrives.
+  - Sealed messages are decrypted once, not on every poll.
+  - Names and avatars are cached for 12 hours instead of being re-fetched on
+    every load, including every room poll.
+  - Book chapters are saved on the device (up to 120 MB, oldest dropped
+    first). Library classics reopen with no request at all; members' books
+    do a few-byte "unchanged?" check.
+- The feed shows posts first and fills in like counts afterwards, instead
+  of waiting for both.
+- **Google Play build:** the .aab no longer contains the background-link
+  foreground service, so no foreground-service declaration is needed in
+  Play Console. The direct-download APK keeps it. The CI readiness report
+  checks the bundle's manifest. `docs/PLAY_CONSOLE_FORMS.md` has the exact
+  Data safety answers. The privacy policy now covers the call relay and
+  what is stored on the device.
+- Server 2.28.0: gzip plus fingerprint ("rev") answers for every action.
+  The smoke test now checks both.
+
+## 2.34.0+62 — 2026-10-22 · Modern look
+
+- **New typeface.** The whole app now uses Plus Jakarta Sans (bundled, SIL
+  Open Font License): tighter, bolder headings and easier-to-read body text.
+  Scripts it doesn't cover (emoji, Arabic, CJK) fall back to the system font.
+- **One consistent design system (Material 3).** Pill-shaped buttons;
+  rounded cards with hairline borders; softer inputs with a cyan focus ring;
+  floating rounded snackbars; 28 px dialogs and sheets; and matching
+  switches, chips, segmented buttons, tabs, menus, tooltips, sliders and
+  progress bars. Navy and cyan stay the brand colours. In dark mode, cyan
+  becomes the action colour, since navy on black was hard to see.
+- **Dark mode** uses a near-black with a faint navy tint instead of flat
+  black, plus layered navy surfaces for sheets, dialogs and menus.
+- **New bottom bar.** Labelled tabs (Feed, Discover, Messages, Profile)
+  with filled icons on a cyan pill for the active tab. The Books button
+  lights up when selected. Honours "Reduce motion".
+- Section headers are larger and get a "See all ›" pill.
+- Server 2.27.3: an admin-only rebuild of the chapters collection,
+  which releases the disk space left by the book texts that moved to
+  Cloudflare R2. A production smoke test (two test accounts covering
+  chat, call relay, R2 book text and account deletion) now runs in CI.
+
+## 2.33.2+61 — 2026-10-22 · Calls connect (NAT traversal fix)
+
+- **TURN relay for voice and video calls.** The server only handed out
+  STUN, which works only when two phones can reach each other directly.
+  On mobile data (carrier NAT) and behind most routers that fails: the
+  "NAT traversal" error. The server (2.27.2) now issues short-lived
+  Cloudflare TURN credentials, including TURN over TLS on port 443 for
+  strict networks. The deploy job creates the Cloudflare TURN key once.
+- **No more lost connection candidates.** Candidates that arrived before
+  the call was set up on the other phone were silently dropped. They are
+  now queued and applied once the call is ready.
+- **Real reconnect.** When the network changes mid-call, the caller sends
+  an ICE-restart offer (before, `restartIce()` was called without
+  renegotiating, so nothing happened).
+- **Clear failure.** A call that cannot connect within 40 seconds ends
+  with "Could not connect — the network blocked the call" instead of
+  hanging on "Connecting…".
+- The app accepts relay lists in either format (Cloudflare sends lists).
+
+## 2.33.1+60 — 2026-10-21 · "Something went wrong" fix
+
+- **Screens no longer get stuck on "Something went wrong" or "could not
+  be reached".** The server answers refusals with an HTTP error (for
+  example "Sign in required" while the login session is still restoring),
+  and the app treated any such answer, or one timed-out cold start, as
+  "server offline" for the rest of the session. Every later call then
+  failed silently until a restart.
+  - Now a refusal never switches the server off.
+  - A real network failure pauses calls for 12 seconds only.
+  - Read-only calls (lists, pages, chapters) retry once after a transient
+    failure. Writes such as sending a message never retry.
+- The owner's "Server update needed" banner no longer appears for newer
+  servers. It only matched version 2.24 exactly.
+
+## 2.33.0+59 — 2026-10-21 · Production readiness
+
+**Google Play + direct download**
+- Every Android release now ships **`booknest-play.aab`** (Google Play
+  upload) next to `booknest.apk` (direct install), signed with the same
+  identity.
+- **Android builds are reliable again.** Recent failures were the CI
+  runner running out of disk ("No space left on device") while Gradle
+  fetched the NDK. The build now frees space first.
+- **Play readiness report** on every build: target SDK, restricted
+  permissions, and 16 KB alignment of every native library.
+- **Play permission policy:**
+  - Removed `READ_MEDIA_IMAGES`; photos come through the system photo
+    picker, which needs no permission. The Permissions screen explains
+    this.
+  - Removed `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`; the background link
+    opens the system battery list instead.
+  - Restricted permissions that plugins could merge back in are stripped.
+- Public **privacy policy** and **account deletion** pages in
+  `docs/legal/`, for the Play Console URLs. The in-app privacy text no
+  longer says account deletion is "coming". It is in Settings.
+- Android and PC builds also run on pushes to the `BookNest` branch.
+
+**Server 2.27**
+- **Library texts move to Cloudflare R2.** MongoDB keeps only a small
+  pointer per chapter. Texts are copied and verified before any row
+  changes, and a manifest is kept in R2. Members' own manuscripts stay
+  where they are.
+- Remixes and sequels of library classics carry their chapter text again;
+  before, they opened empty in the editor.
+- **About 3× faster answers (3.4 s → 1.1 s per call).** Supabase ran the
+  function next to the caller (for example California) while the data
+  lives in Western Europe, so every database round trip crossed the
+  Atlantic. The app now pins calls to eu-west-1 with the `x-region`
+  header. `ping` reports the timing and the regions.
+- **Migration done (21 Oct):** all 18,722 library chapters (508 MB) are
+  in R2 and verified. MongoDB dropped from 515 MB, over the free-tier
+  limit with writes blocked, to 13 MB. Sign-ups, publishing, chats and
+  the book import can write again.
+- Removed the old "texts to Cloudinary" job; Cloudinary is for images
+  only.
+
+**Correction to 2.32.0:** the GitHub library import and the AI covers did
+not go live. The import stopped because the free database was full; the
+move to R2 above frees that space. Covers are postponed. The library is
+still the earlier ~1,587 books.
+
+## 2.32.0+58 — 2026-10-07 · The big library
+
+**Library (server 2.26)**
+- **~3,200 books, every one from GitHub.** All of Standard Ebooks
+  (github.com/standardebooks — the best-edited public-domain editions) plus
+  the most-read Project Gutenberg texts via GITenberg (github.com/GITenberg).
+- **No new storage, no text on Cloudinary.** MongoDB keeps only per-chapter
+  pointers pinned to exact commits; the edge function reads the chapter from
+  GitHub (jsDelivr fallback, in-memory cache) when a reader opens it and
+  returns it inline — older app versions read the new books unchanged.
+  Existing Gutenberg books move to pointers too, keeping their ids (likes,
+  views, reviews stay).
+- **Copyright: life + 70.** A book is imported only when every author and
+  translator died in 1955 or earlier (Nigeria, UK, EU and most countries) —
+  US-only public domain is not enough.
+- **Real genres.** Library books now use the app's genre list, so they show
+  on genre shelves (the first importer used labels like "Crime" that no
+  shelf matched).
+- **A unique AI cover for every library book**: painted per book (FLUX,
+  seeded by the book), title set in open-licence Google Fonts, perceptual
+  duplicate check across the whole library, hosted on Cloudinary. Members'
+  own books and covers are never touched.
+- New admin actions: `admin.libraryIndex`, `admin.setCovers`;
+  `admin.importBooks` accepts chapter pointers and writes each book's
+  chapters in one bulk write.
+
+**Reader**
+- Poetry keeps its line breaks in page mode (markdown hard breaks are
+  honoured; long poems split into page-sized stanzas).
+
+**Tooling**
+- `tools/library/import_github.py` + `library-github-import.yml`,
+  `tools/library/covers.py` + `library-covers.yml` (settings in
+  `tools/library/import.env` / `covers.env`; reports land in
+  `tools/library/reports/`).
+
+## 2.31.0+57 — 2026-10-04 · Security + reliability fix drop
+
+**Security**
+- **Gems can no longer be self-granted.** Any signed-in reader could set
+  their own `profiles.gems` (sold for real money) through the public API.
+  A database trigger now pins privileged columns for end users —
+  `profiles.gems/id/created_at`, `club_books.moderation_status`,
+  `organizations/schools.is_verified`, `*_members.role` — while the server
+  (service role) keeps granting gems normally
+  (`supabase/migrations/20261004000001_lock_privileged_columns.sql`, also
+  folded into `backend/booknest_complete_setup.sql`).
+- **`db.write` locked down.** The service-role generic writer accepted any
+  column on 13 tables and let anyone edit/delete any chapter or
+  announcement group. It now only updates the caller's own profile, and
+  only `username, display_name, avatar_url, cover_url, phone_number`.
+
+**Server fixes (edge function → server 2.25)**
+- Paid gem purchases crashed after payment (`grantGems is not defined` —
+  it was block-scoped inside the action switch). Moved to module scope.
+- Book drafts, publishing and book updates threw
+  `Cannot access 'UNIT_TYPES' before initialization` (a `const` inside the
+  switch). Moved to module scope.
+- Wallet, daily gem claim, gem history, Streaks, Events, RSVP, the reading
+  streak reward and the book-approval reward all called `.collection()` on
+  an un-awaited Promise — 10 call sites fixed.
+- Group announcements never loaded (`uid` referenced but never defined).
+- Admin chapter tools referenced a missing `isChapterBookId`.
+
+**App fixes**
+- Startup can no longer hang on a slow network (profile self-heal bounded
+  to 4 s).
+- Club chat room list is now actually cached (`chats.list` cache key).
+- `/wrapped`, `/random-chat`, `/moderator`, `/shared` require sign-in.
+- Client no longer sends `gems` on profile creation; duplicate import
+  removed; app version strings back in sync.
+
+**Desktop**
+- The PC app was still named **tether** / `com.example` (from the project
+  template). It is now **BookNest** (`booknest.exe`, N.O Group) on
+  Windows, macOS and Linux. PC users sign in once more after updating.
+- Windows now ships a real installer, **BookNest-Setup.exe**, plus the
+  portable zip — both bundle the Visual C++ runtime so the app starts on
+  fresh PCs. All three OS builds publish to one "BookNest … for PC"
+  release.
+
 ## 2.29.0+54 — 2026-09-21 · Anime upgraded + voice-first chats + PCs
 
 - **Anime upgraded — the ink engine begins.** A real freehand **sketch

@@ -300,13 +300,45 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                               ? ListView(
                                   children: [_buildEmptyState()],
                                 )
-                              : ListView.builder(
-                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                  itemCount: _filteredItems.length,
-                                  itemBuilder: (context, index) {
-                                    return _DiscoverCard(item: _filteredItems[index]);
-                                  },
-                                ),
+                              : LayoutBuilder(builder: (context, box) {
+                                  // PC: cards flow into 2–3 columns.
+                                  final cols = (box.maxWidth / 440)
+                                      .floor()
+                                      .clamp(1, 3);
+                                  if (cols == 1) {
+                                    return ListView.builder(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 20, vertical: 8),
+                                      itemCount: _filteredItems.length,
+                                      itemBuilder: (context, index) {
+                                        return _DiscoverCard(
+                                            item: _filteredItems[index]);
+                                      },
+                                    );
+                                  }
+                                  const gap = 16.0;
+                                  final w = (box.maxWidth - 40 -
+                                          gap * (cols - 1)) /
+                                      cols;
+                                  return ListView(
+                                    physics:
+                                        const AlwaysScrollableScrollPhysics(),
+                                    padding: const EdgeInsets.fromLTRB(
+                                        20, 8, 20, 40),
+                                    children: [
+                                      Wrap(
+                                        spacing: gap,
+                                        children: [
+                                          for (final item in _filteredItems)
+                                            SizedBox(
+                                                width: w,
+                                                child: _DiscoverCard(
+                                                    item: item)),
+                                        ],
+                                      ),
+                                    ],
+                                  );
+                                }),
                         ),
                 ),
               ],

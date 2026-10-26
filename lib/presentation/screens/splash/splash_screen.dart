@@ -58,26 +58,30 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // The logo is navy ink — it sits on a white tile (like its
+              // app icon), never on black. Soft cyan glow ties it to the page.
               Container(
-                width: 116,
-                height: 116,
+                width: 120,
+                height: 120,
                 decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                      color: BookNestColors.cyan.withOpacity(.45)),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
                   boxShadow: [
                     BoxShadow(
-                      color: BookNestColors.cyan.withOpacity(.3),
-                      blurRadius: 34,
-                      offset: const Offset(0, 10),
+                      color: BookNestColors.cyan.withOpacity(.28),
+                      blurRadius: 40,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 12),
                     ),
                   ],
                 ),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(18),
+                // NB: despite its name this file is the navy logo (for light
+                // backgrounds); "…light_theme.png" is the white one.
                 child: Image.asset(
                   'assets/logo/booknest_logo_new_transparent_dark_theme.png',
                   fit: BoxFit.contain,
+                  filterQuality: FilterQuality.medium,
                 ),
               ),
               const SizedBox(height: 24),

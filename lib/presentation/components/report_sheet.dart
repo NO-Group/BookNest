@@ -234,6 +234,7 @@ Future<void> confirmBlock(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
+      scrollable: true,
       title: Text(currentlyBlocked ? 'Unblock $peerName?' : 'Block $peerName?'),
       content: Text(currentlyBlocked
           ? '$peerName will be able to message you again.'

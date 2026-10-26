@@ -33,6 +33,7 @@ class _MassMessageScreenState extends State<MassMessageScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Send to every reader?',
             style: TextStyle(fontWeight: FontWeight.w800)),

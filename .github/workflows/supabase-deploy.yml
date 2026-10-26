@@ -1,21 +1,37 @@
 name: Supabase Edge Deploy
 
-# Deploys the booknest edge function straight from CI so the server never
-# lags the app. One-time setup by the owner (dashboard only, no terminal):
-#   1. Supabase dashboard → Account → Access Tokens → Generate token
+# Ships the server side in one click: applies the database security
+# migrations, deploys the booknest-api edge function, then asks the live
+# server which version it is running.
+#
+# One-time setup by the owner (dashboard only, no terminal):
+#   1. Supabase dashboard → Account (top-right avatar) → Access Tokens →
+#      Generate new token
 #   2. GitHub repo → Settings → Secrets and variables → Actions →
-#      "New repository secret", twice:
-#        SUPABASE_ACCESS_TOKEN  = the token from step 1
-#        SUPABASE_PROJECT_REF   = Supabase dashboard → Project Settings →
-#                                 General → Reference ID
+#      "New repository secret":
+#        SUPABASE_ACCESS_TOKEN = the token from step 1
+#      (optional) SUPABASE_PROJECT_REF — defaults to this app's public
+#      project ref, so it is only needed if the project ever moves.
 #   3. GitHub → Actions tab → "Supabase Edge Deploy" → Run workflow.
-# After that, deploying the server is ONE click — no more manual pasting.
 
 on:
   workflow_dispatch:
+  # A server or migration change on the build branch ships itself.
+  push:
+    branches:
+      - arena/01a106c8-booknest
+    paths:
+      - 'supabase/functions/booknest-api/**'
+      - 'supabase/migrations/20261004000001_lock_privileged_columns.sql'
+      - 'supabase/migrations/20261023000001_profile_cover.sql'
+      - '.github/workflows/supabase-deploy.yml'
 
 permissions:
-  contents: read
+  contents: write # commits ops/turn-setup.md + ops/push-setup.md (names and statuses only, never secrets)
+
+env:
+  # Public by design (it is in the app's Supabase URL).
+  DEFAULT_PROJECT_REF: ekgbbbbjwgfixqarlnil
 
 jobs:
   deploy-edge:
@@ -24,32 +40,182 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Guard — secrets present?
+      - name: Guard — access token present?
         env:
           HAS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
-          HAS_REF: ${{ secrets.SUPABASE_PROJECT_REF != '' }}
         run: |
-          if [ "$HAS_TOKEN" != "true" ] || [ "$HAS_REF" != "true" ]; then
+          if [ "$HAS_TOKEN" != "true" ]; then
             {
-              echo "## Missing secrets"
+              echo "## Missing secret"
               echo ""
-              echo "Add **SUPABASE_ACCESS_TOKEN** and **SUPABASE_PROJECT_REF**"
-              echo "under Settings → Secrets and variables → Actions"
-              echo "(see ops/SUPABASE_AUTO_DEPLOY.md), then re-run."
-            } >> $GITHUB_STEP_SUMMARY
+              echo "Add **SUPABASE_ACCESS_TOKEN** under Settings → Secrets and"
+              echo "variables → Actions (Supabase dashboard → Account → Access"
+              echo "Tokens → Generate), then re-run this workflow."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
+
+      - name: Resolve project ref
+        env:
+          REF_SECRET: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          # Accept a bare ref or a pasted URL; fall back to the app's ref.
+          REF="$(printf '%s' "$REF_SECRET" | grep -oE '[a-z]{20}' | head -1)"
+          REF="${REF:-$DEFAULT_PROJECT_REF}"
+          echo "PROJECT_REF=$REF" >> "$GITHUB_ENV"
+          echo "Deploying to project $REF"
+
+      - name: Syntax gate (refuse to deploy a file that does not parse)
+        run: npx -y esbuild@0.24.0 supabase/functions/booknest-api/index.ts --format=esm --log-level=error > /dev/null
+
+      - name: Apply database security migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Idempotent migrations only — each is safe to run on every deploy.
+          for f in supabase/migrations/20261004000001_lock_privileged_columns.sql supabase/migrations/20261023000001_profile_cover.sql; do
+            echo "applying $f"
+            jq -Rs '{query: .}' "$f" > body.json
+            code=$(curl -sS -o resp.json -w '%{http_code}' -X POST \
+              "https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query" \
+              -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data @body.json)
+            echo "HTTP $code: $(head -c 400 resp.json)"
+            [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || exit 1
+          done
+          echo "- Database migrations applied ✅ (column locks, profile cover)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.121.0
+
+      - name: Server secrets for Cloudflare R2 (book texts)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ] || [ -z "$R2_BUCKET" ]; then
+            echo "R2 secrets not set in GitHub — skipping (R2 chapters would be unreadable)."
+            exit 0
+          fi
+          supabase secrets set --project-ref "$PROJECT_REF" \
+            R2_ACCOUNT_ID="$R2_ACCOUNT_ID" R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
+            R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" R2_BUCKET="$R2_BUCKET" >/dev/null
+          echo "R2 secrets set on the server."
+
+      # Voice/video calls need a TURN relay: on mobile data (carrier NAT) and
+      # behind most routers, phones cannot reach each other directly. Uses
+      # Cloudflare's TURN service on the same Cloudflare account. The key is
+      # created once and stored as server secrets; later runs only re-check.
+      - name: TURN relay for calls (Cloudflare)
+        continue-on-error: true
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GH_TURN_ID: ${{ secrets.CF_TURN_KEY_ID }}
+          GH_TURN_TOKEN: ${{ secrets.CF_TURN_KEY_API_TOKEN }}
+        run: |
+          set -uo pipefail
+          mkdir -p ops
+          R=ops/turn-setup.md
+          echo "# TURN relay setup — $(date -u +%F' '%H:%M) UTC" > $R
+          NAMES="$(supabase secrets list --project-ref "$PROJECT_REF" -o json 2>/dev/null | jq -r '.[].name' 2>/dev/null)"
+          [ -n "$NAMES" ] || NAMES="$(supabase secrets list --project-ref "$PROJECT_REF" 2>/dev/null | awk -F'|' 'NR>2{gsub(/ /,"",$1); print $1}')"
+          echo "- server secrets readable: $(printf '%s\n' "$NAMES" | grep -c .) names" >> $R
+          echo "- server secrets present: $(printf '%s' "$NAMES" | grep -E '^(CF_TURN_KEY_ID|CF_TURN_KEY_API_TOKEN|TURN_URL|TURN_SECRET)$' | tr '\n' ' ')" >> $R
+          if [ -n "$GH_TURN_ID" ] && [ -n "$GH_TURN_TOKEN" ]; then
+            # Owner-provided key (GitHub secrets) always wins.
+            KEY_ID="$GH_TURN_ID"; KEY_TOKEN="$GH_TURN_TOKEN"; echo "- source: GitHub secrets CF_TURN_KEY_ID / CF_TURN_KEY_API_TOKEN" >> $R
+          elif printf '%s' "$NAMES" | grep -qx CF_TURN_KEY_ID && printf '%s' "$NAMES" | grep -qx CF_TURN_KEY_API_TOKEN; then
+            echo "- TURN key already on the server ✅ (nothing to do)" >> $R
+            KEY_ID=""; KEY_TOKEN=""
+          else
+            OUT="$(curl -s --max-time 30 -X POST "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/calls/turn_keys" \
+              -H "Authorization: Bearer $CF_TOKEN" -H 'Content-Type: application/json' -d '{"name":"booknest-calls"}')"
+            if [ "$(printf '%s' "$OUT" | jq -r '.success')" = "true" ]; then
+              KEY_ID="$(printf '%s' "$OUT" | jq -r '.result.uid')"; KEY_TOKEN="$(printf '%s' "$OUT" | jq -r '.result.key')"
+              echo "::add-mask::$KEY_TOKEN"
+              echo "- created Cloudflare TURN key \`booknest-calls\` ✅" >> $R
+            else
+              echo "- ❌ could not create a TURN key: \`$(printf '%s' "$OUT" | jq -c '.errors' | head -c 400)\`" >> $R
+              echo "  The Cloudflare API token needs the **Calls: Edit** (Realtime) permission, or create a TURN key in the dashboard (Realtime → TURN) and add GitHub secrets CF_TURN_KEY_ID + CF_TURN_KEY_API_TOKEN." >> $R
+              KEY_ID=""; KEY_TOKEN=""
+            fi
+          fi
+          if [ -n "$KEY_ID" ] && [ -n "$KEY_TOKEN" ]; then
+            supabase secrets set --project-ref "$PROJECT_REF" CF_TURN_KEY_ID="$KEY_ID" CF_TURN_KEY_API_TOKEN="$KEY_TOKEN" >/dev/null \
+              && echo "- stored as server secrets ✅" >> $R
+            T="$(curl -s --max-time 30 -X POST "https://rtc.live.cloudflare.com/v1/turn/keys/$KEY_ID/credentials/generate-ice-servers" \
+              -H "Authorization: Bearer $KEY_TOKEN" -H 'Content-Type: application/json' -d '{"ttl":600}')"
+            echo "- credential test: $(printf '%s' "$T" | jq -c '[.iceServers] | flatten | map(.urls) | flatten' 2>/dev/null | head -c 600 || printf '%s' "$T" | head -c 300)" >> $R
+          fi
+          cat $R; cat $R >> "$GITHUB_STEP_SUMMARY"
+          git config user.email "booknest-ci@users.noreply.github.com"; git config user.name "booknest-ci"
+          git add -f $R && git commit -q -m "TURN relay setup report [skip ci]" && \
+            for i in 1 2 3; do git pull -q --rebase --autostash origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break; sleep 5; done || true
+
+      - name: Push notifications (Firebase Cloud Messaging)
+        continue-on-error: true
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -uo pipefail
+          mkdir -p ops
+          R=ops/push-setup.md
+          echo "# Push (FCM) setup — $(date -u +%F' '%H:%M) UTC" > $R
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "- GitHub secret FIREBASE_SERVICE_ACCOUNT not set — push stays off (in-app alerts still work)." >> $R
+          else
+            pip install -q pyjwt cryptography >/dev/null 2>&1
+            OUT_JSON="$RUNNER_TEMP/sa.json" python3 tools/ops/firebase_check.py >> $R; RC=$?
+            if [ -s "$RUNNER_TEMP/sa.json" ]; then
+              PID="$(jq -r .project_id "$RUNNER_TEMP/sa.json")"
+              supabase secrets set --project-ref "$PROJECT_REF" \
+                FIREBASE_SERVICE_ACCOUNT="$(cat "$RUNNER_TEMP/sa.json")" FIREBASE_PROJECT_ID="$PID" >/dev/null \
+                && echo "- stored as server secrets FIREBASE_SERVICE_ACCOUNT + FIREBASE_PROJECT_ID ✅" >> $R \
+                || echo "- ❌ could not store the server secrets" >> $R
+              rm -f "$RUNNER_TEMP/sa.json"
+            fi
+            [ "$RC" = 0 ] || echo "- check exit code $RC (see above)" >> $R
+          fi
+          cat $R; cat $R >> "$GITHUB_STEP_SUMMARY"
+          git config user.email "booknest-ci@users.noreply.github.com"; git config user.name "booknest-ci"
+          git add -f $R && git commit -q -m "Push setup report [skip ci]" && \
+            for i in 1 2 3; do git pull -q --rebase --autostash origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break; sleep 5; done || true
 
       - name: Deploy booknest-api
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           supabase functions deploy booknest-api \
-            --project-ref "$SUPABASE_PROJECT_REF" \
+            --project-ref "$PROJECT_REF" \
             --use-api
+
+      - name: Smoke test — which server version is live?
+        run: |
+          set -uo pipefail
+          WANT="$(grep -oE "server: '[0-9.]+'" supabase/functions/booknest-api/index.ts | head -1 | grep -oE "[0-9.]+")"
+          ANON="$(grep -A3 'supabaseAnonKey = ' lib/config/app_config.dart | grep -oE "eyJ[^']+")"
+          for i in 1 2 3 4 5 6; do
+            OUT="$(curl -s --max-time 20 -X POST \
+              "https://${PROJECT_REF}.supabase.co/functions/v1/booknest-api" \
+              -H "Authorization: Bearer $ANON" -H "Content-Type: application/json" \
+              -d '{"action":"ping"}')"
+            GOT="$(printf '%s' "$OUT" | grep -oE '"server":"[0-9.]+"' | grep -oE '[0-9.]+' || true)"
+            echo "try $i: live server=${GOT:-?} (want $WANT)"
+            if [ "$GOT" = "$WANT" ]; then
+              echo "- Edge function live: server $GOT ✅" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Live server did not report $WANT: ${OUT:0:300}"
+          exit 1
