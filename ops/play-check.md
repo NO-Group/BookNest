@@ -1,6 +1,6 @@
-# Google Play readiness — 2026-10-23 17:45 UTC
+# Google Play readiness — 2026-10-26 15:56 UTC
 
-Build tools: `37.0.0` · APK 117M · AAB 97M
+Build tools: `37.0.0` · APK 117M · AAB 98M
 
 ## App
 
