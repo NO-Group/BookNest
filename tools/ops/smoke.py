@@ -383,10 +383,111 @@ def groups_suite(a_id, a_tok, b_id, b_tok, book_ids):
                     'classId': str(cid), 'title': 'Read chapter 1', 'bookId': book}))
             step('schedule exam', api(a_tok, 'schools.exam.create', {'schoolId': gid, 'title': 'Smoke test', 'subject': 'English'}))
             step('leaderboard', api(b_tok, 'schools.leaderboard', {'kind': kind, 'groupId': gid}))
+            cbt_suite(a_tok, b_tok, gid)
         step('delete group (owner)', api(a_tok, 'groups.delete', {'kind': kind, 'groupId': gid}))
         bad = [f'{n}: {e}' for n, good, e in steps if not good]
         check(f'{label}: every feature works ({len(steps) - len(bad)}/{len(steps)})', not bad,
               '; '.join(bad)[:400] if bad else ', '.join(n for n, _, _ in steps))
+
+
+def cbt_suite(a_tok, b_tok, gid):
+    """School CBT the way a real school uses it: the teacher (a) sets
+    questions, the student (b) is locked out before the start time, sits
+    the exam once, can't come back in, and gets a server-marked score."""
+    def ok(r):
+        return r[0] == 200 and r[1].get('ok') is True
+
+    def data(r):
+        return r[1].get('data', {}) or {}
+
+    def iso(offset):
+        return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(time.time() + offset))
+    steps = []
+
+    def step(name, good, detail=''):
+        steps.append((name, bool(good), detail))
+    qs = [
+        {'type': 'mcq', 'text': 'What is 2 + 2?', 'options': ['3', '4', '5', '6'], 'answer': 1,
+         'explanation': '2 + 2 = 4', 'subject': 'Mathematics', 'topic': 'Arithmetic', 'year': '2025'},
+        {'type': 'mcq', 'text': 'The capital of Nigeria is', 'options': ['Lagos', 'Abuja', 'Kano'], 'answer': 1,
+         'subject': 'Civic Education', 'year': '2024'},
+    ]
+    r = api(a_tok, 'cbt.bank.add', {'schoolId': gid, 'questions': qs})
+    step('teacher adds questions to the bank', ok(r) and data(r).get('added') == 2, str(r[1])[:120])
+    r = api(b_tok, 'cbt.bank.add', {'schoolId': gid, 'questions': qs})
+    step('student cannot add questions', r[0] == 403, f'HTTP {r[0]}')
+    r = api(b_tok, 'cbt.bank.subjects', {'schoolId': gid})
+    step('student sees practice subjects', ok(r) and len(data(r).get('subjects', [])) == 2, str(r[1])[:120])
+    r = api(b_tok, 'cbt.practice.questions', {'schoolId': gid, 'subject': 'Mathematics', 'count': 10})
+    pq = data(r).get('questions', [])
+    step('practice gives questions with answers', ok(r) and pq and pq[0].get('answer') == 1, str(r[1])[:120])
+    api(b_tok, 'cbt.practice.record', {'schoolId': gid, 'subject': 'Mathematics', 'score': 1, 'total': 1,
+                                       'seconds': 12, 'mode': 'mock'})
+    r = api(b_tok, 'cbt.practice.history', {'schoolId': gid})
+    step('practice history', ok(r) and len(data(r).get('recent', [])) == 1, str(r[1])[:120])
+    paper = qs + [{'type': 'theory', 'text': 'Explain photosynthesis.', 'marks': 5}]
+    base = {'schoolId': gid, 'subject': 'General', 'durationMin': 30, 'published': True,
+            'questions': paper, 'settings': {'results': 'instant', 'strictExit': True}}
+    r = api(a_tok, 'cbt.exam.save', {**base, 'title': 'Locked', 'startsAt': iso(3600)})
+    locked_id = data(r).get('exam', {}).get('id')
+    r = api(b_tok, 'cbt.exam.start', {'examId': locked_id or ''})
+    step('questions locked before the start time', r[0] == 423, f'HTTP {r[0]} {r[1].get("error")}')
+    r = api(a_tok, 'cbt.exam.save', {**base, 'title': 'Live', 'startsAt': iso(-60)})
+    live_id = data(r).get('exam', {}).get('id')
+    r = api(b_tok, 'cbt.exam.list', {'schoolId': gid})
+    listed = {e.get('id'): e for e in data(r).get('exams', [])}
+    step('student sees both exams, no questions in the list',
+         ok(r) and live_id in listed and locked_id in listed and 'questions' not in listed.get(live_id, {}),
+         str(r[1])[:160])
+    r = api(b_tok, 'cbt.exam.start', {'examId': live_id or ''})
+    paper_out = data(r).get('questions', [])
+    att = data(r).get('attempt', {}).get('id')
+    leak = any('answer' in q or 'explanation' in q for q in paper_out)
+    step('enter live exam: 3 questions, no answers sent', ok(r) and len(paper_out) == 3 and not leak,
+         str(r[1])[:160])
+    answers = {}
+    for q in paper_out:
+        if q['type'] == 'theory':
+            answers[q['id']] = 'Plants make food from light.'
+        elif q['text'].startswith('What is'):
+            answers[q['id']] = next(o['k'] for o in q['options'] if o['t'] == '4')
+        else:
+            answers[q['id']] = next(o['k'] for o in q['options'] if o['t'] == 'Lagos')
+    r = api(b_tok, 'cbt.attempt.save', {'attemptId': att or '', 'answers': answers})
+    step('autosave', ok(r), str(r[1])[:120])
+    r = api(b_tok, 'cbt.attempt.submit', {'attemptId': att or '', 'answers': answers, 'reason': 'manual'})
+    res = data(r).get('result') or {}
+    step('submit: server marks 1/7 (theory pending)',
+         ok(r) and res.get('score') == 1 and res.get('total') == 7 and res.get('theoryPending') == 1, str(r[1])[:160])
+    r = api(b_tok, 'cbt.exam.start', {'examId': live_id or ''})
+    step('no second attempt', r[0] == 409, f'HTTP {r[0]}')
+    r = api(a_tok, 'cbt.exam.save', {**base, 'title': 'Strict', 'startsAt': iso(-60)})
+    strict_id = data(r).get('exam', {}).get('id')
+    api(b_tok, 'cbt.exam.start', {'examId': strict_id or ''})
+    r = api(b_tok, 'cbt.exam.start', {'examId': strict_id or ''})
+    step('leaving and coming back auto-submits', r[0] == 409 and 'automatically' in str(r[1].get('error')),
+         f'HTTP {r[0]} {r[1].get("error")}')
+    r = api(a_tok, 'cbt.results', {'examId': strict_id or ''})
+    rows = data(r).get('attempts', [])
+    step('teacher sees the auto-submission', ok(r) and rows and rows[0].get('reason') == 'reentered', str(r[1])[:160])
+    r = api(a_tok, 'cbt.results', {'examId': live_id or ''})
+    rows = data(r).get('attempts', [])
+    r = api(a_tok, 'cbt.attempt.view', {'attemptId': rows[0]['id'] if rows else ''})
+    theory = next((q for q in data(r).get('questions', []) if q.get('type') == 'theory'), {})
+    r = api(a_tok, 'cbt.attempt.grade', {'attemptId': rows[0]['id'] if rows else '', 'marks': {theory.get('id', 'x'): 4}})
+    step('teacher marks theory: 5/7', ok(r) and data(r).get('score') == 5, str(r[1])[:120])
+    r = api(b_tok, 'cbt.results', {'examId': live_id or ''})
+    step('students cannot open the results sheet', r[0] == 403, f'HTTP {r[0]}')
+    step('release results', ok(api(a_tok, 'cbt.exam.release', {'examId': live_id or ''})))
+    r = api(b_tok, 'cbt.exam.list', {'schoolId': gid})
+    mine = next((e for e in data(r).get('exams', []) if e.get('id') == live_id), {}).get('myAttempt') or {}
+    step('student sees final score', mine.get('score') == 5, str(mine)[:120])
+    for eid in (locked_id, live_id, strict_id):
+        if eid:
+            api(a_tok, 'cbt.exam.delete', {'examId': eid})
+    bad = [f'{n}: {e}' for n, good, e in steps if not good]
+    check(f'School CBT exams: every step works ({len(steps) - len(bad)}/{len(steps)})', not bad,
+          '; '.join(bad)[:500] if bad else ', '.join(n for n, _, _ in steps))
 
 
 def finish(users):

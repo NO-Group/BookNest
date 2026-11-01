@@ -1,5 +1,47 @@
 # Changelog
 
+## 2.40.0+74 — 2026-11-01 · School CBT: exams and practice
+
+Server 2.33.0. Modelled on the MySchool app, but for each school's own
+students and its own teachers' questions.
+
+- **Real exams, distance-learning style.** Teachers and school admins set
+  a paper and pick a start time. The questions stay locked on the server
+  until that time; students see only a countdown and a lock.
+  - Each student gets **one** timed attempt. The timer keeps running and
+    the paper closes at the end of the exam window.
+  - **Leaving the exam submits it.** Switching apps, going to the home
+    screen, locking the phone, closing BookNest, or (on PC) leaving the
+    exam window submits the saved answers straight away. Coming back in
+    after a crash also auto-submits. Teachers see why each script ended.
+    The rule can be turned off per exam, in which case exits are only
+    recorded.
+  - Answers save as students go. Answers and explanations are never sent
+    to the student's device during the exam, and the server does the
+    marking.
+  - Question order and A–D options can be shuffled for each student.
+  - Exam room: question grid (answered / flagged), flag for review,
+    calculator, timer that turns red in the last 5 minutes, and a side
+    panel on PC.
+- **Set the paper three ways:** write questions (objective or theory),
+  pick from the school's question bank, or paste a whole sheet from Excel,
+  Google Sheets or CSV
+  (`subject, topic, year, question, A, B, C, D, answer, explanation, marks`).
+  An exam can be for the whole school or for one class. It can be saved as
+  a draft and published later.
+- **Results and marking.** Ranked results with average, pass rate and
+  highest score. Open any script to see every answer. Mark theory answers
+  using your marking guide. Release results when ready; scores can also be
+  shown instantly or when the exam closes. Copy results to a spreadsheet.
+- **CBT teachers.** The owner or deputy can let any member set exams, on
+  top of class teachers.
+- **Practice (like MySchool):** subjects from the school's question bank,
+  study mode (answer and explanation after each question), timed mock
+  exams (choose the number of questions and the time), filters by year and
+  topic, keyword search across past questions, saved questions that work
+  offline, and a progress page (average and best score per subject,
+  history). Teachers can keep any question secret for exams only.
+
 ## 2.39.1+73 — 2026-10-23 · PC: studio desk, group pages
 
 - **Manuscript studio on PC:** a three-pane writing desk. Chapters are on

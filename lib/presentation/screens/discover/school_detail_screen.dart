@@ -4,11 +4,13 @@ import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../components/booknest_ui.dart';
 import 'group_base_screen.dart';
+import 'school_cbt.dart';
 import 'school_lms.dart';
 
 /// The full school experience: everything a group gets (profile,
 /// membership, announcements, directory, chat) plus the two things only a
-/// school needs — a curated reading list and a live top-readers
+/// school needs — CBT exams and practice (school_cbt.dart), classes,
+/// assignments, a curated reading list and a live top-readers
 /// leaderboard (distinct books opened in the last 30 days, computed on the
 /// server from real reading activity).
 class SchoolDetailScreen extends StatelessWidget {
@@ -24,6 +26,8 @@ class SchoolDetailScreen extends StatelessWidget {
       title: 'School',
       extraSections: (state) => [
         SchoolClassesSection(state: state),
+        const SizedBox(height: 16),
+        SchoolCbtSection(state: state),
         const SizedBox(height: 16),
         SchoolAssignmentsSection(state: state),
         const SizedBox(height: 16),

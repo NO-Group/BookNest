@@ -996,6 +996,182 @@ async function groupManager(
   return isManager ? group as Record<string, unknown> : null;
 }
 
+// ── School CBT (distance-learning exams) ───────────────────────────────────
+// Teachers build a question bank and schedule exams; questions stay on the
+// server until the start time, answers never leave it, and grading happens
+// here. Collections live in the groups database:
+//   school_qbank        — the school's question bank (practice: true = open
+//                         for student practice, false = exam-only, secret)
+//   school_cbt_exams    — scheduled exams with their own question snapshot
+//   school_cbt_attempts — one per student per exam (unique)
+//   school_cbt_practice — practice/mock history for analytics
+
+type CbtQuestion = {
+  id: string;
+  type: 'mcq' | 'theory';
+  text: string;
+  options: string[];
+  answer: number;
+  explanation: string;
+  marks: number;
+  subject: string;
+  topic: string;
+  year: string;
+  imageUrl: string | null;
+};
+
+/** Owner, deputy, a class teacher, or a named CBT teacher of the school. */
+async function isSchoolStaff(schoolId: string, uid: string): Promise<boolean> {
+  if (!schoolId || !uid) return false;
+  const db = await dbFor('groups');
+  const school = await db.collection('schools').findOne(
+    { _id: schoolId } as never,
+    { projection: { ownerId: 1, viceModeratorId: 1, cbtTeacherIds: 1 } },
+  );
+  if (!school) return false;
+  if (school.ownerId === uid || school.viceModeratorId === uid) return true;
+  const named = (school.cbtTeacherIds as string[] | undefined) ?? [];
+  if (named.includes(uid)) return true;
+  return (await db.collection('school_classes')
+    .countDocuments({ schoolId, teacherId: uid })) > 0;
+}
+
+/** Deterministic shuffle (mulberry32) so an attempt keeps its order. */
+function cbtShuffle<T>(items: T[], seed: number): T[] {
+  const out = [...items];
+  let a = seed >>> 0;
+  const rand = () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** Validates and normalises one question from the client. */
+function cleanCbtQuestion(raw: unknown): CbtQuestion | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const q = raw as Record<string, unknown>;
+  const type = q.type === 'theory' ? 'theory' : 'mcq';
+  const text = String(q.text ?? '').trim().slice(0, 4000);
+  if (!text) return null;
+  const options = Array.isArray(q.options)
+    ? q.options.map((o) => String(o ?? '').trim().slice(0, 600))
+      .filter((o) => o.length > 0).slice(0, 6)
+    : [];
+  const answer = Number(q.answer ?? -1);
+  if (type === 'mcq') {
+    if (options.length < 2) return null;
+    if (!Number.isInteger(answer) || answer < 0 || answer >= options.length) {
+      return null;
+    }
+  }
+  const marks = Math.min(100, Math.max(0.5, Number(q.marks ?? 1) || 1));
+  const image = String(q.imageUrl ?? '');
+  return {
+    id: String(q.id ?? '').match(/^[\w-]{6,64}$/)
+      ? String(q.id) : crypto.randomUUID(),
+    type,
+    text,
+    options: type === 'mcq' ? options : [],
+    answer: type === 'mcq' ? answer : -1,
+    explanation: String(q.explanation ?? '').trim().slice(0, 4000),
+    marks,
+    subject: String(q.subject ?? '').trim().slice(0, 80),
+    topic: String(q.topic ?? '').trim().slice(0, 80),
+    year: String(q.year ?? '').trim().slice(0, 12),
+    imageUrl: image.startsWith('https://') ? image.slice(0, 600) : null,
+  };
+}
+
+function cbtTotal(questions: CbtQuestion[]): number {
+  return questions.reduce((sum, q) => sum + (q.marks || 1), 0);
+}
+
+/** Grades an attempt: objective marks now, theory from the teacher. */
+function gradeCbt(
+  questions: CbtQuestion[],
+  answers: Record<string, unknown>,
+  theoryMarks: Record<string, unknown>,
+) {
+  let objective = 0;
+  let theory = 0;
+  let theoryPending = 0;
+  let correct = 0;
+  for (const q of questions) {
+    if (q.type === 'mcq') {
+      if (Number(answers[q.id]) === q.answer) {
+        objective += q.marks;
+        correct++;
+      }
+    } else {
+      const given = theoryMarks[q.id];
+      if (given === undefined || given === null) {
+        if (String(answers[q.id] ?? '').trim()) theoryPending++;
+      } else {
+        theory += Math.min(q.marks, Math.max(0, Number(given) || 0));
+      }
+    }
+  }
+  const total = cbtTotal(questions);
+  const score = Math.round((objective + theory) * 100) / 100;
+  return { objective, theory, theoryPending, correct, score, total };
+}
+
+/** When may a student see their own score? */
+function cbtResultsVisible(exam: Record<string, unknown>): boolean {
+  const mode = String((exam.settings as Record<string, unknown> | undefined)
+    ?.results ?? 'instant');
+  if (mode === 'instant') return true;
+  if (mode === 'after_close') {
+    return Date.now() >= new Date(exam.endsAt as string).getTime();
+  }
+  return exam.released === true;
+}
+
+/** Closes attempts whose clock ran out (the app was killed or offline). */
+async function finalizeExpiredCbt(examId: string): Promise<void> {
+  const db = await dbFor('groups');
+  const stale = await db.collection('school_cbt_attempts').find({
+    examId, status: 'in_progress', deadline: { $lt: new Date(Date.now() - 90_000) },
+  }).limit(500).toArray();
+  if (stale.length === 0) return;
+  const exam = await db.collection('school_cbt_exams')
+    .findOne({ _id: new ObjectId(examId) });
+  if (!exam) return;
+  const questions = (exam.questions ?? []) as CbtQuestion[];
+  for (const att of stale) {
+    const g = gradeCbt(questions, (att.answers ?? {}) as Record<string, unknown>,
+      (att.theoryMarks ?? {}) as Record<string, unknown>);
+    await db.collection('school_cbt_attempts').updateOne(
+      { _id: att._id, status: 'in_progress' },
+      { $set: {
+        status: 'auto_submitted', reason: 'time', submittedAt: att.deadline,
+        score: g.score, total: g.total, objective: g.objective,
+        correct: g.correct, theoryPending: g.theoryPending,
+      } },
+    );
+  }
+}
+
+/** Is this student allowed to sit the exam (school + class roster)? */
+async function canSitCbt(
+  exam: Record<string, unknown>, uid: string,
+): Promise<boolean> {
+  const schoolId = String(exam.schoolId);
+  if (!(await isClubMember('schools', schoolId, uid))) return false;
+  const classId = String(exam.classId ?? '');
+  if (!classId) return true;
+  return (await (await dbFor('groups')).collection('school_class_members')
+    .countDocuments({ classId, userId: uid })) > 0;
+}
+
 // ── chat message toolkit: reactions, deletes, read receipts ────────────────
 type MsgRow = Record<string, unknown> & { _id: ObjectId };
 
@@ -1577,7 +1753,7 @@ async function handleRequest(req: Request): Promise<Response> {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.32.1',
+          server: '2.33.0',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -5316,6 +5492,710 @@ async function handleRequest(req: Request): Promise<Response> {
             subject: r.subject ?? null, at: r.at ?? null,
           })),
         });
+      }
+
+      // ── School CBT ──────────────────────────────────────────────────────
+      case 'cbt.role': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const schoolId = String(p.schoolId ?? '');
+        const manager = !!(await groupManager('schools', schoolId, uid));
+        const staff = manager || await isSchoolStaff(schoolId, uid);
+        const member = staff || await isClubMember('schools', schoolId, uid);
+        const school = await (await dbFor('groups')).collection('schools')
+          .findOne({ _id: schoolId } as never, { projection: { cbtTeacherIds: 1 } });
+        return ok({
+          manager, staff, member,
+          teacherIds: manager ? ((school?.cbtTeacherIds as string[]) ?? []) : [],
+        });
+      }
+
+      case 'cbt.teachers.set': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const schoolId = String(p.schoolId ?? '');
+        const userId = String(p.userId ?? '');
+        if (!isUuid(userId)) return fail('A valid userId is required');
+        if (!(await groupManager('schools', schoolId, uid))) {
+          return fail('Only the school owner or deputy can name teachers', 403);
+        }
+        await (await dbFor('groups')).collection('schools').updateOne(
+          { _id: schoolId } as never,
+          p.teacher === false
+            ? { $pull: { cbtTeacherIds: userId } } as never
+            : { $addToSet: { cbtTeacherIds: userId } } as never,
+        );
+        return ok({ teacher: p.teacher !== false });
+      }
+
+      case 'cbt.bank.add': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const schoolId = String(p.schoolId ?? '');
+        if (!(await isSchoolStaff(schoolId, uid))) {
+          return fail('Only teachers and school admins can add questions', 403);
+        }
+        const list = Array.isArray(p.questions) ? p.questions.slice(0, 300) : [];
+        const practice = p.practice !== false;
+        const rows = list.map(cleanCbtQuestion)
+          .filter((q): q is CbtQuestion => q !== null)
+          .map((q) => ({
+            ...q, schoolId, practice, createdBy: uid, createdAt: new Date(),
+          }));
+        if (rows.length === 0) {
+          return fail('No valid questions — each needs text, and objective '
+            + 'questions need at least 2 options and a correct answer');
+        }
+        const col = (await dbFor('groups')).collection('school_qbank');
+        try { await col.createIndex({ schoolId: 1, subject: 1, createdAt: -1 }); }
+        catch { /* exists */ }
+        await col.insertMany(rows as never[]);
+        return ok({ added: rows.length, skipped: list.length - rows.length });
+      }
+
+      case 'cbt.bank.update':
+      case 'cbt.bank.delete': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const questionId = String(p.questionId ?? '');
+        if (!isHexId(questionId)) return fail('A valid questionId is required');
+        const col = (await dbFor('groups')).collection('school_qbank');
+        const row = await col.findOne({ _id: new ObjectId(questionId) });
+        if (!row) return fail('Question not found', 404);
+        if (!(await isSchoolStaff(String(row.schoolId), uid))) {
+          return fail('Only teachers and school admins can edit questions', 403);
+        }
+        if (action === 'cbt.bank.delete') {
+          await col.deleteOne({ _id: row._id });
+          return ok({ deleted: true });
+        }
+        const q = cleanCbtQuestion({ ...p.question as object, id: row.id });
+        if (!q) return fail('That question is not valid');
+        await col.updateOne({ _id: row._id }, { $set: {
+          ...q, practice: p.practice === undefined ? row.practice : p.practice !== false,
+          updatedAt: new Date(),
+        } });
+        return ok({ updated: true });
+      }
+
+      case 'cbt.bank.list': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const schoolId = String(p.schoolId ?? '');
+        if (!(await isSchoolStaff(schoolId, uid))) {
+          return fail('Only teachers and school admins can open the bank', 403);
+        }
+        const filter: Record<string, unknown> = { schoolId };
+        if (p.subject) filter.subject = String(p.subject);
+        const search = String(p.search ?? '').trim().slice(0, 80);
+        if (search) {
+          filter.text = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+        }
+        const rows = await (await dbFor('groups')).collection('school_qbank')
+          .find(filter).sort({ createdAt: -1 })
+          .limit(Math.min(500, Number(p.limit ?? 200) || 200)).toArray();
+        return ok({
+          questions: rows.map((r) => ({
+            questionId: String(r._id), id: r.id, type: r.type, text: r.text,
+            options: r.options ?? [], answer: r.answer, explanation: r.explanation ?? '',
+            marks: r.marks ?? 1, subject: r.subject ?? '', topic: r.topic ?? '',
+            year: r.year ?? '', imageUrl: r.imageUrl ?? null, practice: r.practice !== false,
+          })),
+        });
+      }
+
+      case 'cbt.bank.subjects': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const schoolId = String(p.schoolId ?? '');
+        const staff = await isSchoolStaff(schoolId, uid);
+        if (!staff && !(await isClubMember('schools', schoolId, uid))) {
+          return fail('Join the school to practise', 403);
+        }
+        const match: Record<string, unknown> = { schoolId };
+        if (!staff || p.practiceOnly === true) match.practice = { $ne: false };
+        const rows = await (await dbFor('groups')).collection('school_qbank')
+          .aggregate([
+            { $match: match },
+            { $group: {
+              _id: '$subject', count: { $sum: 1 },
+              topics: { $addToSet: '$topic' }, years: { $addToSet: '$year' },
+            } },
+            { $sort: { _id: 1 } },
+          ]).toArray();
+        return ok({
+          subjects: rows.map((r) => ({
+            subject: r._id || 'General', count: r.count,
+            topics: ((r.topics ?? []) as string[]).filter(Boolean).sort(),
+            years: ((r.years ?? []) as string[]).filter(Boolean).sort().reverse(),
+          })),
+        });
+      }
+
+      case 'cbt.practice.questions': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const schoolId = String(p.schoolId ?? '');
+        if (!(await isClubMember('schools', schoolId, uid)) &&
+            !(await isSchoolStaff(schoolId, uid))) {
+          return fail('Join the school to practise', 403);
+        }
+        const match: Record<string, unknown> = {
+          schoolId, practice: { $ne: false },
+        };
+        const subject = String(p.subject ?? '');
+        if (subject && subject !== 'General') match.subject = subject;
+        if (subject === 'General') match.subject = { $in: ['', null] };
+        if (p.topic) match.topic = String(p.topic);
+        if (p.year) match.year = String(p.year);
+        const search = String(p.search ?? '').trim().slice(0, 80);
+        if (search) {
+          match.text = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+        }
+        const count = Math.min(200, Math.max(1, Number(p.count ?? 20) || 20));
+        const col = (await dbFor('groups')).collection('school_qbank');
+        const rows = p.ordered === true || search
+          ? await col.find(match).sort({ year: -1, createdAt: 1 }).limit(count).toArray()
+          : await col.aggregate([{ $match: match }, { $sample: { size: count } }]).toArray();
+        return ok({
+          questions: rows.map((r) => ({
+            id: String(r._id), type: r.type, text: r.text, options: r.options ?? [],
+            answer: r.answer, explanation: r.explanation ?? '', marks: r.marks ?? 1,
+            subject: r.subject ?? '', topic: r.topic ?? '', year: r.year ?? '',
+            imageUrl: r.imageUrl ?? null,
+          })),
+        });
+      }
+
+      case 'cbt.practice.record': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const schoolId = String(p.schoolId ?? '');
+        if (!(await isClubMember('schools', schoolId, uid)) &&
+            !(await isSchoolStaff(schoolId, uid))) {
+          return fail('Join the school to practise', 403);
+        }
+        const total = Math.max(0, Math.min(500, Number(p.total ?? 0) || 0));
+        const score = Math.max(0, Math.min(total, Number(p.score ?? 0) || 0));
+        await (await dbFor('groups')).collection('school_cbt_practice').insertOne({
+          schoolId, userId: uid,
+          subject: String(p.subject ?? '').slice(0, 80),
+          mode: p.mode === 'study' ? 'study' : 'mock',
+          score, total, seconds: Math.max(0, Number(p.seconds ?? 0) || 0),
+          at: new Date(),
+        });
+        return ok({ saved: true });
+      }
+
+      case 'cbt.practice.history': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const schoolId = String(p.schoolId ?? '');
+        const col = (await dbFor('groups')).collection('school_cbt_practice');
+        const recent = await col.find({ schoolId, userId: uid })
+          .sort({ at: -1 }).limit(50).toArray();
+        const bySubject = await col.aggregate([
+          { $match: { schoolId, userId: uid, total: { $gt: 0 } } },
+          { $group: {
+            _id: '$subject', sessions: { $sum: 1 },
+            score: { $sum: '$score' }, total: { $sum: '$total' },
+            best: { $max: { $divide: ['$score', '$total'] } },
+          } },
+          { $sort: { sessions: -1 } },
+        ]).toArray();
+        return ok({
+          recent: recent.map((r) => ({
+            subject: r.subject, mode: r.mode, score: r.score, total: r.total,
+            seconds: r.seconds, at: r.at,
+          })),
+          subjects: bySubject.map((r) => ({
+            subject: r._id || 'General', sessions: r.sessions,
+            average: r.total > 0 ? Math.round((r.score / r.total) * 1000) / 10 : 0,
+            best: Math.round((r.best ?? 0) * 1000) / 10,
+          })),
+        });
+      }
+
+      case 'cbt.exam.save': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const schoolId = String(p.schoolId ?? '');
+        if (!(await isSchoolStaff(schoolId, uid))) {
+          return fail('Only teachers and school admins can set exams', 403);
+        }
+        const title = String(p.title ?? '').trim().slice(0, 160);
+        const startsAt = new Date(String(p.startsAt ?? ''));
+        const durationMin = Math.round(Number(p.durationMin ?? 0));
+        if (!title) return fail('Give the exam a title');
+        if (isNaN(startsAt.getTime())) return fail('Pick a start date and time');
+        if (!(durationMin >= 1 && durationMin <= 600)) {
+          return fail('Duration must be between 1 and 600 minutes');
+        }
+        let endsAt = new Date(String(p.endsAt ?? ''));
+        if (isNaN(endsAt.getTime())) {
+          endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
+        }
+        if (endsAt.getTime() < startsAt.getTime() + 60_000) {
+          return fail('The exam window must close after it opens');
+        }
+        const questions = (Array.isArray(p.questions) ? p.questions : [])
+          .slice(0, 300).map(cleanCbtQuestion)
+          .filter((q): q is CbtQuestion => q !== null);
+        const publish = p.published === true;
+        if (publish && questions.length === 0) {
+          return fail('Add at least one question before publishing');
+        }
+        const s = (p.settings ?? {}) as Record<string, unknown>;
+        const settings = {
+          shuffleQuestions: s.shuffleQuestions !== false,
+          shuffleOptions: s.shuffleOptions !== false,
+          strictExit: s.strictExit !== false,
+          results: ['instant', 'after_close', 'released'].includes(String(s.results))
+            ? String(s.results) : 'after_close',
+          passMark: Math.min(100, Math.max(0, Number(s.passMark ?? 50) || 0)),
+        };
+        const classId = String(p.classId ?? '');
+        const doc = {
+          schoolId, classId: classId || null, title,
+          subject: String(p.subject ?? '').trim().slice(0, 80),
+          instructions: String(p.instructions ?? '').trim().slice(0, 3000),
+          startsAt, endsAt, durationMin, questions, settings,
+          published: publish, updatedAt: new Date(),
+        };
+        const db = await dbFor('groups');
+        const exams = db.collection('school_cbt_exams');
+        const examId = String(p.examId ?? '');
+        if (examId) {
+          if (!isHexId(examId)) return fail('A valid examId is required');
+          const existing = await exams.findOne({ _id: new ObjectId(examId) });
+          if (!existing || existing.schoolId !== schoolId) {
+            return fail('Exam not found', 404);
+          }
+          const started = await db.collection('school_cbt_attempts')
+            .countDocuments({ examId });
+          if (started > 0) {
+            // Students already sat it — only the window and result
+            // settings may change, never the questions.
+            await exams.updateOne({ _id: existing._id }, { $set: {
+              endsAt, 'settings.results': settings.results,
+              'settings.passMark': settings.passMark, updatedAt: new Date(),
+            } });
+            return ok({ exam: { id: examId }, locked: true });
+          }
+          await exams.updateOne({ _id: existing._id }, { $set: doc });
+          return ok({ exam: { id: examId } });
+        }
+        try { await exams.createIndex({ schoolId: 1, startsAt: -1 }); } catch { /* */ }
+        const inserted = await exams.insertOne({
+          ...doc, released: false, createdBy: uid, createdAt: new Date(),
+        });
+        return ok({ exam: { id: String(inserted.insertedId) } });
+      }
+
+      case 'cbt.exam.get': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const examId = String(p.examId ?? '');
+        if (!isHexId(examId)) return fail('A valid examId is required');
+        const exam = await (await dbFor('groups')).collection('school_cbt_exams')
+          .findOne({ _id: new ObjectId(examId) });
+        if (!exam) return fail('Exam not found', 404);
+        if (!(await isSchoolStaff(String(exam.schoolId), uid))) {
+          return fail('Only teachers and school admins can open an exam paper', 403);
+        }
+        const attempts = await (await dbFor('groups'))
+          .collection('school_cbt_attempts').countDocuments({ examId });
+        return ok({ exam: {
+          id: examId, schoolId: exam.schoolId, classId: exam.classId ?? null,
+          title: exam.title, subject: exam.subject ?? '',
+          instructions: exam.instructions ?? '', startsAt: exam.startsAt,
+          endsAt: exam.endsAt, durationMin: exam.durationMin,
+          questions: exam.questions ?? [], settings: exam.settings ?? {},
+          published: exam.published === true, released: exam.released === true,
+          attempts,
+        } });
+      }
+
+      case 'cbt.exam.delete': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const examId = String(p.examId ?? '');
+        if (!isHexId(examId)) return fail('A valid examId is required');
+        const db = await dbFor('groups');
+        const exam = await db.collection('school_cbt_exams')
+          .findOne({ _id: new ObjectId(examId) });
+        if (!exam) return fail('Exam not found', 404);
+        if (!(await isSchoolStaff(String(exam.schoolId), uid))) {
+          return fail('Only teachers and school admins can delete exams', 403);
+        }
+        await db.collection('school_cbt_attempts').deleteMany({ examId });
+        await db.collection('school_cbt_exams').deleteOne({ _id: exam._id });
+        return ok({ deleted: true });
+      }
+
+      case 'cbt.exam.list': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const schoolId = String(p.schoolId ?? '');
+        const staff = await isSchoolStaff(schoolId, uid);
+        if (!staff && !(await isClubMember('schools', schoolId, uid))) {
+          return ok({ exams: [], staff: false });
+        }
+        const db = await dbFor('groups');
+        const filter: Record<string, unknown> = { schoolId };
+        if (!staff) filter.published = true;
+        const rows = await db.collection('school_cbt_exams').find(filter, {
+          projection: { 'questions.type': 1, 'questions.marks': 1, title: 1, subject: 1,
+            classId: 1, startsAt: 1, endsAt: 1, durationMin: 1, settings: 1,
+            published: 1, released: 1, instructions: 1 },
+        }).sort({ startsAt: -1 }).limit(100).toArray();
+        let myClasses = new Set<string>();
+        if (!staff) {
+          const mine = await db.collection('school_class_members')
+            .find({ userId: uid }).project({ classId: 1 }).toArray();
+          myClasses = new Set(mine.map((m) => String(m.classId)));
+        }
+        const visible = rows.filter((r) => staff || !r.classId ||
+          myClasses.has(String(r.classId)));
+        const ids = visible.map((r) => String(r._id));
+        const classIds = [...new Set(visible.map((r) => String(r.classId ?? ''))
+          .filter((c) => isHexId(c)))];
+        const classes = classIds.length === 0 ? [] : await db
+          .collection('school_classes')
+          .find({ _id: { $in: classIds.map((c) => new ObjectId(c)) } })
+          .project({ name: 1 }).toArray();
+        const className = new Map(classes.map((c) => [String(c._id), String(c.name)]));
+        const mine = await db.collection('school_cbt_attempts')
+          .find({ examId: { $in: ids }, userId: uid }).toArray();
+        const myAttempt = new Map(mine.map((a) => [String(a.examId), a]));
+        const counts = staff ? await db.collection('school_cbt_attempts').aggregate([
+          { $match: { examId: { $in: ids } } },
+          { $group: { _id: '$examId', n: { $sum: 1 } } },
+        ]).toArray() : [];
+        const countOf = new Map(counts.map((c) => [String(c._id), c.n as number]));
+        const now = Date.now();
+        return ok({
+          staff,
+          serverNow: new Date(),
+          exams: visible.map((r) => {
+            const qs = (r.questions ?? []) as CbtQuestion[];
+            const a = myAttempt.get(String(r._id));
+            const showScore = a && a.status !== 'in_progress' && cbtResultsVisible(r);
+            const start = new Date(r.startsAt).getTime();
+            const end = new Date(r.endsAt).getTime();
+            return {
+              id: String(r._id), title: r.title, subject: r.subject ?? '',
+              instructions: r.instructions ?? '',
+              classId: r.classId ?? null,
+              className: r.classId ? className.get(String(r.classId)) ?? null : null,
+              startsAt: r.startsAt, endsAt: r.endsAt, durationMin: r.durationMin,
+              questionCount: qs.length, totalMarks: cbtTotal(qs),
+              hasTheory: qs.some((q) => q.type === 'theory'),
+              strictExit: (r.settings as Record<string, unknown>)?.strictExit !== false,
+              results: (r.settings as Record<string, unknown>)?.results ?? 'after_close',
+              passMark: (r.settings as Record<string, unknown>)?.passMark ?? 50,
+              status: now < start ? 'upcoming' : now < end ? 'live' : 'closed',
+              published: r.published === true, released: r.released === true,
+              attempts: staff ? countOf.get(String(r._id)) ?? 0 : undefined,
+              myAttempt: a ? {
+                id: String(a._id), status: a.status, reason: a.reason ?? null,
+                submittedAt: a.submittedAt ?? null,
+                score: showScore ? a.score : null,
+                total: showScore ? a.total : null,
+                theoryPending: showScore ? a.theoryPending ?? 0 : null,
+              } : null,
+            };
+          }),
+        });
+      }
+
+      case 'cbt.exam.start': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const examId = String(p.examId ?? '');
+        if (!isHexId(examId)) return fail('A valid examId is required');
+        const db = await dbFor('groups');
+        const exam = await db.collection('school_cbt_exams')
+          .findOne({ _id: new ObjectId(examId) });
+        if (!exam || exam.published !== true) return fail('Exam not found', 404);
+        if (!(await canSitCbt(exam, uid))) {
+          return fail('This exam is for another class or school', 403);
+        }
+        const now = new Date();
+        if (now < new Date(exam.startsAt)) {
+          return fail('This exam is still locked — it opens at '
+            + new Date(exam.startsAt).toISOString(), 423);
+        }
+        if (now >= new Date(exam.endsAt)) {
+          return fail('This exam has closed', 410);
+        }
+        const questions = (exam.questions ?? []) as CbtQuestion[];
+        const settings = (exam.settings ?? {}) as Record<string, unknown>;
+        const attempts = db.collection('school_cbt_attempts');
+        try { await attempts.createIndex({ examId: 1, userId: 1 }, { unique: true }); }
+        catch { /* exists */ }
+        let att = await attempts.findOne({ examId, userId: uid });
+        if (att && att.status !== 'in_progress') {
+          return fail('You have already submitted this exam', 409);
+        }
+        if (att && (settings.strictExit !== false ||
+            new Date(att.deadline).getTime() < now.getTime())) {
+          // Strict exams can't be re-entered: leaving (even a crash) ends
+          // the attempt with whatever was saved.
+          const g = gradeCbt(questions, (att.answers ?? {}) as Record<string, unknown>, {});
+          await attempts.updateOne({ _id: att._id, status: 'in_progress' }, { $set: {
+            status: 'auto_submitted',
+            reason: new Date(att.deadline).getTime() < now.getTime() ? 'time' : 'reentered',
+            submittedAt: now, score: g.score, total: g.total,
+            objective: g.objective, correct: g.correct, theoryPending: g.theoryPending,
+          } });
+          return fail('You left this exam earlier, so it was submitted '
+            + 'automatically with the answers you had saved.', 409);
+        }
+        if (!att) {
+          const seed = Math.floor(Math.random() * 2 ** 31);
+          const ids = questions.map((q) => q.id);
+          const order = settings.shuffleQuestions !== false ? cbtShuffle(ids, seed) : ids;
+          const optionOrder: Record<string, number[]> = {};
+          questions.forEach((q, i) => {
+            if (q.type !== 'mcq') return;
+            const base = q.options.map((_, k) => k);
+            optionOrder[q.id] = settings.shuffleOptions !== false
+              ? cbtShuffle(base, seed + i + 1) : base;
+          });
+          const deadline = new Date(Math.min(
+            now.getTime() + Number(exam.durationMin) * 60_000,
+            new Date(exam.endsAt).getTime(),
+          ));
+          const doc = {
+            examId, schoolId: exam.schoolId, userId: uid, status: 'in_progress',
+            startedAt: now, deadline, order, optionOrder, answers: {}, exits: 0,
+            events: [], theoryMarks: {},
+          };
+          try {
+            const ins = await attempts.insertOne(doc);
+            att = { ...doc, _id: ins.insertedId };
+          } catch (error) {
+            if (!isDupKey(error)) throw error;
+            return fail('This exam was opened on another device', 409);
+          }
+        }
+        const byId = new Map(questions.map((q) => [q.id, q]));
+        const order = (att.order as string[]) ?? questions.map((q) => q.id);
+        const optionOrder = (att.optionOrder ?? {}) as Record<string, number[]>;
+        return ok({
+          attempt: {
+            id: String(att._id), deadline: att.deadline, serverNow: now,
+            answers: att.answers ?? {},
+          },
+          exam: {
+            id: examId, title: exam.title, subject: exam.subject ?? '',
+            instructions: exam.instructions ?? '', durationMin: exam.durationMin,
+            strictExit: settings.strictExit !== false, totalMarks: cbtTotal(questions),
+          },
+          // Never the answers or explanations — only what's on the paper.
+          questions: order.map((id) => byId.get(id)).filter(Boolean).map((q) => ({
+            id: q!.id, type: q!.type, text: q!.text, marks: q!.marks,
+            imageUrl: q!.imageUrl ?? null,
+            options: q!.type === 'mcq'
+              ? (optionOrder[q!.id] ?? q!.options.map((_, k) => k))
+                .map((k) => ({ k, t: q!.options[k] }))
+              : [],
+          })),
+        });
+      }
+
+      case 'cbt.attempt.save':
+      case 'cbt.attempt.submit':
+      case 'cbt.attempt.event': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const attemptId = String(p.attemptId ?? '');
+        if (!isHexId(attemptId)) return fail('A valid attemptId is required');
+        const db = await dbFor('groups');
+        const attempts = db.collection('school_cbt_attempts');
+        const att = await attempts.findOne({ _id: new ObjectId(attemptId), userId: uid });
+        if (!att) return fail('Attempt not found', 404);
+        if (att.status !== 'in_progress') {
+          return ok({ status: att.status, closed: true });
+        }
+        const now = Date.now();
+        const deadline = new Date(att.deadline).getTime();
+        const inTime = now <= deadline + 60_000; // network grace
+        const incoming = (p.answers && typeof p.answers === 'object')
+          ? p.answers as Record<string, unknown> : null;
+        const clean: Record<string, unknown> = {};
+        if (incoming) {
+          for (const [k, v] of Object.entries(incoming).slice(0, 400)) {
+            if (!/^[\w-]{1,64}$/.test(k)) continue;
+            clean[k] = typeof v === 'number' ? v : String(v ?? '').slice(0, 20000);
+          }
+        }
+        if (action === 'cbt.attempt.event') {
+          await attempts.updateOne({ _id: att._id }, {
+            $inc: { exits: 1 },
+            $push: { events: { $each: [{ t: new Date(), type: String(p.type ?? 'left_app').slice(0, 30) }], $slice: -50 } } as never,
+          });
+          return ok({ logged: true });
+        }
+        const answers = inTime && incoming ? { ...(att.answers ?? {}), ...clean } : (att.answers ?? {});
+        if (action === 'cbt.attempt.save') {
+          if (!inTime) return fail('Time is up', 410);
+          await attempts.updateOne({ _id: att._id, status: 'in_progress' },
+            { $set: { answers, savedAt: new Date() } });
+          return ok({ saved: true });
+        }
+        const exam = await db.collection('school_cbt_exams')
+          .findOne({ _id: new ObjectId(String(att.examId)) });
+        if (!exam) return fail('Exam not found', 404);
+        const questions = (exam.questions ?? []) as CbtQuestion[];
+        const g = gradeCbt(questions, answers as Record<string, unknown>, {});
+        const reason = ['manual', 'time', 'left_app'].includes(String(p.reason))
+          ? String(p.reason) : 'manual';
+        await attempts.updateOne({ _id: att._id, status: 'in_progress' }, { $set: {
+          answers, status: reason === 'manual' ? 'submitted' : 'auto_submitted',
+          reason, submittedAt: new Date(), score: g.score, total: g.total,
+          objective: g.objective, correct: g.correct, theoryPending: g.theoryPending,
+          ...(reason === 'left_app' ? { exits: (Number(att.exits) || 0) + 1 } : {}),
+        } });
+        const visible = cbtResultsVisible(exam);
+        return ok({
+          status: reason === 'manual' ? 'submitted' : 'auto_submitted',
+          reason,
+          result: visible ? {
+            score: g.score, total: g.total, correct: g.correct,
+            theoryPending: g.theoryPending,
+            passMark: (exam.settings as Record<string, unknown>)?.passMark ?? 50,
+          } : null,
+        });
+      }
+
+      case 'cbt.results': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const examId = String(p.examId ?? '');
+        if (!isHexId(examId)) return fail('A valid examId is required');
+        const db = await dbFor('groups');
+        const exam = await db.collection('school_cbt_exams')
+          .findOne({ _id: new ObjectId(examId) });
+        if (!exam) return fail('Exam not found', 404);
+        if (!(await isSchoolStaff(String(exam.schoolId), uid))) {
+          return fail('Only teachers and school admins can see results', 403);
+        }
+        await finalizeExpiredCbt(examId);
+        const rows = await db.collection('school_cbt_attempts')
+          .find({ examId }).sort({ score: -1 }).limit(2000).toArray();
+        const names = await namesForUsers(rows.map((r) => String(r.userId)));
+        const total = cbtTotal((exam.questions ?? []) as CbtQuestion[]);
+        return ok({
+          exam: {
+            id: examId, title: exam.title, total, released: exam.released === true,
+            passMark: (exam.settings as Record<string, unknown>)?.passMark ?? 50,
+            results: (exam.settings as Record<string, unknown>)?.results ?? 'after_close',
+          },
+          attempts: rows.map((r) => ({
+            id: String(r._id), userId: r.userId,
+            name: names.get(String(r.userId)) ?? 'Student',
+            status: r.status, reason: r.reason ?? null, exits: r.exits ?? 0,
+            startedAt: r.startedAt, submittedAt: r.submittedAt ?? null,
+            score: r.score ?? null, total: r.total ?? total,
+            correct: r.correct ?? null, theoryPending: r.theoryPending ?? 0,
+          })),
+        });
+      }
+
+      case 'cbt.attempt.view': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const attemptId = String(p.attemptId ?? '');
+        if (!isHexId(attemptId)) return fail('A valid attemptId is required');
+        const db = await dbFor('groups');
+        const att = await db.collection('school_cbt_attempts')
+          .findOne({ _id: new ObjectId(attemptId) });
+        if (!att) return fail('Attempt not found', 404);
+        const exam = await db.collection('school_cbt_exams')
+          .findOne({ _id: new ObjectId(String(att.examId)) });
+        if (!exam) return fail('Exam not found', 404);
+        const staff = await isSchoolStaff(String(exam.schoolId), uid);
+        const own = att.userId === uid;
+        if (!staff && !(own && att.status !== 'in_progress' && cbtResultsVisible(exam))) {
+          return fail('Results are not available yet', 403);
+        }
+        const names = await namesForUsers([String(att.userId)]);
+        const answers = (att.answers ?? {}) as Record<string, unknown>;
+        const marks = (att.theoryMarks ?? {}) as Record<string, unknown>;
+        return ok({
+          attempt: {
+            id: attemptId, name: names.get(String(att.userId)) ?? 'Student',
+            status: att.status, reason: att.reason ?? null, exits: att.exits ?? 0,
+            events: att.events ?? [], score: att.score ?? null,
+            total: att.total ?? cbtTotal((exam.questions ?? []) as CbtQuestion[]),
+            theoryPending: att.theoryPending ?? 0,
+            submittedAt: att.submittedAt ?? null, startedAt: att.startedAt,
+          },
+          exam: { id: String(exam._id), title: exam.title },
+          questions: ((exam.questions ?? []) as CbtQuestion[]).map((q) => ({
+            id: q.id, type: q.type, text: q.text, options: q.options,
+            answer: q.answer, explanation: q.explanation, marks: q.marks,
+            imageUrl: q.imageUrl ?? null,
+            given: answers[q.id] ?? null,
+            awarded: q.type === 'mcq'
+              ? (Number(answers[q.id]) === q.answer ? q.marks : 0)
+              : (marks[q.id] ?? null),
+          })),
+        });
+      }
+
+      case 'cbt.attempt.grade': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const attemptId = String(p.attemptId ?? '');
+        if (!isHexId(attemptId)) return fail('A valid attemptId is required');
+        const db = await dbFor('groups');
+        const att = await db.collection('school_cbt_attempts')
+          .findOne({ _id: new ObjectId(attemptId) });
+        if (!att) return fail('Attempt not found', 404);
+        const exam = await db.collection('school_cbt_exams')
+          .findOne({ _id: new ObjectId(String(att.examId)) });
+        if (!exam) return fail('Exam not found', 404);
+        if (!(await isSchoolStaff(String(exam.schoolId), uid))) {
+          return fail('Only teachers and school admins can mark scripts', 403);
+        }
+        if (att.status === 'in_progress') {
+          return fail('The student is still writing this exam');
+        }
+        const questions = (exam.questions ?? []) as CbtQuestion[];
+        const marks = { ...((att.theoryMarks ?? {}) as Record<string, unknown>) };
+        const incoming = (p.marks ?? {}) as Record<string, unknown>;
+        for (const q of questions) {
+          if (q.type !== 'theory' || !(q.id in incoming)) continue;
+          const v = incoming[q.id];
+          if (v === null || v === '') { delete marks[q.id]; continue; }
+          marks[q.id] = Math.min(q.marks, Math.max(0, Number(v) || 0));
+        }
+        const g = gradeCbt(questions, (att.answers ?? {}) as Record<string, unknown>, marks);
+        await db.collection('school_cbt_attempts').updateOne({ _id: att._id }, { $set: {
+          theoryMarks: marks, score: g.score, total: g.total,
+          theoryPending: g.theoryPending, gradedBy: uid, gradedAt: new Date(),
+        } });
+        return ok({ score: g.score, total: g.total, theoryPending: g.theoryPending });
+      }
+
+      case 'cbt.exam.release': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const examId = String(p.examId ?? '');
+        if (!isHexId(examId)) return fail('A valid examId is required');
+        const db = await dbFor('groups');
+        const exam = await db.collection('school_cbt_exams')
+          .findOne({ _id: new ObjectId(examId) });
+        if (!exam) return fail('Exam not found', 404);
+        if (!(await isSchoolStaff(String(exam.schoolId), uid))) {
+          return fail('Only teachers and school admins can release results', 403);
+        }
+        await db.collection('school_cbt_exams').updateOne({ _id: exam._id },
+          { $set: { released: p.released !== false } });
+        return ok({ released: p.released !== false });
       }
 
       // ── kind superpowers: POTM, vice mods, school lists, leaderboards ────
