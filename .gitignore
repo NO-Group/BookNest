@@ -61,3 +61,7 @@ supabase/.deno/
 
 # Firebase config is injected by CI from a secret
 android/app/google-services.json
+
+# Machine-specific / generated — never commit
+/local.properties
+__pycache__/

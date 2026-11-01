@@ -1,6 +1,6 @@
 # BookNest — Backend Architecture v2 (Multi-Cloud Blueprint)
 
-> Status: **implemented, pending deployment.** The Flutter app is already wired
+> Status: **live** (server 2.33.0+, Supabase eu-west-1, MongoDB Atlas, Cloudflare R2, Cloudinary for images only). The Flutter app is already wired
 > to this architecture. Run `backend/README.md` to go live. Supabase tables that
 > bridge the transition are in `backend/supabase_min_schema.sql`.
 > The Mongo document contract: `docs/MONGO_SCHEMA.md`.

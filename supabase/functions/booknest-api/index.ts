@@ -1160,6 +1160,54 @@ async function finalizeExpiredCbt(examId: string): Promise<void> {
   }
 }
 
+/** In-app notification + push to school members (exam published,
+ * results released). Recipients are capped; push is fire-and-forget. */
+async function notifySchool(
+  userIds: string[], schoolId: string, title: string, text: string,
+  actorId: string,
+): Promise<void> {
+  const ids = [...new Set(userIds)].filter((u) => u && u !== actorId).slice(0, 2000);
+  if (ids.length === 0) return;
+  const now = new Date();
+  try {
+    await (await dbFor('notifications')).collection('notifications').insertMany(
+      ids.map((userId) => ({
+        userId, type: 'school', actorId, schoolId,
+        text: `${title} — ${text}`.slice(0, 200), read: false, createdAt: now,
+      })),
+    );
+  } catch (error) {
+    console.error('school notifications failed', error);
+  }
+  void Promise.all(ids.slice(0, 500).map((u) =>
+    sendPush(u, title, text.slice(0, 120), {
+      route: `/school/${schoolId}`, kind: 'school',
+    })));
+}
+
+/** Who should hear about an exam: its class roster, or the whole school. */
+async function cbtAudience(exam: Record<string, unknown>): Promise<string[]> {
+  const db = await dbFor('groups');
+  const classId = String(exam.classId ?? '');
+  const rows = classId
+    ? await db.collection('school_class_members').find({ classId })
+      .project({ userId: 1 }).limit(5000).toArray()
+    : await db.collection('schools_members').find({ groupId: String(exam.schoolId) })
+      .project({ userId: 1 }).limit(5000).toArray();
+  return rows.map((r) => String(r.userId));
+}
+
+function lagosTime(d: Date): string {
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Africa/Lagos', weekday: 'short', day: 'numeric',
+      month: 'short', hour: '2-digit', minute: '2-digit',
+    }).format(d) + ' WAT';
+  } catch {
+    return d.toISOString();
+  }
+}
+
 /** Is this student allowed to sit the exam (school + class roster)? */
 async function canSitCbt(
   exam: Record<string, unknown>, uid: string,
@@ -1753,7 +1801,7 @@ async function handleRequest(req: Request): Promise<Response> {
         const base = {
           databases: DB_NAMES,
           time: new Date().toISOString(),
-          server: '2.33.0',
+          server: '2.34.0',
         };
         if (!MONGO_URI) return ok({ ...base, db: null, mongo: 'not_configured' });
         try {
@@ -3182,6 +3230,10 @@ async function handleRequest(req: Request): Promise<Response> {
           classIds.length ? gdb.collection('school_class_members').deleteMany({ classId: { $in: classIds } }) : null,
           gdb.collection('school_assignments').deleteMany({ schoolId: id }),
           gdb.collection('school_exams').deleteMany({ schoolId: id }),
+          gdb.collection('school_cbt_exams').deleteMany({ schoolId: id }),
+          gdb.collection('school_cbt_attempts').deleteMany({ schoolId: id }),
+          gdb.collection('school_cbt_practice').deleteMany({ schoolId: id }),
+          gdb.collection('school_qbank').deleteMany({ schoolId: id }),
         ]);
         try {
           await (await dbFor('chats')).collection('conversations')
@@ -4672,6 +4724,7 @@ async function handleRequest(req: Request): Promise<Response> {
             actorId: n.actorId ?? null,
             conversationId: n.conversationId ?? null,
             bookId: n.bookId ?? null,
+            schoolId: n.schoolId ?? null,
             text: n.text ?? '',
             read: n.read === true,
             createdAt: n.createdAt,
@@ -5463,9 +5516,8 @@ async function handleRequest(req: Request): Promise<Response> {
         if (!schoolId || !title) {
           return fail('A school and a title are required');
         }
-        const manager = await groupManager('schools', schoolId, uid);
-        if (!manager) {
-          return fail('Only the school owner can schedule exams', 403);
+        if (!(await isSchoolStaff(schoolId, uid))) {
+          return fail('Only teachers and school admins can add exam dates', 403);
         }
         let at: Date | null = null;
         if (typeof p.at === 'string' && p.at) {
@@ -5479,6 +5531,21 @@ async function handleRequest(req: Request): Promise<Response> {
             at, createdAt: new Date(),
           });
         return ok({ exam: { id: String(inserted.insertedId) } });
+      }
+
+      case 'schools.exam.delete': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const examId = String(p.examId ?? '');
+        if (!isHexId(examId)) return fail('A valid examId is required');
+        const col = (await dbFor('groups')).collection('school_exams');
+        const row = await col.findOne({ _id: new ObjectId(examId) });
+        if (!row) return fail('Exam date not found', 404);
+        if (!(await isSchoolStaff(String(row.schoolId), uid))) {
+          return fail('Only teachers and school admins can remove exam dates', 403);
+        }
+        await col.deleteOne({ _id: row._id });
+        return ok({ deleted: true });
       }
 
       case 'schools.exam.list': {
@@ -5783,12 +5850,20 @@ async function handleRequest(req: Request): Promise<Response> {
             return ok({ exam: { id: examId }, locked: true });
           }
           await exams.updateOne({ _id: existing._id }, { $set: doc });
+          if (publish && existing.published !== true) {
+            await notifySchool(await cbtAudience(doc), schoolId,
+              `New exam: ${title}`, `Unlocks ${lagosTime(startsAt)}`, uid);
+          }
           return ok({ exam: { id: examId } });
         }
         try { await exams.createIndex({ schoolId: 1, startsAt: -1 }); } catch { /* */ }
         const inserted = await exams.insertOne({
           ...doc, released: false, createdBy: uid, createdAt: new Date(),
         });
+        if (publish) {
+          await notifySchool(await cbtAudience(doc), schoolId,
+            `New exam: ${title}`, `Unlocks ${lagosTime(startsAt)}`, uid);
+        }
         return ok({ exam: { id: String(inserted.insertedId) } });
       }
 
@@ -6086,8 +6161,31 @@ async function handleRequest(req: Request): Promise<Response> {
         const rows = await db.collection('school_cbt_attempts')
           .find({ examId }).sort({ score: -1 }).limit(2000).toArray();
         const names = await namesForUsers(rows.map((r) => String(r.userId)));
-        const total = cbtTotal((exam.questions ?? []) as CbtQuestion[]);
+        const paper = (exam.questions ?? []) as CbtQuestion[];
+        const total = cbtTotal(paper);
+        const finished = rows.filter((r) => r.status !== 'in_progress');
+        // Item analysis: how the class answered each question.
+        const items = paper.map((q) => {
+          const picks = q.type === 'mcq' ? q.options.map(() => 0) : [];
+          let answered = 0;
+          let correct = 0;
+          for (const r of finished) {
+            const v = ((r.answers ?? {}) as Record<string, unknown>)[q.id];
+            if (v === undefined || v === null || String(v).trim() === '') continue;
+            answered++;
+            if (q.type === 'mcq') {
+              const k = Number(v);
+              if (k >= 0 && k < picks.length) picks[k]++;
+              if (k === q.answer) correct++;
+            }
+          }
+          return {
+            id: q.id, type: q.type, text: q.text.slice(0, 300), options: q.options,
+            answer: q.answer, answered, correct, sat: finished.length, picks,
+          };
+        });
         return ok({
+          items,
           exam: {
             id: examId, title: exam.title, total, released: exam.released === true,
             passMark: (exam.settings as Record<string, unknown>)?.passMark ?? 50,
@@ -6181,6 +6279,36 @@ async function handleRequest(req: Request): Promise<Response> {
         return ok({ score: g.score, total: g.total, theoryPending: g.theoryPending });
       }
 
+      case 'cbt.exam.duplicate': {
+        const uid = await currentUserId(req);
+        if (!uid) return fail('Sign in required', 401);
+        const examId = String(p.examId ?? '');
+        if (!isHexId(examId)) return fail('A valid examId is required');
+        const db = await dbFor('groups');
+        const exam = await db.collection('school_cbt_exams')
+          .findOne({ _id: new ObjectId(examId) });
+        if (!exam) return fail('Exam not found', 404);
+        if (!(await isSchoolStaff(String(exam.schoolId), uid))) {
+          return fail('Only teachers and school admins can copy exams', 403);
+        }
+        const { _id, ...rest } = exam;
+        void _id;
+        const week = 7 * 24 * 60 * 60_000;
+        const startsAt = new Date(Math.max(Date.now() + 24 * 60 * 60_000,
+          new Date(exam.startsAt).getTime() + week));
+        const span = new Date(exam.endsAt).getTime() - new Date(exam.startsAt).getTime();
+        const inserted = await db.collection('school_cbt_exams').insertOne({
+          ...rest,
+          title: `${String(exam.title).slice(0, 150)} (copy)`,
+          questions: ((exam.questions ?? []) as CbtQuestion[])
+            .map((q) => ({ ...q, id: crypto.randomUUID() })),
+          startsAt, endsAt: new Date(startsAt.getTime() + span),
+          published: false, released: false,
+          createdBy: uid, createdAt: new Date(), updatedAt: new Date(),
+        });
+        return ok({ exam: { id: String(inserted.insertedId) } });
+      }
+
       case 'cbt.exam.release': {
         const uid = await currentUserId(req);
         if (!uid) return fail('Sign in required', 401);
@@ -6195,6 +6323,12 @@ async function handleRequest(req: Request): Promise<Response> {
         }
         await db.collection('school_cbt_exams').updateOne({ _id: exam._id },
           { $set: { released: p.released !== false } });
+        if (p.released !== false && exam.released !== true) {
+          const sat = await db.collection('school_cbt_attempts')
+            .find({ examId }).project({ userId: 1 }).limit(5000).toArray();
+          await notifySchool(sat.map((a) => String(a.userId)), String(exam.schoolId),
+            `Results are out: ${exam.title}`, 'Open the school to see your score', uid);
+        }
         return ok({ released: p.released !== false });
       }
 
@@ -7996,6 +8130,22 @@ async function handleRequest(req: Request): Promise<Response> {
         await counts('push_tokens', users.collection('push_tokens').deleteMany({ userId: uid }));
         await counts('blocks', moderation.collection('blocks').deleteMany({ $or: [{ userId: uid }, { blockedId: uid }] }));
         await counts('reports', moderation.collection('reports').deleteMany({ reporterId: uid }));
+        // Group footprint: memberships, rosters, RSVPs, exam scripts and
+        // practice history. Groups the reader owns stay for their members.
+        const groupsDb = await dbFor('groups');
+        for (const kind of ['clubs', 'communities', 'organizations', 'schools']) {
+          await counts(`${kind}_members`, groupsDb.collection(`${kind}_members`).deleteMany({ userId: uid }));
+        }
+        await counts('unit_members', groupsDb.collection('unit_members').deleteMany({ userId: uid }));
+        await counts('event_rsvps', groupsDb.collection('event_rsvps').deleteMany({ userId: uid }));
+        await counts('school_class_members', groupsDb.collection('school_class_members').deleteMany({ userId: uid }));
+        await counts('school_cbt_attempts', groupsDb.collection('school_cbt_attempts').deleteMany({ userId: uid }));
+        await counts('school_cbt_practice', groupsDb.collection('school_cbt_practice').deleteMany({ userId: uid }));
+        await counts('event_rsvps_social', social.collection('event_rsvps').deleteMany({ userId: uid }));
+        await counts('cbt_teacher', groupsDb.collection('schools').updateMany(
+          { cbtTeacherIds: uid } as never, { $pull: { cbtTeacherIds: uid } } as never));
+        await counts('notifications', (await dbFor('notifications')).collection('notifications')
+          .deleteMany({ userId: uid }));
         // The profile row and the auth account itself.
         let profileGone = false;
         let authGone = false;

@@ -1,305 +1,52 @@
-# BookNest — Your Checklist (from the chat-backup release to publishing)
+# BookNest — Your checklist
 
----
+Only what still needs **you**. Everything else (server deploys, builds,
+smoke tests, releases) runs automatically from GitHub Actions. Live reports:
+`ops/smoke-report.md`, `ops/analyze-report.md`, `ops/google-setup.md`,
+`ops/play-check.md`.
 
-## This build, 2.31.0 — security fixes (do these 2 to finish)
+## 1 · Merge the release PR
 
-The new APK and PC installers are on the **Releases** page. The app-side
-fixes are inside them. The **server** fixes (paid gems, wallet, streaks,
-events, publishing, announcements, the gem-exploit lock) only take effect
-once the server is updated — one of these, whichever is easier:
+PR #61 → `BookNest`. The server is already live from the branch; merging
+makes the default branch match it, and lets the scheduled jobs (storage
+sweeps, health checks) run, because GitHub only runs cron workflows from
+the default branch.
 
-1. **One-click (recommended):** Supabase dashboard → your avatar (top
-   right) → **Access Tokens** → *Generate new token*. Then GitHub → this
-   repo → Settings → Secrets and variables → Actions → *New repository
-   secret* → name `SUPABASE_ACCESS_TOKEN`, paste the token. Then Actions →
-   **Supabase Edge Deploy** → Run workflow (branch
-   `arena/01a106c8-booknest`). It applies the database lock, deploys the
-   server and checks the live version says **2.25**.
-2. **By hand:** Supabase → SQL Editor → paste
-   `supabase/migrations/20261004000001_lock_privileged_columns.sql` → Run
-   (prints *BookNest privileged columns locked*). Then Edge Functions →
-   booknest-api → paste `supabase/functions/booknest-api/index.ts` →
-   Deploy.
+## 2 · Google sign-in and Drive backup on Android (one-time, ~5 min)
 
-**Signing key (do before the Play Store):** the release keystore is still
-committed in `android/key/`. It stays for now on purpose — removing it
-would make CI sign with a different key and every installed copy would
-refuse to update. To move it out: GitHub → Settings → Secrets → Actions →
-add `KEYSTORE_BASE64` (= `base64 -w0 android/key/booknest-release.jks`)
-and `KEYSTORE_PROPERTIES_BASE64` (= `base64 -w0
-android/key/booknest-keystore.properties`); the Android workflow already
-prefers them. Then delete the two files from the repo. Because the key is
-in git history, publish to Play with **Play App Signing** (Google holds
-the real app key; this one becomes just the upload key, which can be
-reset).
+1. Firebase console → project **booknest-12-33-oct22-2026** → Project
+   settings → Your apps → Android `com.n_o_group.booknest` → **Add
+   fingerprint**:
+   - SHA-1 `5F:64:B4:39:E7:F5:9C:78:0C:CA:16:28:5A:D6:F8:7E:57:F9:51:EB`
+   - SHA-256 `67:E0:00:83:FB:28:0F:2A:30:77:9D:D0:A3:14:CE:74:44:B7:6F:0D:02:66:E6:EC:08:B7:39:45:25:A8:B2:93`
+2. Download the new `google-services.json` and replace
+   `android/app/google-services.json`, or send it to the agent.
+3. Google Cloud console (same project) → APIs & Services → enable **Google
+   Drive API** → OAuth consent screen: add the scope
+   `.../auth/drive.appdata`.
 
-Everything the code side has shipped (v2.6 → v2.25) is built, green, and
-waiting. What follows is **every action only you can do**, in order,
-dashboard-click level. Tick them top to bottom — each has a "proof" so
-you know it worked.
+`ops/google-setup.md` turns ✅ once this is done.
 
----
+## 3 · Optional GitHub secrets (NO-Group/BookNest → Settings → Secrets)
 
-## This build — the storage fix, nearly automatic
+| Secret | What it unlocks |
+|---|---|
+| `GOOGLE_IOS_CLIENT_ID` | Google sign-in / Drive backup on iPhone |
+| `GOOGLE_DESKTOP_CLIENT_ID`, `GOOGLE_DESKTOP_CLIENT_SECRET` | Google sign-in / Drive backup on PC |
+| `KEYSTORE_BASE64`, `KEYSTORE_PROPERTIES_BASE64` | Move the Android signing key out of the repo (only if you rotate it; the committed key is in use today) |
 
-Your MongoDB alerts were real: the free database filled past its
-512 MB limit because the book import stored every full chapter text
-inside it. Nothing is lost. This build fixes it for good:
+## 4 · Google Play
 
-1. The **Library to CDN** workflow (Actions tab) moves every chapter
-   text to your free Cloudinary space automatically. If MongoDB lets
-   it finish, there is NOTHING for you to do — the run's summary will
-   say so.
-2. Only if its summary says MongoDB refused every write, do this one
-   click: log into cloud.mongodb.com → your Books cluster → Browse
-   Collections → the `books` database → hover the `chapters`
-   collection → the trash icon → confirm. (Safe: every text is
-   already on the CDN, and the workflow keeps a complete manifest to
-   rebuild from.) Then run the **Library to CDN** workflow again
-   (Actions tab → the workflow → "Run workflow").
-3. When it finishes, download your PC installers from the latest
-   **Desktop Release** run's artifacts: Windows zip, macOS app,
-   Linux tar.gz.
+Store listing and forms: `docs/STORE_LISTING.md`, `docs/PLAY_CONSOLE_FORMS.md`.
+Privacy policy URL:
+https://github.com/NO-Group/BookNest/blob/BookNest/docs/legal/PRIVACY.md
+Upload `booknest-play.aab` from the latest `app-…` release.
 
-Also in this build: comics are gone everywhere as you ordered, books
-open properly when tapped (a real bug fixed), and the Word Nest
-dictionary refills itself after the storage fix.
+## 5 · Schools: getting started with CBT
 
-## This build, 2.30.0 — the storage fix (do these 3 in order)
-
-Your MongoDB alerts were real: the book import filled the free
-database past its 512 MB limit, because it stored every book's full
-text inside it. Everything you built is safe. This build moves the
-texts to your free Cloudinary media space (the law the app already
-follows for covers) and keeps only small info in the database.
-
-1. Wait for the two Actions runs that start from this push to finish:
-   **Library to CDN** (moves the texts out — its summary tells you how
-   much space was freed) and **BookNest Desktop Release** (your PC
-   installers). Check them on the Actions tab of this repo.
-2. When "Library to CDN" finishes green, the Word Nest dictionary
-   fills itself on the server as the run's last step (96k words).
-   Open Word Nest in the app and it is simply there. If it still
-   looks empty, tell me.
-3. Download your PC installers from this repo's **Releases** page
-   (right side): the newest "BookNest for PC" entry has the Windows
-   zip, the macOS app and the Linux tar.gz together. The phone APK
-   lives there too ("BookNest … for Android" → booknest.apk).
-
-Nothing else is on you this time. Comics are gone everywhere as you
-ordered; the app no longer uses Firebase at all.
-
-## 0 · What just shipped (v2.29.0+54)
-
-Anime grew an **ink engine** (draw freehand on panels, six colors,
-pen widths) plus long-press panel menus and a Discover entry. Chats
-now show a **mic button instead of send** while the text box is empty
-— voice notes are one tap, WhatsApp-style. And a **Desktop Release**
-workflow now builds BookNest for Windows, macOS and Linux.
-
-Your actions:
-1. Install the new APK (step 1 below) — or grab the PC builds from
-   **Actions → Desktop Release → Run workflow** (each OS uploads its
-   own artifact; macOS builds are unsigned: right-click → Open).
-2. **Library Import — one click, still pending.** Actions tab → branch
-   dropdown to `arena/01a03a7f-booknest` → Library Import → Run
-   workflow → Run. Your secrets are already in place; this single run
-   updates the server AND fills 1,500+ books + the full dictionary.
-   (After this first run, just ask me — I can run it for you.)
-
----
-
-## 1 · Install the current app (5 min)
-
-- [ ] Open **github.com/NO-Group/BookNest** → **Actions** tab.
-- [ ] Tap the **newest green run** (its title starts with the highest
-      version, e.g. "v2.25…").
-- [ ] Scroll to **Artifacts** → download **BookNest-release-apk**.
-- [ ] Open the file on the phone → **Install**.
-      - If Play Protect interrupts: **More details → Install anyway**.
-- [ ] Open BookNest → **Settings → About** → the Version line must show
-      **2.25.0+42** or higher.
-
-**Proof:** the version line matches the run you installed.
-
----
-
-## 2 · Update the server — ONE paste (5 min) ← the big one
-
-The app now carries a guided kit for this, but here is the plain path:
-
-- [ ] On GitHub (same branch, `arena/01a03a7f-booknest`) open
-      **`supabase/functions/booknest-api/index.ts`** → **Raw** button →
-      select **all** → copy.
-- [ ] **supabase.com** dashboard → your project → **Edge Functions** →
-      **booknest-api** → **Edit**.
-- [ ] Click in the code box → **Ctrl/Cmd+A** → **paste** (replaces the
-      old file) → **Deploy** → wait for the confirmation.
-- [ ] Back in the app → **Settings → About** → the red banner (if it was
-      there) should now be **gone** (or tap **Re-test**).
-
-**Proof:** no red banner in About or Moderation + the file
-`backend-probe.txt` (repo root, updates on every CI run) shows a ping
-carrying the current `server` stamp and a books list with **6 seeded
-classics**.
-
-**Why it matters:** this single paste activates — reports, message
-deletes, reactions, the books shelf (auto-seeded with 6 real classics),
-the moderator users-list fallback, the in-app deploy-kit handshakes, and
-Random Chat matching.
-
----
-
-## 3 · Never paste again — one-click deploys (3 min, one-time)
-
-- [ ] Supabase dashboard → avatar (bottom-left) → **Account** →
-      **Access Tokens** → **Generate new token** (`booknest-ci`) → copy.
-- [ ] Project **Settings → General → Reference ID** → copy.
-- [ ] GitHub repo → **Settings → Secrets and variables → Actions** →
-      **New repository secret**:
-      - `SUPABASE_ACCESS_TOKEN` = the token
-      - `SUPABASE_PROJECT_REF` = the Reference ID
-- [ ] **Actions → Supabase Edge Deploy → Run workflow** → Run.
-- [ ] Full guide: **`ops/SUPABASE_AUTO_DEPLOY.md`**.
-
-**Proof:** that workflow run goes green — from now on, server updates
-are that one click.
-
----
-
-## 3B · Fill the library — 1,500+ real classics (the agent runs this)
-
-The import is **not your job anymore**. One workflow now does the whole
-thing by itself: it updates the server, creates its own secure import
-key (never shown to anyone), then streams in the most-read
-public-domain books on Earth — Sherlock Holmes, Pride and Prejudice,
-The Art of War, Dracula and 1,500+ more — each with its real cover.
-Fully legal (Public Domain in the USA), nothing hand-copied, and
-re-runs skip what's already in.
-
-- [ ] First make sure **step 3 above is done** (the two secrets:
-      `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF`). That handover
-      is the only part only you can do — GitHub and Supabase only let
-      the account owner create those keys.
-- [ ] GitHub → **Actions** tab → the branch dropdown at the top-left
-      says **main** — switch it to **arena/01a03a7f-booknest** (this is
-      the step everyone misses; on `main` the button is invisible!).
-- [ ] Now **Library Import** appears in the workflow list → click it →
-      **Run workflow** → leave everything as it is ("Readiness check
-      only" = false) → **Run**.
-- [ ] Wait for the green run (~10–40 min — watch the counter climb in
-      the log). Re-running anytime is safe; finished books skip.
-
-After the FIRST run you can also just tell the agent
-**"run the library import"** in chat — it presses the button for you.
-
-**Proof:** the run summary says "imported 1500+"; the Books screen now
-needs scrolling. Moderators can delete any imported book like any other
-(all get `bulk-` ids and real titles/authors).
-
----
-
----
-
-## 4 · Calls that connect everywhere — TURN (4 min, one-time, optional but recommended)
-
-- [ ] First do steps 2–3 (TURN rides the updated server).
-- [ ] Cloudflare dashboard → **Calls → TURN** → enable → copy the
-      **Auth token**.
-- [ ] Supabase → Project **Settings → Edge Functions → Secrets** → add:
-      - `TURN_URL` =
-        `turn:standard.turn.cloudflare.com:3478?transport=udp,turn:standard.turn.cloudflare.com:3478?transport=tcp,turns:standard.turn.cloudflare.com:5349?transport=tcp`
-      - `TURN_SECRET` = the auth token
-- [ ] Full guide: **`ops/TURN_SETUP.md`**.
-
-**Proof:** calls connect even on stubborn networks (hotel/corporate).
-
----
-
-## 5 · Test the flagship list (10 min)
-
-- [ ] **Feed**: like a post — count moves instantly. Long post cards
-      never overflow; long names shrink to "…".
-- [ ] **Chats**: send text, photo, **voice note** (play, scrub, 2×),
-      emoji; long-press → reply, react, delete (for me / everyone).
-- [ ] **Random chat**: Messages screen → **shuffle icon** → search →
-      matched into a normal chat (test with a second account).
-- [ ] **Calls**: voice + video between two accounts — timer ticks,
-      speaker/earpiece, mute, camera flip. Accept/decline with ringtone.
-- [ ] **Books**: shelf shows the 6 classics; open one and read.
-- [ ] **Profile**: any reader's page — left-aligned header, stat
-      counters, **Follow / Message** pills, Books/About tabs.
-- [ ] **Emotes**: keyboard → Emotes/Animated tabs — real Twemoji art
-      with the glow-and-motion effects.
-- [ ] **Reports**: long-press any message / profile menu → Report →
-      it lands in the Moderation console.
-- [ ] **Moderator console**: Readers tab fills.
-
----
-
-## 6 · Move the signing identity into secrets (publish-critical, when ready)
-
-The signing key currently lives in the repo — fine while the repo is
-private, but it must move before publishing. The pipeline already
-prefers secrets when present (nothing breaks until you rotate):
-
-- [ ] Tell me "rotate the keystore" — I'll generate a fresh identity and
-      give you two base64 blobs to paste as GitHub secrets:
-      `KEYSTORE_BASE64` and `KEYSTORE_PROPERTIES_BASE64`.
-- [ ] I then remove the committed key files; CI keeps signing installs
-      so everyone's app keeps updating.
-
-**Proof:** newest green run's log shows "Signing with secret-provided
-identity."
-
----
-
-## 7 · Publish runway — already cleared
-
-- [x] No developer-speak anywhere in the UI (vendor names, "paste",
-      "deploy", "server setting" instructions — all rewritten or
-      removed for readers; the only technical banner left is the
-      owner-only update notice that disappears once step 2 is done).
-- [x] Emote artwork properly credited (Settings → About + NOTICE file).
-- [x] Store basics: production-signed APK from CI, version bump every
-      release, no secrets in the app.
-
-**You're publish-ready when steps 1–2 are ticked.**
-
----
-
-# PARKED · Money — only when YOU say go
-
-You chose to leave monetization out for now. Nothing below is needed
-until you say so — the app works fully without it (readers just read
-for free). When that day comes, do these in order:
-
-## 3C · Switch on money: Paystack + the price catalog (10 min)
-
-- [ ] **Fill the shelves FIRST** — if you have not done step 3B yet
-      (Library Import), do it now. An empty library is the one thing
-      that drives readers away, and 3B fixes it with one click.
-- [ ] **supabase.com** dashboard → **SQL Editor** → **New query**.
-- [ ] On GitHub (branch `arena/01a03a7f-booknest`) open
-      **`supabase/migrations/20260806000005_monetization_catalog.sql`**
-      → **Raw** → select all → copy → paste into the SQL Editor →
-      **Run**. You should see "Success. No rows returned".
-      This creates the fixed ₦/$ price catalog (11 products × 2
-      currencies). Prices are edited HERE from now on — never in the app.
-- [ ] **Paystack**: sign up / sign in at **paystack.com** →
-      **Settings → API Keys & Webhooks** → copy your **Secret Key**
-      (starts `sk_test_` while testing, `sk_live_` when you go live).
-- [ ] Back in Supabase: **Edge Functions → booknest-api → Secrets** →
-      add a secret: name **`PAYSTACK_SECRET_KEY`**, value = the key you
-      copied.
-- [ ] Still in Paystack → **Webhooks** → **Add webhook URL** → paste:
-      `https://ekgbbbbjwgfixqarlnil.supabase.co/functions/v1/booknest-api`
-      and tick **Charge success**. This is how payments confirm even if
-      a reader closes the app mid-checkout.
-- [ ] Open the app → **Wallet → BookNest Store** → buy the **100 Gems**
-      pack with the TEST key → pay with Paystack's test card → the gems
-      should land in your wallet within a minute.
-
-**Proof:** gems land in the wallet after a test payment; the webhook
-URL shows as active in Paystack.
+1. Create the school → **Classes** (optional, for class-only exams).
+2. **CBT & exams → Question bank** → write questions, or paste a sheet:
+   `subject, topic, year, question, A, B, C, D, answer, explanation, marks`.
+3. **Set exam** → pick a start time, duration and window → Publish.
+   Questions unlock at the start time. Leaving the exam submits it.
+4. **⋮ → Results & marking** → mark theory answers → release results.
