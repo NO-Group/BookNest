@@ -6,11 +6,12 @@ import 'package:booknest/presentation/screens/discover/school_cbt_common.dart';
 
 void main() {
   group('Brand theme', () {
-    test('dark theme: near-black background, navy primary, cyan secondary', () {
+    test('dark theme: near-black background, cyan accents', () {
       final theme = BookNestTheme.darkTheme;
       expect(theme.brightness, Brightness.dark);
       expect(theme.scaffoldBackgroundColor, BookNestColors.darkBackground);
-      expect(theme.colorScheme.primary, const Color(0xFF102A56));
+      // Cyan reads better than navy on the near-black background.
+      expect(theme.colorScheme.primary, const Color(0xFF00E5FF));
       expect(theme.colorScheme.secondary, const Color(0xFF00E5FF));
     });
 

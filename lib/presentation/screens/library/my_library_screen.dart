@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
-import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 
 /// My Library — everything you keep: cloud-synced saved books + your works.

@@ -19,7 +19,7 @@ Future<String?> pickCbtImage() async {
     final ext = picked.name.contains('.')
         ? picked.name.split('.').last.toLowerCase()
         : 'jpg';
-    return CloudinaryService.uploadImage(
+    return await CloudinaryService.uploadImage(
       bytes: bytes,
       folder: 'cbt',
       extension: const ['jpg', 'jpeg', 'png', 'webp'].contains(ext) ? ext : 'jpg',
