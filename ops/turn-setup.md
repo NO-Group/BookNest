@@ -1,4 +1,4 @@
-# TURN relay setup — 2026-11-01 14:35 UTC
+# TURN relay setup — 2026-11-01 15:09 UTC
 - server secrets readable: 22 names
 - server secrets present: CF_TURN_KEY_API_TOKEN CF_TURN_KEY_ID 
 - source: GitHub secrets CF_TURN_KEY_ID / CF_TURN_KEY_API_TOKEN
