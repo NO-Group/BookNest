@@ -116,9 +116,9 @@ class _FilePreviewScreenState extends State<FilePreviewScreen> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(22),
-                  color: BookNestColors.cyan.withOpacity(.10),
+                  color: BookNestColors.cyan.withValues(alpha: .10),
                   border:
-                      Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+                      Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
                 ),
                 child: Icon(_icon, color: BookNestColors.cyan, size: 54),
               ),

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,6 +28,7 @@ class SchoolCbtSection extends StatefulWidget {
 
 class _SchoolCbtSectionState extends State<SchoolCbtSection> {
   List<Map<String, dynamic>> _exams = [];
+  List<Map<String, dynamic>> _dates = [];
   bool _loading = true;
   bool _staff = false;
   bool _manager = false;
@@ -61,6 +61,8 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
         .call('cbt.role', {'schoolId': _schoolId});
     final res = await BackendApi.instance
         .call('cbt.exam.list', {'schoolId': _schoolId});
+    final dates = await BackendApi.instance
+        .call('schools.exam.list', {'schoolId': _schoolId});
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -70,6 +72,10 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
           .map((e) => e.toString())
           .toList();
       _exams = cbtList(res?['exams']);
+      final cutoff = DateTime.now().subtract(const Duration(days: 2));
+      _dates = cbtList(dates?['exams'])
+          .where((d) => (cbtDate(d['at']) ?? DateTime(2100)).isAfter(cutoff))
+          .toList();
       final server = cbtDate(res?['serverNow']);
       if (server != null) _skew = server.difference(DateTime.now());
     });
@@ -225,7 +231,7 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
                       }
                       return SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        activeColor: BookNestColors.cyan,
+                        activeThumbColor: BookNestColors.cyan,
                         value: chosen.contains(id),
                         title: Text(names[id] ?? 'Member'),
                         onChanged: (v) async {
@@ -245,6 +251,139 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
       ),
     );
     _load();
+  }
+
+  Future<void> _duplicate(Map<String, dynamic> exam) async {
+    final res = await cbtCall(
+        context, 'cbt.exam.duplicate', {'examId': exam['id']},
+        fallback: 'Could not copy the exam.');
+    if (res == null || !mounted) return;
+    cbtToast(context, 'Copied as a draft — set the new date, then publish.');
+    _push(CbtSetExamScreen(
+        schoolId: _schoolId, examId: res['exam']['id'].toString()));
+  }
+
+  /// A paper exam sat in class — just a date on the calendar.
+  Future<void> _addDate() async {
+    final title = TextEditingController();
+    final subject = TextEditingController();
+    var at = DateTime.now().add(const Duration(days: 7));
+    at = DateTime(at.year, at.month, at.day, 9);
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: const Text('Add an exam date'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Text(
+                    'For exams written in class (not on BookNest). Students '
+                    'see a countdown.',
+                    style: TextStyle(fontSize: 12.5)),
+                const SizedBox(height: 10),
+                TextField(
+                    controller: title,
+                    decoration: const InputDecoration(labelText: 'Title')),
+                TextField(
+                    controller: subject,
+                    decoration: const InputDecoration(labelText: 'Subject')),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(cbtWhen(at)),
+                  trailing: const Icon(Icons.edit_calendar_rounded),
+                  onTap: () async {
+                    final d = await showDatePicker(
+                        context: context,
+                        initialDate: at,
+                        firstDate: DateTime.now()
+                            .subtract(const Duration(days: 1)),
+                        lastDate:
+                            DateTime.now().add(const Duration(days: 730)));
+                    if (d == null || !context.mounted) return;
+                    final t = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.fromDateTime(at));
+                    setLocal(() => at = DateTime(d.year, d.month, d.day,
+                        t?.hour ?? at.hour, t?.minute ?? at.minute));
+                  },
+                ),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Add')),
+          ],
+        ),
+      ),
+    );
+    if (save != true || title.text.trim().isEmpty || !mounted) return;
+    final res = await cbtCall(context, 'schools.exam.create', {
+      'schoolId': _schoolId,
+      'title': title.text.trim(),
+      'subject': subject.text.trim(),
+      'at': at.toUtc().toIso8601String(),
+    }, fallback: 'Could not add the date.');
+    if (res != null) _load();
+  }
+
+  Future<void> _removeDate(Map<String, dynamic> d) async {
+    final res = await cbtCall(
+        context, 'schools.exam.delete', {'examId': d['id']},
+        fallback: 'Could not remove the date.');
+    if (res != null) _load();
+  }
+
+  Widget _datesGroup() {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('WRITTEN IN CLASS',
+            style: TextStyle(
+                fontSize: 11,
+                letterSpacing: .8,
+                fontWeight: FontWeight.w800,
+                color: onSurface.withValues(alpha: .5))),
+        for (final d in _dates)
+          Builder(builder: (_) {
+            final at = cbtDate(d['at']);
+            final left = at?.difference(_now);
+            return ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.edit_document,
+                  color: BookNestColors.cyan, size: 22),
+              title: Text(d['title']?.toString() ?? 'Exam',
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: Text([
+                if ((d['subject']?.toString() ?? '').isNotEmpty) d['subject'],
+                cbtWhen(at),
+              ].join(' · ')),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (left != null && !left.isNegative)
+                  Text(cbtCountdown(left),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: BookNestColors.cyan)),
+                if (_staff)
+                  IconButton(
+                    tooltip: 'Remove',
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    onPressed: () => _removeDate(d),
+                  ),
+              ]),
+            );
+          }),
+      ]),
+    );
   }
 
   @override
@@ -283,7 +422,7 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
           if (!member && !_loading)
             Text('Join the school to practise and sit its exams.',
                 style:
-                    TextStyle(fontSize: 12.5, color: onSurface.withOpacity(.6)))
+                    TextStyle(fontSize: 12.5, color: onSurface.withValues(alpha: .6)))
           else
             Wrap(spacing: 8, runSpacing: 8, children: [
               _chip(Icons.school_rounded, 'Practice', () {
@@ -297,6 +436,7 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
                 _chip(Icons.inventory_2_rounded, 'Question bank', () {
                   _push(CbtQuestionBankScreen(schoolId: _schoolId));
                 }),
+                _chip(Icons.event_note_rounded, 'Exam date', _addDate),
               ],
             ]),
           if (_loading)
@@ -307,7 +447,7 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
                       strokeWidth: 2, color: BookNestColors.cyan)),
             )
           else if (member) ...[
-            if (_exams.isEmpty)
+            if (_exams.isEmpty && _dates.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 14),
                 child: Text(
@@ -316,10 +456,11 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
                             'Questions stay locked until it starts.'
                         : 'No exams scheduled for you yet.',
                     style: TextStyle(
-                        fontSize: 12.5, color: onSurface.withOpacity(.6))),
+                        fontSize: 12.5, color: onSurface.withValues(alpha: .6))),
               ),
             if (live.isNotEmpty) _group('Live now', live),
             if (upcoming.isNotEmpty) _group('Upcoming', upcoming),
+            if (_dates.isNotEmpty) _datesGroup(),
             if (closed.isNotEmpty) _group('Past', closed.take(8).toList()),
           ],
         ]),
@@ -343,7 +484,7 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
                 fontSize: 11,
                 letterSpacing: .8,
                 fontWeight: FontWeight.w800,
-                color: onSurface.withOpacity(.5))),
+                color: onSurface.withValues(alpha: .5))),
         for (final e in exams) _examTile(e),
       ]),
     );
@@ -383,6 +524,8 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
             _push(CbtResultsScreen(
                 examId: e['id'].toString(),
                 title: e['title']?.toString() ?? 'Results'));
+          } else if (v == 'duplicate') {
+            _duplicate(e);
           } else if (v == 'delete') {
             _delete(e);
           }
@@ -390,6 +533,7 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
         itemBuilder: (_) => const [
           PopupMenuItem(value: 'results', child: Text('Results & marking')),
           PopupMenuItem(value: 'edit', child: Text('Edit')),
+          PopupMenuItem(value: 'duplicate', child: Text('Duplicate (reuse paper)')),
           PopupMenuItem(value: 'delete', child: Text('Delete')),
         ],
       );
@@ -411,10 +555,10 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
       );
     } else if (status == 'upcoming') {
       trailing = Icon(Icons.lock_clock_rounded,
-          color: onSurface.withOpacity(.45));
+          color: onSurface.withValues(alpha: .45));
     } else {
       trailing = Text('Missed',
-          style: TextStyle(color: onSurface.withOpacity(.45)));
+          style: TextStyle(color: onSurface.withValues(alpha: .45)));
     }
     return Padding(
       padding: const EdgeInsets.only(top: 10),
@@ -465,7 +609,7 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                    fontSize: 11.5, color: onSurface.withOpacity(.6))),
+                    fontSize: 11.5, color: onSurface.withValues(alpha: .6))),
             Text(
                 _staff
                     ? '$line · ${e['attempts'] ?? 0} sat'
@@ -479,7 +623,7 @@ class _SchoolCbtSectionState extends State<SchoolCbtSection> {
                     fontWeight: FontWeight.w600,
                     color: status == 'live'
                         ? const Color(0xFF00B894)
-                        : onSurface.withOpacity(.6))),
+                        : onSurface.withValues(alpha: .6))),
           ]),
         ),
         const SizedBox(width: 6),
@@ -736,7 +880,7 @@ class _CbtExamRoomScreenState extends State<CbtExamRoomScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: (low ? Colors.redAccent : BookNestColors.cyan).withOpacity(.15),
+        color: (low ? Colors.redAccent : BookNestColors.cyan).withValues(alpha: .15),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -885,7 +1029,7 @@ class _CbtExamRoomScreenState extends State<CbtExamRoomScreen>
         value: _questions.where(_isAnswered).length / _questions.length,
         minHeight: 3,
         color: BookNestColors.cyan,
-        backgroundColor: onSurface.withOpacity(.08),
+        backgroundColor: onSurface.withValues(alpha: .08),
       ),
       Expanded(
         child: SingleChildScrollView(
@@ -900,10 +1044,10 @@ class _CbtExamRoomScreenState extends State<CbtExamRoomScreen>
                       Text('Question ${_index + 1} of ${_questions.length}',
                           style: TextStyle(
                               fontWeight: FontWeight.w800,
-                              color: onSurface.withOpacity(.6))),
+                              color: onSurface.withValues(alpha: .6))),
                       const Spacer(),
                       Text('${cbtNum(q['marks'])} mark${q['marks'] == 1 ? '' : 's'}',
-                          style: TextStyle(color: onSurface.withOpacity(.6))),
+                          style: TextStyle(color: onSurface.withValues(alpha: .6))),
                       IconButton(
                         tooltip: 'Flag for review',
                         onPressed: () => setState(() => _flagged.contains(qid)
@@ -995,14 +1139,14 @@ class _CbtExamRoomScreenState extends State<CbtExamRoomScreen>
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
         color: selected
-            ? BookNestColors.cyan.withOpacity(.14)
-            : onSurface.withOpacity(.04),
+            ? BookNestColors.cyan.withValues(alpha: .14)
+            : onSurface.withValues(alpha: .04),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(
               color: selected
                   ? BookNestColors.cyan
-                  : onSurface.withOpacity(.12),
+                  : onSurface.withValues(alpha: .12),
               width: selected ? 1.6 : 1),
         ),
         child: InkWell(
@@ -1014,7 +1158,7 @@ class _CbtExamRoomScreenState extends State<CbtExamRoomScreen>
               CircleAvatar(
                 radius: 14,
                 backgroundColor:
-                    selected ? BookNestColors.cyan : onSurface.withOpacity(.1),
+                    selected ? BookNestColors.cyan : onSurface.withValues(alpha: .1),
                 child: Text(cbtLetters[i],
                     style: TextStyle(
                         fontWeight: FontWeight.w800,
@@ -1058,7 +1202,7 @@ class _CbtExamRoomScreenState extends State<CbtExamRoomScreen>
             Wrap(spacing: 12, children: [
               _legend(BookNestColors.cyan, 'Answered'),
               _legend(Colors.orangeAccent, 'Flagged'),
-              _legend(onSurface.withOpacity(.15), 'Not yet'),
+              _legend(onSurface.withValues(alpha: .15), 'Not yet'),
             ]),
             const SizedBox(height: 12),
             Flexible(
@@ -1083,7 +1227,7 @@ class _CbtExamRoomScreenState extends State<CbtExamRoomScreen>
               if (_strict)
                 Text('Leaving this window submits your exam.',
                     style: TextStyle(
-                        fontSize: 12, color: Colors.redAccent.withOpacity(.9))),
+                        fontSize: 12, color: Colors.redAccent.withValues(alpha: .9))),
             ],
           ]),
     );
@@ -1112,7 +1256,7 @@ class _CbtExamRoomScreenState extends State<CbtExamRoomScreen>
         ? Colors.orangeAccent
         : answered
             ? BookNestColors.cyan
-            : onSurface.withOpacity(.08);
+            : onSurface.withValues(alpha: .08);
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: () {
@@ -1154,6 +1298,7 @@ class _CbtResultsScreenState extends State<CbtResultsScreen> {
   bool _loading = true;
   Map<String, dynamic> _exam = {};
   List<Map<String, dynamic>> _rows = [];
+  List<Map<String, dynamic>> _items = [];
 
   @override
   void initState() {
@@ -1169,7 +1314,94 @@ class _CbtResultsScreenState extends State<CbtResultsScreen> {
       _loading = false;
       _exam = Map<String, dynamic>.from((res?['exam'] as Map?) ?? const {});
       _rows = cbtList(res?['attempts']);
+      _items = cbtList(res?['items']);
     });
+  }
+
+  /// Item analysis: per question, how many got it right and how the
+  /// picks spread — the questions everyone missed show what to reteach.
+  Widget _analysis() {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final mcq = _items.where((i) => i['type'] == 'mcq').toList();
+    if (mcq.isEmpty || _rows.isEmpty) return const SizedBox.shrink();
+    double rate(Map<String, dynamic> i) {
+      final sat = (i['sat'] as num?)?.toDouble() ?? 0;
+      return sat <= 0 ? 0 : ((i['correct'] as num?) ?? 0) / sat * 100;
+    }
+    final hardest = [...mcq]..sort((a, b) => rate(a).compareTo(rate(b)));
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ExpansionTile(
+        leading: const Icon(Icons.insights_rounded, color: BookNestColors.cyan),
+        title: const Text('Question analysis',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        subtitle: Text(
+            'Hardest: Q${mcq.indexOf(hardest.first) + 1} · '
+            '${rate(hardest.first).toStringAsFixed(0)}% correct'),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        children: [
+          for (var n = 0; n < _items.length; n++)
+            if (_items[n]['type'] == 'mcq')
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Builder(builder: (_) {
+                  final i = _items[n];
+                  final r = rate(i);
+                  final picks = ((i['picks'] as List?) ?? const [])
+                      .map((e) => (e as num).toInt())
+                      .toList();
+                  final options = ((i['options'] as List?) ?? const [])
+                      .map((e) => '$e')
+                      .toList();
+                  final answer = (i['answer'] as num?)?.toInt() ?? -1;
+                  final sat = (i['sat'] as num?)?.toInt() ?? 0;
+                  final color = r >= 70
+                      ? const Color(0xFF00B894)
+                      : r >= 40
+                          ? Colors.orangeAccent
+                          : Colors.redAccent;
+                  return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Expanded(
+                            child: Text('Q${n + 1}. ${i['text']}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('${r.toStringAsFixed(0)}%',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w900, color: color)),
+                        ]),
+                        const SizedBox(height: 4),
+                        Wrap(spacing: 10, runSpacing: 2, children: [
+                          for (var k = 0; k < picks.length && k < options.length; k++)
+                            Text(
+                                '${cbtLetters[k]}${k == answer ? '✓' : ''} '
+                                '${sat == 0 ? 0 : (picks[k] / sat * 100).round()}%',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: k == answer
+                                        ? FontWeight.w800
+                                        : FontWeight.w400,
+                                    color: k == answer
+                                        ? const Color(0xFF00B894)
+                                        : onSurface.withValues(alpha: .7))),
+                          Text(
+                              'skipped ${sat - ((i['answered'] as num?)?.toInt() ?? 0)}',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: onSurface.withValues(alpha: .5))),
+                        ]),
+                      ]);
+                }),
+              ),
+        ],
+      ),
+    );
   }
 
   double _pct(Map<String, dynamic> r) {
@@ -1182,7 +1414,7 @@ class _CbtResultsScreenState extends State<CbtResultsScreen> {
     final released = _exam['released'] == true;
     final res = await cbtCall(context, 'cbt.exam.release',
         {'examId': widget.examId, 'released': !released});
-    if (res != null) {
+    if (res != null && mounted) {
       cbtToast(context,
           released ? 'Results hidden from students.' : 'Results released to students.');
       _load();
@@ -1253,7 +1485,7 @@ class _CbtResultsScreenState extends State<CbtResultsScreen> {
                             const SizedBox(height: 12),
                             Card(
                               child: SwitchListTile(
-                                activeColor: BookNestColors.cyan,
+                                activeThumbColor: BookNestColors.cyan,
                                 value: _exam['released'] == true,
                                 onChanged: (_) => _release(),
                                 title: const Text('Results released'),
@@ -1265,12 +1497,13 @@ class _CbtResultsScreenState extends State<CbtResultsScreen> {
                               ),
                             ),
                             const SizedBox(height: 8),
+                            _analysis(),
                             if (_rows.isEmpty)
                               Padding(
                                 padding: const EdgeInsets.all(24),
                                 child: Text('Nobody has sat this exam yet.',
                                     style: TextStyle(
-                                        color: onSurface.withOpacity(.6))),
+                                        color: onSurface.withValues(alpha: .6))),
                               ),
                             for (var i = 0; i < _rows.length; i++)
                               _row(i + 1, _rows[i], pass),
@@ -1287,7 +1520,7 @@ class _CbtResultsScreenState extends State<CbtResultsScreen> {
         width: 150,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: BookNestColors.cyan.withOpacity(.08),
+          color: BookNestColors.cyan.withValues(alpha: .08),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1512,7 +1745,7 @@ class _CbtScriptScreenState extends State<CbtScriptScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: onSurface.withOpacity(.05),
+                color: onSurface.withValues(alpha: .05),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: SelectableText(
@@ -1525,7 +1758,7 @@ class _CbtScriptScreenState extends State<CbtScriptScreen> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text('Marking guide: ${q['explanation']}',
                     style: TextStyle(
-                        fontSize: 12.5, color: onSurface.withOpacity(.7))),
+                        fontSize: 12.5, color: onSurface.withValues(alpha: .7))),
               ),
             if (widget.staff)
               Padding(
@@ -1560,7 +1793,7 @@ class _CbtScriptScreenState extends State<CbtScriptScreen> {
                           ? const Color(0xFF00B894)
                           : (given is num && given.toInt() == k)
                               ? Colors.redAccent
-                              : onSurface.withOpacity(.3)),
+                              : onSurface.withValues(alpha: .3)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text('${cbtLetters[k]}. ${options[k]}',
@@ -1573,13 +1806,13 @@ class _CbtScriptScreenState extends State<CbtScriptScreen> {
             if (given == null)
               Text('Not answered',
                   style: TextStyle(
-                      fontSize: 12, color: onSurface.withOpacity(.6))),
+                      fontSize: 12, color: onSurface.withValues(alpha: .6))),
             if ((q['explanation']?.toString() ?? '').isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text('Explanation: ${q['explanation']}',
                     style: TextStyle(
-                        fontSize: 12.5, color: onSurface.withOpacity(.75))),
+                        fontSize: 12.5, color: onSurface.withValues(alpha: .75))),
               ),
           ],
         ]),

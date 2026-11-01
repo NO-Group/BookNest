@@ -33,7 +33,7 @@ class _GenreBrowseScreenState extends State<GenreBrowseScreen> {
       final rows = (res?['books'] as List?) ?? const [];
       if (!mounted) return;
       setState(() {
-        _books = (rows as List)
+        _books = rows
             .map((row) => Map<String, dynamic>.from(row as Map))
             .toList();
         _loading = false;

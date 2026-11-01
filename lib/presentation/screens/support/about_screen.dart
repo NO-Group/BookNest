@@ -35,7 +35,7 @@ class AboutScreen extends StatelessWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: BookNestColors.cyan.withOpacity(.3),
+                    color: BookNestColors.cyan.withValues(alpha: .3),
                     blurRadius: 26,
                     offset: const Offset(0, 9),
                   ),

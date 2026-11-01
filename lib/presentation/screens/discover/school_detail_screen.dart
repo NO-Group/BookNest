@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../config/theme.dart';
-import '../../../services/backend_api.dart';
-import '../../components/booknest_ui.dart';
 import 'group_base_screen.dart';
 import 'school_cbt.dart';
 import 'school_lms.dart';
@@ -30,8 +27,6 @@ class SchoolDetailScreen extends StatelessWidget {
         SchoolCbtSection(state: state),
         const SizedBox(height: 16),
         SchoolAssignmentsSection(state: state),
-        const SizedBox(height: 16),
-        SchoolExamsSection(state: state),
         const SizedBox(height: 16),
         GroupReadingListSection(state: state),
         const SizedBox(height: 16),

@@ -145,7 +145,7 @@ class _BookDiscussionScreenState extends State<BookDiscussionScreen> {
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(16),
                                 color: mine && !pending
-                                    ? BookNestColors.cyan.withOpacity(.07)
+                                    ? BookNestColors.cyan.withValues(alpha: .07)
                                     : theme.colorScheme.surface,
                                 border:
                                     Border.all(color: theme.dividerColor),
@@ -196,7 +196,7 @@ class _BookDiscussionScreenState extends State<BookDiscussionScreen> {
                                   Text(comment['body']?.toString() ?? '',
                                       style: TextStyle(
                                         color: theme.colorScheme.onSurface
-                                            .withOpacity(.88),
+                                            .withValues(alpha: .88),
                                         height: 1.4,
                                         fontSize: 13.5,
                                       )),

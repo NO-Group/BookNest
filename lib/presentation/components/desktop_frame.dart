@@ -244,7 +244,7 @@ class _SideItem extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Material(
         color: selected
-            ? BookNestColors.cyan.withOpacity(dark ? .13 : .16)
+            ? BookNestColors.cyan.withValues(alpha: dark ? .13 : .16)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
@@ -286,7 +286,7 @@ class _WriteButton extends StatelessWidget {
             colors: [BookNestColors.cyanSoft, BookNestColors.cyan]),
         boxShadow: [
           BoxShadow(
-              color: BookNestColors.cyan.withOpacity(.28),
+              color: BookNestColors.cyan.withValues(alpha: .28),
               blurRadius: 18,
               offset: const Offset(0, 6)),
         ],
@@ -458,7 +458,7 @@ class _RailItem extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
                 color: selected
-                    ? BookNestColors.cyan.withOpacity(.16)
+                    ? BookNestColors.cyan.withValues(alpha: .16)
                     : Colors.transparent,
               ),
               child: Icon(selected ? dest.selectedIcon : dest.icon,
@@ -492,7 +492,7 @@ class _LogoTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(size * .28),
-        border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+        border: Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
       ),
       child: Image.asset(
         // Despite the name, this is the navy logo (for light backgrounds).

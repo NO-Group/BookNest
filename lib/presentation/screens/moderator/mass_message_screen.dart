@@ -104,7 +104,7 @@ class _MassMessageScreenState extends State<MassMessageScreen> {
                         'latest broadcasts are kept.',
                         style: TextStyle(
                             fontSize: 11.5,
-                            color: onSurface.withOpacity(.5))),
+                            color: onSurface.withValues(alpha: .5))),
                     const SizedBox(height: 14),
                     TextField(
                       controller: _titleCtrl,

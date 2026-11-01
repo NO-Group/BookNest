@@ -179,7 +179,7 @@ class _BookReviewsScreenState extends State<BookReviewsScreen> {
                                     style: TextStyle(
                                         color: theme
                                             .colorScheme.onSurface
-                                            .withOpacity(.85),
+                                            .withValues(alpha: .85),
                                         height: 1.45,
                                         fontSize: 13.5)),
                               ],

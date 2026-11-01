@@ -196,7 +196,7 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
                   gradient: const LinearGradient(
                       colors: [BookNestColors.navy, BookNestColors.navyDeep]),
                   border: Border.all(
-                      color: BookNestColors.cyan.withOpacity(_stage == _VrStage.recording ? 1 : .35),
+                      color: BookNestColors.cyan.withValues(alpha: _stage == _VrStage.recording ? 1 : .35),
                       width: _stage == _VrStage.recording ? 4 : 2),
                 ),
                 child: Icon(
@@ -224,7 +224,7 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: BookNestColors.cyan.withOpacity(.1),
+                    color: BookNestColors.cyan.withValues(alpha: .1),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(_notice!,
@@ -302,10 +302,10 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
         decoration: BoxDecoration(
           color: primary
               ? BookNestColors.cyan
-              : (dark ? Colors.white.withOpacity(.07) : Colors.white),
+              : (dark ? Colors.white.withValues(alpha: .07) : Colors.white),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-              color: primary ? BookNestColors.cyan : BookNestColors.cyan.withOpacity(.4)),
+              color: primary ? BookNestColors.cyan : BookNestColors.cyan.withValues(alpha: .4)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

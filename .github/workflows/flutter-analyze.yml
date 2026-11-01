@@ -1,4 +1,4 @@
-name: Code health (flutter analyze)
+name: Code health (flutter analyze + tests)
 
 # Runs the Dart analyzer and commits ops/analyze-report.md: every error
 # and warning with its file and line, plus a count of infos by rule. The
@@ -78,6 +78,21 @@ jobs:
             echo '```'
           } > ops/analyze-report.md
           tail -3 analyze.log
+
+      - name: Unit tests
+        run: |
+          set +e
+          flutter test --reporter expanded > test.log 2>&1
+          status=$?
+          set -e
+          {
+            echo
+            echo "## flutter test (exit $status)"
+            echo '```text'
+            grep -E '^\s*[0-9]+:[0-9]+ \+|Expected|Actual|FAILED|Some tests failed|All tests passed' test.log | tail -60 || true
+            echo '```'
+          } >> ops/analyze-report.md
+          tail -5 test.log
 
       - name: Publish report
         if: always()

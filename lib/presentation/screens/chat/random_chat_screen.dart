@@ -139,8 +139,8 @@ class _RandomChatScreenState extends State<RandomChatScreen> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: LinearGradient(colors: [
-                      BookNestColors.cyan.withOpacity(.22),
-                      BookNestColors.cyan.withOpacity(.05),
+                      BookNestColors.cyan.withValues(alpha: .22),
+                      BookNestColors.cyan.withValues(alpha: .05),
                     ]),
                     border: Border.all(color: BookNestColors.cyan, width: 3),
                   ),

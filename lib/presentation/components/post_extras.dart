@@ -1,7 +1,5 @@
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/theme.dart';
@@ -156,10 +154,10 @@ class LinkPreviewCard extends StatelessWidget {
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: dark
-                    ? Colors.white.withOpacity(.04)
+                    ? Colors.white.withValues(alpha: .04)
                     : BookNestColors.lightSurface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: BookNestColors.cyan.withOpacity(.28)),
+                border: Border.all(color: BookNestColors.cyan.withValues(alpha: .28)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -192,9 +190,9 @@ class LinkPreviewCard extends StatelessWidget {
           child: Container(
             margin: const EdgeInsets.only(top: 10),
             decoration: BoxDecoration(
-              color: dark ? Colors.white.withOpacity(.04) : BookNestColors.lightSurface,
+              color: dark ? Colors.white.withValues(alpha: .04) : BookNestColors.lightSurface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: BookNestColors.cyan.withOpacity(.28)),
+              border: Border.all(color: BookNestColors.cyan.withValues(alpha: .28)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,7 +258,7 @@ class LinkPreviewCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
-                              color: BookNestColors.cyan.withOpacity(.9),
+                              color: BookNestColors.cyan.withValues(alpha: .9),
                             ),
                           ),
                         ],

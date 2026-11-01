@@ -196,7 +196,7 @@ class DesktopGoogleAuth {
       }
       final q = await reply.future.timeout(const Duration(minutes: 5));
       if (q['state'] != state || (q['code'] ?? '').isEmpty) return null;
-      return _token({
+      return await _token({
         'grant_type': 'authorization_code',
         'code': q['code']!,
         'redirect_uri': redirect,

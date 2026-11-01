@@ -10,7 +10,6 @@ import '../../components/chat_kit.dart';
 import '../../../services/doc_extract.dart';
 import '../../../services/chat_store.dart';
 import '../../../services/chat_backup_service.dart';
-import '../../components/booknest_ui.dart';
 import '../../components/skeleton_kit.dart';
 import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
@@ -320,7 +319,7 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
         children: [
           const SizedBox(height: 90),
           Icon(Icons.forum_outlined,
-              size: 64, color: BookNestColors.cyan.withOpacity(.5)),
+              size: 64, color: BookNestColors.cyan.withValues(alpha: .5)),
           const SizedBox(height: 14),
           Center(
             child: Text('No conversations yet',
@@ -392,7 +391,7 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
           ),
           selected: context.isExpanded &&
               conversation['id']?.toString() == _openConv,
-          selectedTileColor: BookNestColors.cyan.withOpacity(.10),
+          selectedTileColor: BookNestColors.cyan.withValues(alpha: .10),
           onTap: () => _open(conv: conversation['id']?.toString(), peer: peerId),
         );
   }
@@ -405,8 +404,8 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            color: BookNestColors.cyan.withOpacity(.08),
-            border: Border.all(color: BookNestColors.cyan.withOpacity(.25)),
+            color: BookNestColors.cyan.withValues(alpha: .08),
+            border: Border.all(color: BookNestColors.cyan.withValues(alpha: .25)),
           ),
           child: Row(
             children: [
@@ -492,7 +491,7 @@ class _NoChatSelected extends StatelessWidget {
             height: 96,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: BookNestColors.cyan.withOpacity(.10),
+              color: BookNestColors.cyan.withValues(alpha: .10),
             ),
             child: const Icon(Icons.forum_rounded,
                 size: 44, color: BookNestColors.cyan),
@@ -602,10 +601,10 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
               color: (theme.brightness == Brightness.dark
                       ? BookNestColors.darkChatBackground
                       : Colors.white)
-                  .withOpacity(.96),
+                  .withValues(alpha: .96),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(30)),
-              border: Border.all(color: BookNestColors.cyan.withOpacity(.22)),
+              border: Border.all(color: BookNestColors.cyan.withValues(alpha: .22)),
             ),
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
             child: Column(
@@ -689,8 +688,8 @@ class _RestoreBanner extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        color: BookNestColors.cyan.withOpacity(.1),
-        border: Border.all(color: BookNestColors.cyan.withOpacity(.4)),
+        color: BookNestColors.cyan.withValues(alpha: .1),
+        border: Border.all(color: BookNestColors.cyan.withValues(alpha: .4)),
       ),
       child: Row(
         children: [

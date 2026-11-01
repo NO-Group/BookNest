@@ -36,7 +36,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              BookNestColors.navyDeep.withOpacity(.16),
+              BookNestColors.navyDeep.withValues(alpha: .16),
               theme.scaffoldBackgroundColor,
             ],
           ),

@@ -19,7 +19,6 @@ class _ReviewsHubScreenState extends State<ReviewsHubScreen> {
   List<Map<String, dynamic>> _works = [];
   bool _loading = true;
 
-  String? get _viewerId => SupabaseService().auth.currentUser?.id;
 
   @override
   void initState() {
@@ -34,7 +33,7 @@ class _ReviewsHubScreenState extends State<ReviewsHubScreen> {
       final rows = (res?['books'] as List?) ?? const [];
       if (!mounted) return;
       setState(() {
-        _works = (rows as List)
+        _works = rows
             .map((row) => Map<String, dynamic>.from(row as Map))
             .toList();
         _loading = false;

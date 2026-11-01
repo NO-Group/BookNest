@@ -30,7 +30,6 @@ class _MyLibraryScreenState extends State<MyLibraryScreen>
   List<Map<String, dynamic>> _works = [];
   bool _worksLoading = true;
 
-  String? get _viewerId => SupabaseService().auth.currentUser?.id;
 
   @override
   void initState() {
@@ -74,7 +73,7 @@ class _MyLibraryScreenState extends State<MyLibraryScreen>
       final rows = (res?['books'] as List?) ?? const [];
       if (!mounted) return;
       setState(() {
-        _works = (rows as List)
+        _works = rows
             .map((row) => Map<String, dynamic>.from(row as Map))
             .toList();
         _worksLoading = false;
@@ -102,10 +101,10 @@ class _MyLibraryScreenState extends State<MyLibraryScreen>
                 color: (Theme.of(context).brightness == Brightness.dark
                         ? BookNestColors.darkChatBackground
                         : Colors.white)
-                    .withOpacity(.66),
+                    .withValues(alpha: .66),
                 border: Border(
                   bottom: BorderSide(
-                      color: BookNestColors.cyan.withOpacity(.15)),
+                      color: BookNestColors.cyan.withValues(alpha: .15)),
                 ),
               ),
             ),
@@ -297,7 +296,7 @@ class _ContinueRail extends StatelessWidget {
                           value: percent / 100,
                           minHeight: 3,
                           backgroundColor:
-                              BookNestColors.cyan.withOpacity(.15),
+                              BookNestColors.cyan.withValues(alpha: .15),
                           color: BookNestColors.cyan,
                         ),
                       ),

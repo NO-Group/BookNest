@@ -274,7 +274,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         fontStyle: typing.isEmpty
                             ? FontStyle.normal
                             : FontStyle.italic,
-                        color: BookNestColors.cyan.withOpacity(.85),
+                        color: BookNestColors.cyan.withValues(alpha: .85),
                       ),
                     ),
                   ),
@@ -326,7 +326,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                         Icon(Icons.search_off_rounded,
                                             size: 40,
                                             color: BookNestColors.cyan
-                                                .withOpacity(.5)),
+                                                .withValues(alpha: .5)),
                                         const SizedBox(height: 10),
                                         Text('No matches in this chat',
                                             style: theme.textTheme.titleMedium
@@ -343,7 +343,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                       children: [
                                         Icon(Icons.forum_rounded,
                                             color:
-                                                BookNestColors.cyan.withOpacity(.6),
+                                                BookNestColors.cyan.withValues(alpha: .6),
                                             size: 42),
                                         const SizedBox(height: 10),
                                         Text('Start the conversation',
@@ -571,7 +571,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final author =
         _senderName(pinned['senderId']?.toString() ?? '', chat.people);
     return Material(
-      color: BookNestColors.cyan.withOpacity(.10),
+      color: BookNestColors.cyan.withValues(alpha: .10),
       child: InkWell(
         onTap: () => showModalBottomSheet<void>(
       isScrollControlled: true,
@@ -649,7 +649,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: BookNestColors.cyan.withOpacity(.7), size: 46),
+            Icon(icon, color: BookNestColors.cyan.withValues(alpha: .7), size: 46),
             const SizedBox(height: 12),
             Text(title,
                 style: theme.textTheme.titleMedium

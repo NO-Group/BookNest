@@ -15,7 +15,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../config/theme.dart';
-import '../../../services/backend_api.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/doc_extract.dart';
 import '../../../services/media_backup_service.dart';
@@ -434,7 +433,7 @@ class _MediaFileViewerState extends State<MediaFileViewer> {
                   fontSize: 11.5,
                   color: dark || cinema
                       ? Colors.white54
-                      : BookNestColors.navyDeep.withOpacity(.55)),
+                      : BookNestColors.navyDeep.withValues(alpha: .55)),
             ),
           ],
         ),
@@ -455,7 +454,7 @@ class _MediaFileViewerState extends State<MediaFileViewer> {
                   const SizedBox(height: 14),
                   Text('Preparing ${item.name}…',
                       style: TextStyle(
-                          color: dark ? Colors.white60 : BookNestColors.navyDeep.withOpacity(.6))),
+                          color: dark ? Colors.white60 : BookNestColors.navyDeep.withValues(alpha: .6))),
                 ],
               ),
             )
@@ -559,7 +558,7 @@ class _PdfPaneState extends State<_PdfPane> {
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(.65),
+                  color: Colors.black.withValues(alpha: .65),
                   borderRadius: BorderRadius.circular(30),
                 ),
                 child: Text(
@@ -649,9 +648,9 @@ class _AudioPaneState extends State<_AudioPane> {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: dark ? Colors.white.withOpacity(.06) : Colors.white,
+            color: dark ? Colors.white.withValues(alpha: .06) : Colors.white,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+            border: Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -698,12 +697,12 @@ class _AudioPaneState extends State<_AudioPane> {
                         style: TextStyle(
                             fontSize: 12,
                             color:
-                                dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.6))),
+                                dark ? Colors.white54 : BookNestColors.navyDeep.withValues(alpha: .6))),
                     Text(_duration == Duration.zero ? '--:--' : _clock(_duration),
                         style: TextStyle(
                             fontSize: 12,
                             color:
-                                dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.6))),
+                                dark ? Colors.white54 : BookNestColors.navyDeep.withValues(alpha: .6))),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -797,9 +796,9 @@ class _DocumentCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(26),
           decoration: BoxDecoration(
-            color: dark ? Colors.white.withOpacity(.06) : Colors.white,
+            color: dark ? Colors.white.withValues(alpha: .06) : Colors.white,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+            border: Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -844,7 +843,7 @@ class _DocumentCard extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 12.5,
                       color:
-                          dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.6)),
+                          dark ? Colors.white54 : BookNestColors.navyDeep.withValues(alpha: .6)),
                 ),
               ),
               if (note != null) ...[
@@ -853,7 +852,7 @@ class _DocumentCard extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontSize: 12.5,
-                        color: dark ? Colors.white70 : BookNestColors.navyDeep.withOpacity(.75))),
+                        color: dark ? Colors.white70 : BookNestColors.navyDeep.withValues(alpha: .75))),
               ],
             ],
           ),
@@ -976,7 +975,7 @@ class _VideoPlayerPaneState extends State<_VideoPlayerPane> {
                   Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: BookNestColors.navyDeep.withOpacity(.55),
+                      color: BookNestColors.navyDeep.withValues(alpha: .55),
                     ),
                     padding: const EdgeInsets.all(14),
                     child: const Icon(Icons.play_arrow_rounded,
@@ -1267,7 +1266,7 @@ class _DocPaneState extends State<_DocPane> {
           const SizedBox(height: 14),
           Text('Opening the document…',
               style: TextStyle(
-                  color: dark ? Colors.white60 : BookNestColors.navyDeep.withOpacity(.6))),
+                  color: dark ? Colors.white60 : BookNestColors.navyDeep.withValues(alpha: .6))),
         ]),
       );
     }
@@ -1307,7 +1306,7 @@ class _NoteBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-      color: BookNestColors.cyan.withOpacity(.12),
+      color: BookNestColors.cyan.withValues(alpha: .12),
       child: Row(children: [
         const Icon(Icons.info_outline_rounded, size: 16, color: BookNestColors.cyan),
         const SizedBox(width: 8),
@@ -1385,8 +1384,8 @@ class _DocReaderState extends State<_DocReader> {
         Container(
           padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
           decoration: BoxDecoration(
-            color: dark ? Colors.white.withOpacity(.04) : Colors.white,
-            border: Border(bottom: BorderSide(color: BookNestColors.cyan.withOpacity(.18))),
+            color: dark ? Colors.white.withValues(alpha: .04) : Colors.white,
+            border: Border(bottom: BorderSide(color: BookNestColors.cyan.withValues(alpha: .18))),
           ),
           child: Row(
             children: [
@@ -1464,7 +1463,7 @@ class _DocReaderState extends State<_DocReader> {
               : page.blocks.isEmpty
                   ? Center(
                       child: Text('This page is empty.',
-                          style: TextStyle(color: fg.withOpacity(.6))))
+                          style: TextStyle(color: fg.withValues(alpha: .6))))
                   : MediaQuery(
                       data: MediaQuery.of(context).copyWith(
                           textScaler: TextScaler.linear(_scale)),
@@ -1501,7 +1500,7 @@ class _BlockView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = dark ? Colors.white : BookNestColors.navyDeep;
-    final body = TextStyle(fontSize: 15.5, height: 1.55, color: fg.withOpacity(.92));
+    final body = TextStyle(fontSize: 15.5, height: 1.55, color: fg.withValues(alpha: .92));
     TextSpan spans(TextStyle base) => TextSpan(
           style: base,
           children: [
@@ -1551,7 +1550,7 @@ class _BlockView extends StatelessWidget {
           decoration: monospace
               ? null
               : BoxDecoration(
-                  color: fg.withOpacity(.06), borderRadius: BorderRadius.circular(10)),
+                  color: fg.withValues(alpha: .06), borderRadius: BorderRadius.circular(10)),
           child: SelectableText(block.text,
               style: TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.5, color: fg)),
         );
@@ -1571,7 +1570,7 @@ class _BlockView extends StatelessWidget {
           ),
         );
       case DocBlockType.divider:
-        return Divider(height: 28, color: BookNestColors.cyan.withOpacity(.3));
+        return Divider(height: 28, color: BookNestColors.cyan.withValues(alpha: .3));
     }
   }
 }
@@ -1592,12 +1591,12 @@ class _DocTable extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: Table(
         defaultColumnWidth: const IntrinsicColumnWidth(),
-        border: TableBorder.all(color: BookNestColors.cyan.withOpacity(.28), width: .8),
+        border: TableBorder.all(color: BookNestColors.cyan.withValues(alpha: .28), width: .8),
         children: [
           for (var r = 0; r < shown.length; r++)
             TableRow(
               decoration: BoxDecoration(
-                  color: r == 0 ? BookNestColors.cyan.withOpacity(.10) : null),
+                  color: r == 0 ? BookNestColors.cyan.withValues(alpha: .10) : null),
               children: [
                 for (var c = 0; c < width; c++)
                   ConstrainedBox(
@@ -1643,7 +1642,7 @@ class _SheetGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = dark ? Colors.white : BookNestColors.navyDeep;
-    final line = BookNestColors.cyan.withOpacity(.22);
+    final line = BookNestColors.cyan.withValues(alpha: .22);
     final cols = rows.fold<int>(0, (w, r) => r.length > w ? r.length : w);
     final widths = List<double>.filled(cols, 64);
     for (final r in rows.take(300)) {
@@ -1672,7 +1671,7 @@ class _SheetGrid extends StatelessWidget {
           alignment: align,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-            color: head ? BookNestColors.cyan.withOpacity(.10) : null,
+            color: head ? BookNestColors.cyan.withValues(alpha: .10) : null,
             border: Border(right: BorderSide(color: line), bottom: BorderSide(color: line)),
           ),
           child: Text(text,
@@ -1772,7 +1771,7 @@ class _ArchiveList extends StatelessWidget {
         child: ListView.separated(
           itemCount: doc.entries.length,
           separatorBuilder: (_, __) =>
-              Divider(height: 1, color: BookNestColors.cyan.withOpacity(.12)),
+              Divider(height: 1, color: BookNestColors.cyan.withValues(alpha: .12)),
           itemBuilder: (_, i) {
             final e = doc.entries[i];
             final slash = e.name.lastIndexOf('/');
@@ -1786,7 +1785,7 @@ class _ArchiveList extends StatelessWidget {
                   [if (slash > 0) e.name.substring(0, slash), _formatBytes(e.size)].join('  ·  '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: fg.withOpacity(.6))),
+                  style: TextStyle(fontSize: 12, color: fg.withValues(alpha: .6))),
               onTap: () => _open(context, e),
             );
           },

@@ -161,7 +161,7 @@ class _BookNestKeyboardState extends State<BookNestKeyboard>
       decoration: BoxDecoration(
         color: dark ? BookNestColors.darkChatBackground : Colors.white,
         border: Border(
-          top: BorderSide(color: BookNestColors.cyan.withOpacity(.25)),
+          top: BorderSide(color: BookNestColors.cyan.withValues(alpha: .25)),
         ),
       ),
       child: SafeArea(
@@ -199,7 +199,7 @@ class _BookNestKeyboardState extends State<BookNestKeyboard>
                   size: 21,
                   color: _translateOn
                       ? BookNestColors.cyan
-                      : (dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.55))),
+                      : (dark ? Colors.white54 : BookNestColors.navyDeep.withValues(alpha: .55))),
             ),
           ),
           // Voice typing
@@ -216,7 +216,7 @@ class _BookNestKeyboardState extends State<BookNestKeyboard>
                           strokeWidth: 2, color: BookNestColors.cyan))
                   : Icon(Icons.mic_none_rounded,
                       size: 21,
-                      color: dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.55)),
+                      color: dark ? Colors.white54 : BookNestColors.navyDeep.withValues(alpha: .55)),
             ),
           ),
           const Spacer(),
@@ -242,7 +242,7 @@ class _BookNestKeyboardState extends State<BookNestKeyboard>
               size: 21,
               color: active
                   ? BookNestColors.cyan
-                  : (dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.55))),
+                  : (dark ? Colors.white54 : BookNestColors.navyDeep.withValues(alpha: .55))),
         ),
       ),
     );
@@ -251,7 +251,7 @@ class _BookNestKeyboardState extends State<BookNestKeyboard>
   Widget _translateBar(bool dark) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      color: BookNestColors.cyan.withOpacity(dark ? .1 : .08),
+      color: BookNestColors.cyan.withValues(alpha: dark ? .1 : .08),
       child: Row(
         children: [
           Icon(Icons.translate_rounded, size: 15, color: BookNestColors.cyan),
@@ -319,7 +319,7 @@ class _BookNestKeyboardState extends State<BookNestKeyboard>
             Text('Words land in the message box. Tap the mic to stop.',
                 style: TextStyle(
                     fontSize: 11,
-                    color: dark ? Colors.white38 : BookNestColors.navyDeep.withOpacity(.5))),
+                    color: dark ? Colors.white38 : BookNestColors.navyDeep.withValues(alpha: .5))),
           ],
         ),
       );
@@ -444,7 +444,7 @@ class _BookNestKeyboardState extends State<BookNestKeyboard>
               fontSize: 12.5,
               height: 1.5,
               color:
-                  dark ? Colors.white38 : BookNestColors.navyDeep.withOpacity(.45)),
+                  dark ? Colors.white38 : BookNestColors.navyDeep.withValues(alpha: .45)),
         ),
       );
     }
@@ -487,7 +487,7 @@ class _EmoteButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             color: dark
-                ? Colors.white.withOpacity(.05)
+                ? Colors.white.withValues(alpha: .05)
                 : BookNestColors.lightSurface,
           ),
           child: Center(child: child),

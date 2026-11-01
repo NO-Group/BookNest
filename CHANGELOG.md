@@ -1,5 +1,52 @@
 # Changelog
 
+## 2.41.0+75 — 2026-11-01 · Clean-up, fixes, CBT upgrades
+
+Server 2.34.0.
+
+**CBT upgrades**
+- **Pictures in questions:** add a diagram, map or graph to any question.
+  The picture is stored on Cloudinary (images only) and shows in the exam,
+  practice and review.
+- **Notifications:** students get a push and an in-app notification when
+  an exam for them is published (with the unlock time) and when results are
+  released. Tapping it opens the school.
+- **Question analysis** on the results page: the share of students who got
+  each question right, how picks spread across A–D, how many skipped it,
+  and which question was hardest. Use it to see what to reteach.
+- **Duplicate exam:** reuse a paper for another class or term. The copy is
+  saved as a draft a week later, ready for a new date.
+- **One exams card:** the old "Exams" countdown card is merged into
+  CBT & exams as **Written in class** dates. Teachers (not just the owner)
+  can now add them, and wrong dates can finally be removed.
+
+**Fixes**
+- Deleting an account now also removes the reader's group memberships,
+  class rosters, event RSVPs, exam scripts, practice history and
+  notifications. Before, these stayed behind.
+- Deleting a school now also removes its question bank, exams, scripts and
+  practice history.
+- PC Google sign-in: errors during the token exchange are caught properly
+  instead of escaping the error handler.
+- Code health: 17 analyzer errors and 89 warnings cleared, and about 600
+  deprecated colour calls updated for current Flutter. A new workflow runs
+  the analyzer and unit tests on every push and writes
+  `ops/analyze-report.md`.
+- Unit tests rewritten (the old ones checked a removed API and an outdated
+  colour). They now cover the brand theme, the CBT Excel/CSV importer and
+  countdowns.
+
+**Removed**
+- A leftover native Android project for a different app ("tether") at the
+  repository root (`app/`, root Gradle files, `gradlew`), plus a committed
+  `local.properties`.
+- Stale CI error dumps, the 168 KB `tree_full.txt`, and the outdated
+  `FULL_STRUCTURE.md` and `FILE_EXPLANATION.md` (they described a 36-file
+  version of the app).
+- `page_flip_loader.dart`: unused, and it didn't compile.
+- `BACKEND_DATA_ARCHITECTURE_PROMPT.md` moved to `docs/ARCHITECTURE.md`.
+  `CHECKLIST.md` is rewritten to list only what's still open.
+
 ## 2.40.0+74 — 2026-11-01 · School CBT: exams and practice
 
 Server 2.33.0. Modelled on the MySchool app, but for each school's own

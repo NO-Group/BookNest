@@ -388,9 +388,9 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           color: dark
-              ? Colors.white.withOpacity(.05)
-              : BookNestColors.navyDeep.withOpacity(.04),
-          border: Border.all(color: BookNestColors.cyan.withOpacity(.22)),
+              ? Colors.white.withValues(alpha: .05)
+              : BookNestColors.navyDeep.withValues(alpha: .04),
+          border: Border.all(color: BookNestColors.cyan.withValues(alpha: .22)),
         ),
         child: Column(
             crossAxisAlignment: CrossAxisAlignment.start, children: children),
@@ -422,8 +422,8 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           tileColor: dark
-              ? Colors.white.withOpacity(.04)
-              : BookNestColors.navyDeep.withOpacity(.04),
+              ? Colors.white.withValues(alpha: .04)
+              : BookNestColors.navyDeep.withValues(alpha: .04),
           leading: Icon(icon, color: BookNestColors.cyan),
           title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
           subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
@@ -452,8 +452,8 @@ class _ChatBackupScreenState extends State<ChatBackupScreen> {
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: BookNestColors.cyan.withOpacity(.12),
-                border: Border.all(color: BookNestColors.cyan.withOpacity(.4)),
+                color: BookNestColors.cyan.withValues(alpha: .12),
+                border: Border.all(color: BookNestColors.cyan.withValues(alpha: .4)),
               ),
               child: const Icon(Icons.backup_rounded,
                   size: 40, color: BookNestColors.cyan),

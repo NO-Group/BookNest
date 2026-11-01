@@ -170,7 +170,7 @@ class _CbtPracticeScreenState extends State<CbtPracticeScreen> {
                   const SizedBox(height: 14),
                   if (years.isNotEmpty)
                     DropdownButtonFormField<String>(
-                      value: year,
+                      initialValue: year,
                       decoration: const InputDecoration(
                           labelText: 'Year', border: OutlineInputBorder()),
                       items: [
@@ -183,7 +183,7 @@ class _CbtPracticeScreenState extends State<CbtPracticeScreen> {
                   if (topics.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
-                      value: topic,
+                      initialValue: topic,
                       decoration: const InputDecoration(
                           labelText: 'Topic', border: OutlineInputBorder()),
                       items: [
@@ -285,7 +285,7 @@ class _CbtPracticeScreenState extends State<CbtPracticeScreen> {
           child: Text(text,
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(.6))),
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .6))),
         ),
       );
 
@@ -443,7 +443,7 @@ class _CbtPracticeScreenState extends State<CbtPracticeScreen> {
                   value: (((s['average'] as num?) ?? 0) / 100).clamp(0, 1).toDouble(),
                   minHeight: 8,
                   color: BookNestColors.cyan,
-                  backgroundColor: BookNestColors.cyan.withOpacity(.12),
+                  backgroundColor: BookNestColors.cyan.withValues(alpha: .12),
                 ),
               ),
             ]),
@@ -640,7 +640,7 @@ class _CbtPracticeSessionScreenState extends State<CbtPracticeSessionScreen> {
         value: (_index + 1) / _qs.length,
         minHeight: 3,
         color: BookNestColors.cyan,
-        backgroundColor: onSurface.withOpacity(.08),
+        backgroundColor: onSurface.withValues(alpha: .08),
       ),
       Expanded(
         child: SingleChildScrollView(
@@ -657,7 +657,7 @@ class _CbtPracticeSessionScreenState extends State<CbtPracticeSessionScreen> {
                         '${'${q['topic'] ?? ''}'.isNotEmpty ? ' · ${q['topic']}' : ''}',
                         style: TextStyle(
                             fontWeight: FontWeight.w700,
-                            color: onSurface.withOpacity(.6))),
+                            color: onSurface.withValues(alpha: .6))),
                   ),
                   IconButton(
                     tooltip: 'Save question',
@@ -684,7 +684,7 @@ class _CbtPracticeSessionScreenState extends State<CbtPracticeSessionScreen> {
                 const SizedBox(height: 16),
                 if (theory) ...[
                   Text('Theory question — think it through, then check the guide.',
-                      style: TextStyle(color: onSurface.withOpacity(.7))),
+                      style: TextStyle(color: onSurface.withValues(alpha: .7))),
                   if ('${q['explanation'] ?? ''}'.isNotEmpty)
                     ExpansionTile(
                       tilePadding: EdgeInsets.zero,
@@ -703,7 +703,7 @@ class _CbtPracticeSessionScreenState extends State<CbtPracticeSessionScreen> {
                       color: (picked == answer
                               ? const Color(0xFF00B894)
                               : Colors.redAccent)
-                          .withOpacity(.1),
+                          .withValues(alpha: .1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
@@ -767,22 +767,22 @@ class _CbtPracticeSessionScreenState extends State<CbtPracticeSessionScreen> {
 
   Widget _option(int k, String text, int? picked, int answer, bool reveal,
       Color onSurface) {
-    Color border = onSurface.withOpacity(.12);
+    Color border = onSurface.withValues(alpha: .12);
     Color? fill;
     if (reveal && k == answer) {
       border = const Color(0xFF00B894);
-      fill = const Color(0xFF00B894).withOpacity(.12);
+      fill = const Color(0xFF00B894).withValues(alpha: .12);
     } else if (reveal && k == picked) {
       border = Colors.redAccent;
-      fill = Colors.redAccent.withOpacity(.1);
+      fill = Colors.redAccent.withValues(alpha: .1);
     } else if (!reveal && k == picked) {
       border = BookNestColors.cyan;
-      fill = BookNestColors.cyan.withOpacity(.14);
+      fill = BookNestColors.cyan.withValues(alpha: .14);
     }
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: fill ?? onSurface.withOpacity(.04),
+        color: fill ?? onSurface.withValues(alpha: .04),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
             side: BorderSide(color: border, width: 1.4)),
@@ -869,7 +869,7 @@ class _CbtPracticeSessionScreenState extends State<CbtPracticeSessionScreen> {
                                 style: const TextStyle(color: Colors.redAccent)),
                           if (picked == null)
                             Text('Not answered',
-                                style: TextStyle(color: onSurface.withOpacity(.6))),
+                                style: TextStyle(color: onSurface.withValues(alpha: .6))),
                           if (answer >= 0 && answer < options.length)
                             Text('Answer: ${cbtLetters[answer]}. ${options[answer]}',
                                 style: const TextStyle(
@@ -881,7 +881,7 @@ class _CbtPracticeSessionScreenState extends State<CbtPracticeSessionScreen> {
                               child: Text(q['explanation'].toString(),
                                   style: TextStyle(
                                       fontSize: 13,
-                                      color: onSurface.withOpacity(.75))),
+                                      color: onSurface.withValues(alpha: .75))),
                             ),
                         ]);
                   }),

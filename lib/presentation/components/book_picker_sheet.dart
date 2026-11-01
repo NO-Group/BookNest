@@ -187,7 +187,7 @@ class _BookPickerSheetState extends State<_BookPickerSheet> {
         return Card(
           elevation: 0,
           margin: const EdgeInsets.only(bottom: 8),
-          color: theme.colorScheme.surface.withOpacity(.6),
+          color: theme.colorScheme.surface.withValues(alpha: .6),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           child: ListTile(

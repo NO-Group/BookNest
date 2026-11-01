@@ -96,7 +96,7 @@ class _CreateNewsScreenState extends State<CreateNewsScreen> {
         ),
         side: BorderSide(
             color: _selectedPostDate != null
-                ? BookNestColors.cyan.withOpacity(.6)
+                ? BookNestColors.cyan.withValues(alpha: .6)
                 : theme.dividerColor),
         backgroundColor: theme.colorScheme.surface,
         onPressed: () async {

@@ -14,7 +14,6 @@ import '../../../services/supabase_service.dart';
 import '../../../services/profile_layout.dart';
 import '../../../services/reader_profile.dart';
 import '../../../config/locales.dart';
-import '../../components/booknest_keyboard.dart';
 import '../chat/media_viewer_screen.dart';
 import '../../components/adaptive.dart';
 
@@ -276,12 +275,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ? [
                             BookNestColors.navy,
                             BookNestColors.navyDeep,
-                            BookNestColors.cyan.withOpacity(.55),
+                            BookNestColors.cyan.withValues(alpha: .55),
                           ]
                         : [
                             BookNestColors.navyDeep,
                             BookNestColors.navy,
-                            BookNestColors.cyan.withOpacity(.35),
+                            BookNestColors.cyan.withValues(alpha: .35),
                           ],
                   ),
                 ),
@@ -291,7 +290,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   right: 34,
                   top: 40,
                   child: Icon(Icons.auto_stories_rounded,
-                      size: 64, color: Colors.white.withOpacity(.10)),
+                      size: 64, color: Colors.white.withValues(alpha: .10)),
                 ),
               if (url != null)
                 CachedNetworkImage(
@@ -808,8 +807,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
-              color: BookNestColors.cyan.withOpacity(.14),
-              border: Border.all(color: BookNestColors.cyan.withOpacity(.5)),
+              color: BookNestColors.cyan.withValues(alpha: .14),
+              border: Border.all(color: BookNestColors.cyan.withValues(alpha: .5)),
             ),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
@@ -834,8 +833,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          color: BookNestColors.cyan.withOpacity(.14),
-          border: Border.all(color: BookNestColors.cyan.withOpacity(.5)),
+          color: BookNestColors.cyan.withValues(alpha: .14),
+          border: Border.all(color: BookNestColors.cyan.withValues(alpha: .5)),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -892,8 +891,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: BookNestColors.cyan.withOpacity(.08),
-        border: Border.all(color: BookNestColors.cyan.withOpacity(.28)),
+        color: BookNestColors.cyan.withValues(alpha: .08),
+        border: Border.all(color: BookNestColors.cyan.withValues(alpha: .28)),
       ),
       child: IntrinsicHeight(
         child: Row(
@@ -901,7 +900,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             cell(Icons.diamond_rounded, '${_profile?['gems'] ?? 0}', 'Gems',
                 () => context.push('/wallet')),
             VerticalDivider(
-                width: 1, color: BookNestColors.cyan.withOpacity(.22)),
+                width: 1, color: BookNestColors.cyan.withValues(alpha: .22)),
             cell(
                 _mode == 'author'
                     ? Icons.history_edu_rounded
@@ -910,7 +909,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 'Mode',
                 _modeBusy ? () {} : _switchMode),
             VerticalDivider(
-                width: 1, color: BookNestColors.cyan.withOpacity(.22)),
+                width: 1, color: BookNestColors.cyan.withValues(alpha: .22)),
             cell(
                 online
                     ? Icons.cloud_done_rounded
@@ -941,9 +940,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           color: dark
-              ? Colors.white.withOpacity(.05)
-              : BookNestColors.navyDeep.withOpacity(.04),
-          border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+              ? Colors.white.withValues(alpha: .05)
+              : BookNestColors.navyDeep.withValues(alpha: .04),
+          border: Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
         ),
         child: Row(
           children: [
@@ -951,7 +950,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.all(9),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: BookNestColors.cyan.withOpacity(.15),
+                color: BookNestColors.cyan.withValues(alpha: .15),
               ),
               child: Icon(
                 _mode == 'author'
@@ -1146,7 +1145,7 @@ class _ProfileTile extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: theme.dividerColor.withOpacity(.6)),
+            border: Border.all(color: theme.dividerColor.withValues(alpha: .6)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1156,7 +1155,7 @@ class _ProfileTile extends StatelessWidget {
                 height: 36,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(11),
-                  color: BookNestColors.cyan.withOpacity(.12),
+                  color: BookNestColors.cyan.withValues(alpha: .12),
                 ),
                 child: Icon(icon, color: BookNestColors.cyan, size: 20),
               ),
@@ -1214,7 +1213,7 @@ class _ProfileAction extends StatelessWidget {
               height: 40,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                color: color.withOpacity(.12),
+                color: color.withValues(alpha: .12),
               ),
               child: Icon(icon, color: color, size: 21),
             ),
@@ -1264,10 +1263,10 @@ class _CloudStatusChip extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           color: online
-              ? BookNestColors.cyan.withOpacity(.12)
+              ? BookNestColors.cyan.withValues(alpha: .12)
               : theme.colorScheme.surface,
           border: Border.all(
-            color: online ? BookNestColors.cyan.withOpacity(.45) : theme.dividerColor,
+            color: online ? BookNestColors.cyan.withValues(alpha: .45) : theme.dividerColor,
           ),
         ),
         child: Row(
@@ -1312,7 +1311,7 @@ class _CoverButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.black.withOpacity(.38),
+      color: Colors.black.withValues(alpha: .38),
       shape: const StadiumBorder(),
       child: InkWell(
         customBorder: const StadiumBorder(),

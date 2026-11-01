@@ -146,11 +146,11 @@ class _WalletScreenState extends State<WalletScreen> {
                             color: (dark
                                     ? BookNestColors.darkChatBackground
                                     : Colors.white)
-                                .withOpacity(.62),
+                                .withValues(alpha: .62),
                             borderRadius: BorderRadius.circular(24),
                             border: Border.all(
                                 color:
-                                    BookNestColors.cyan.withOpacity(.28)),
+                                    BookNestColors.cyan.withValues(alpha: .28)),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,7 +170,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                       boxShadow: [
                                         BoxShadow(
                                             color: BookNestColors.cyan
-                                                .withOpacity(.35),
+                                                .withValues(alpha: .35),
                                             blurRadius: 16),
                                       ],
                                     ),
@@ -253,11 +253,11 @@ class _WalletScreenState extends State<WalletScreen> {
                                   horizontal: 14, vertical: 12),
                               decoration: BoxDecoration(
                                 color: theme.colorScheme.surface
-                                    .withOpacity(.7),
+                                    .withValues(alpha: .7),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
                                     color: theme.dividerColor
-                                        .withOpacity(.6)),
+                                        .withValues(alpha: .6)),
                               ),
                               child: Row(
                                 children: [
@@ -267,7 +267,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       color: BookNestColors.cyan
-                                          .withOpacity(.12),
+                                          .withValues(alpha: .12),
                                     ),
                                     child: Icon(
                                         delta >= 0

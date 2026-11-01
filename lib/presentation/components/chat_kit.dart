@@ -127,9 +127,9 @@ class ChatSearchBar extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
-        color: onSurface.withOpacity(.06),
+        color: onSurface.withValues(alpha: .06),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+        border: Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
       ),
       child: Row(children: [
         const Icon(Icons.search_rounded, size: 19, color: BookNestColors.cyan),
@@ -393,7 +393,7 @@ class _ChatBubbleState extends State<ChatBubble>
             Builder(builder: (sheetContext) {
               final preview = _text.trim();
               final shade =
-                  Theme.of(context).colorScheme.surface.withOpacity(.9);
+                  Theme.of(context).colorScheme.surface.withValues(alpha: .9);
               if (preview.isEmpty) return const SizedBox.shrink();
               return Container(
                 width: double.infinity,
@@ -415,7 +415,7 @@ class _ChatBubbleState extends State<ChatBubble>
                         .textTheme
                         .bodyMedium
                         ?.color
-                        ?.withOpacity(.85),
+                        ?.withValues(alpha: .85),
                   ),
                 ),
               );
@@ -567,7 +567,7 @@ class _ChatBubbleState extends State<ChatBubble>
               size: 13,
               color: mine
                   ? Colors.white54
-                  : (dark ? Colors.white38 : BookNestColors.navyDeep.withOpacity(.45))),
+                  : (dark ? Colors.white38 : BookNestColors.navyDeep.withValues(alpha: .45))),
           const SizedBox(width: 6),
           Text(
             'This message was deleted',
@@ -576,7 +576,7 @@ class _ChatBubbleState extends State<ChatBubble>
               fontSize: 13.5,
               color: mine
                   ? Colors.white54
-                  : (dark ? Colors.white38 : BookNestColors.navyDeep.withOpacity(.45)),
+                  : (dark ? Colors.white38 : BookNestColors.navyDeep.withValues(alpha: .45)),
             ),
           ),
         ],
@@ -690,11 +690,11 @@ class _ChatBubbleState extends State<ChatBubble>
           bottomRight: Radius.circular(mine ? 4 : 18),
         ),
         border: mine
-            ? Border.all(color: Colors.white.withOpacity(.06))
-            : Border.all(color: BookNestColors.cyan.withOpacity(.22)),
+            ? Border.all(color: Colors.white.withValues(alpha: .06))
+            : Border.all(color: BookNestColors.cyan.withValues(alpha: .22)),
         boxShadow: [
           BoxShadow(
-            color: BookNestColors.navyDeep.withOpacity(dark ? .28 : .10),
+            color: BookNestColors.navyDeep.withValues(alpha: dark ? .28 : .10),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -721,7 +721,7 @@ class _ChatBubbleState extends State<ChatBubble>
                   fontWeight: FontWeight.w800,
                   decoration:
                       widget.senderId == null ? null : TextDecoration.underline,
-                  decorationColor: BookNestColors.cyan.withOpacity(.5),
+                  decorationColor: BookNestColors.cyan.withValues(alpha: .5),
                 ),
               ),
             ),
@@ -734,7 +734,7 @@ class _ChatBubbleState extends State<ChatBubble>
                 Icon(Icons.shortcut_rounded,
                     size: 12,
                     color: mine
-                        ? Colors.white.withOpacity(.65)
+                        ? Colors.white.withValues(alpha: .65)
                         : BookNestColors.cyan),
                 const SizedBox(width: 4),
                 Text(
@@ -744,7 +744,7 @@ class _ChatBubbleState extends State<ChatBubble>
                       fontStyle: FontStyle.italic,
                       fontWeight: FontWeight.w600,
                       color: mine
-                          ? Colors.white.withOpacity(.65)
+                          ? Colors.white.withValues(alpha: .65)
                           : BookNestColors.cyan),
                 ),
               ],
@@ -766,16 +766,16 @@ class _ChatBubbleState extends State<ChatBubble>
                   style: TextStyle(
                     fontSize: 10,
                     color: mine
-                        ? Colors.white.withOpacity(.65)
+                        ? Colors.white.withValues(alpha: .65)
                         : (dark
-                            ? Colors.white.withOpacity(.45)
-                            : BookNestColors.navyDeep.withOpacity(.5)),
+                            ? Colors.white.withValues(alpha: .45)
+                            : BookNestColors.navyDeep.withValues(alpha: .5)),
                   ),
                 ),
                 if (mine) ...[
                   const SizedBox(width: 4),
                   _ticks(
-                    Colors.white.withOpacity(.55),
+                    Colors.white.withValues(alpha: .55),
                     BookNestColors.cyan,
                   ),
                 ],
@@ -797,7 +797,7 @@ class _ChatBubbleState extends State<ChatBubble>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(.45),
+                    color: Colors.black.withValues(alpha: .45),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -808,7 +808,7 @@ class _ChatBubbleState extends State<ChatBubble>
                               const TextStyle(fontSize: 10, color: Colors.white)),
                       if (mine) ...[
                         const SizedBox(width: 4),
-                        _ticks(Colors.white.withOpacity(.6), BookNestColors.cyan),
+                        _ticks(Colors.white.withValues(alpha: .6), BookNestColors.cyan),
                       ],
                     ],
                   ),
@@ -866,18 +866,18 @@ class _ChatBubbleState extends State<ChatBubble>
                                   horizontal: 7, vertical: 3),
                               decoration: BoxDecoration(
                                 color: _reactedByMe(entry.key)
-                                    ? BookNestColors.cyan.withOpacity(.18)
+                                    ? BookNestColors.cyan.withValues(alpha: .18)
                                     : (dark
-                                        ? Colors.white.withOpacity(.07)
-                                        : BookNestColors.navyDeep.withOpacity(.06)),
+                                        ? Colors.white.withValues(alpha: .07)
+                                        : BookNestColors.navyDeep.withValues(alpha: .06)),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: _reactedByMe(entry.key)
                                       ? BookNestColors.cyan
                                       : (dark
-                                          ? Colors.white.withOpacity(.12)
+                                          ? Colors.white.withValues(alpha: .12)
                                           : BookNestColors.navyDeep
-                                              .withOpacity(.12)),
+                                              .withValues(alpha: .12)),
                                 ),
                               ),
                               child: Row(
@@ -921,9 +921,9 @@ class _ChatBubbleState extends State<ChatBubble>
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: BookNestColors.cyan.withOpacity(.16),
+                        color: BookNestColors.cyan.withValues(alpha: .16),
                         border: Border.all(
-                            color: BookNestColors.cyan.withOpacity(.5)),
+                            color: BookNestColors.cyan.withValues(alpha: .5)),
                       ),
                       child: Icon(
                         mine
@@ -988,8 +988,8 @@ class _ComposerReplyBar extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         color: dark
-            ? Colors.white.withOpacity(.06)
-            : BookNestColors.navyDeep.withOpacity(.05),
+            ? Colors.white.withValues(alpha: .06)
+            : BookNestColors.navyDeep.withValues(alpha: .05),
         border: const Border(
             left: BorderSide(color: BookNestColors.cyan, width: 3)),
       ),
@@ -1012,15 +1012,15 @@ class _ComposerReplyBar extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 13,
                       color: dark
-                          ? Colors.white.withOpacity(.75)
-                          : BookNestColors.navyDeep.withOpacity(.75)),
+                          ? Colors.white.withValues(alpha: .75)
+                          : BookNestColors.navyDeep.withValues(alpha: .75)),
                 ),
               ],
             ),
           ),
           IconButton(
             icon: const Icon(Icons.close_rounded, size: 18),
-            color: dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.55),
+            color: dark ? Colors.white54 : BookNestColors.navyDeep.withValues(alpha: .55),
             onPressed: onCancel,
           ),
         ],
@@ -1047,8 +1047,8 @@ class _ReplyStrip extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         color: dark
-            ? Colors.white.withOpacity(.05)
-            : BookNestColors.navyDeep.withOpacity(.05),
+            ? Colors.white.withValues(alpha: .05)
+            : BookNestColors.navyDeep.withValues(alpha: .05),
         border: Border(
           left: BorderSide(
               color: BookNestColors.cyan, width: 2.5),
@@ -1059,7 +1059,7 @@ class _ReplyStrip extends StatelessWidget {
         children: [
           Icon(Icons.reply_rounded,
               size: 13,
-              color: BookNestColors.cyan.withOpacity(.9)),
+              color: BookNestColors.cyan.withValues(alpha: .9)),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
@@ -1070,8 +1070,8 @@ class _ReplyStrip extends StatelessWidget {
                 fontSize: 12.5,
                 fontStyle: FontStyle.italic,
                 color: dark
-                    ? Colors.white.withOpacity(.65)
-                    : BookNestColors.navyDeep.withOpacity(.65),
+                    ? Colors.white.withValues(alpha: .65)
+                    : BookNestColors.navyDeep.withValues(alpha: .65),
               ),
             ),
           ),
@@ -1250,7 +1250,7 @@ class _VideoContentState extends State<_VideoContent> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color:
-                                BookNestColors.navyDeep.withOpacity(.55),
+                                BookNestColors.navyDeep.withValues(alpha: .55),
                           ),
                           padding: const EdgeInsets.all(12),
                           child: const Icon(Icons.play_arrow_rounded,
@@ -1260,7 +1260,7 @@ class _VideoContentState extends State<_VideoContent> {
                   Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: BookNestColors.navyDeep.withOpacity(.55),
+                      color: BookNestColors.navyDeep.withValues(alpha: .55),
                     ),
                     padding: const EdgeInsets.all(12),
                     child: const Icon(Icons.play_arrow_rounded,
@@ -1271,7 +1271,7 @@ class _VideoContentState extends State<_VideoContent> {
                     top: 6,
                     right: 6,
                     child: Material(
-                      color: Colors.black.withOpacity(.35),
+                      color: Colors.black.withValues(alpha: .35),
                       shape: const CircleBorder(),
                       child: InkWell(
                         customBorder: const CircleBorder(),
@@ -1317,7 +1317,7 @@ class _VideoContentState extends State<_VideoContent> {
                                   inactiveColor: Colors.white24,
                                   onChanged: duration == 0
                                       ? null
-                                      : (v) => c!.seekTo(
+                                      : (v) => c.seekTo(
                                             Duration(
                                                 milliseconds: v.round()),
                                           ),
@@ -1328,7 +1328,7 @@ class _VideoContentState extends State<_VideoContent> {
                         ),
                         const SizedBox(width: 6),
                         ValueListenableBuilder<VideoPlayerValue>(
-                          valueListenable: c!,
+                          valueListenable: c,
                           builder: (context, value, _) => InkWell(
                             onTap: () {
                               final speeds = const [1.0, 1.5, 2.0];
@@ -1337,7 +1337,7 @@ class _VideoContentState extends State<_VideoContent> {
                                       speeds.length];
                               setState(() {
                                 _speed = next;
-                                c!.setPlaybackSpeed(next);
+                                c.setPlaybackSpeed(next);
                               });
                             },
                             child: Text(
@@ -1346,23 +1346,23 @@ class _VideoContentState extends State<_VideoContent> {
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w800,
                                   color: _speed == 1.0
-                                      ? Colors.white.withOpacity(.85)
+                                      ? Colors.white.withValues(alpha: .85)
                                       : BookNestColors.cyan),
                             ),
                           ),
                         ),
                         const SizedBox(width: 4),
                         ValueListenableBuilder<VideoPlayerValue>(
-                          valueListenable: c!,
+                          valueListenable: c,
                           builder: (context, value, _) => InkWell(
-                            onTap: () => c!.value.volume > 0
-                                ? c!.setVolume(0)
-                                : c!.setVolume(1),
+                            onTap: () => c.value.volume > 0
+                                ? c.setVolume(0)
+                                : c.setVolume(1),
                             child: Icon(
-                              c!.value.volume > 0
+                              c.value.volume > 0
                                   ? Icons.volume_up_rounded
                                   : Icons.volume_off_rounded,
-                              color: Colors.white.withOpacity(.85),
+                              color: Colors.white.withValues(alpha: .85),
                               size: 18,
                             ),
                           ),
@@ -1527,7 +1527,7 @@ class _ImageContent extends StatelessWidget {
             placeholder: (_, __) => Container(
               width: 220,
               height: 160,
-              color: Colors.white.withOpacity(.05),
+              color: Colors.white.withValues(alpha: .05),
               child: const Center(
                 child: CircularProgressIndicator(
                     color: BookNestColors.cyan, strokeWidth: 2),
@@ -1594,7 +1594,7 @@ class _RecoveredImageState extends State<_RecoveredImage> {
           return Container(
             width: 220,
             height: 160,
-            color: Colors.white.withOpacity(.05),
+            color: Colors.white.withValues(alpha: .05),
             child: const Center(
               child: CircularProgressIndicator(
                   color: BookNestColors.cyan, strokeWidth: 2),
@@ -1609,7 +1609,7 @@ class _RecoveredImageState extends State<_RecoveredImage> {
   Widget _broken() => Container(
         width: 220,
         height: 120,
-        color: Colors.white.withOpacity(.05),
+        color: Colors.white.withValues(alpha: .05),
         child: const Icon(Icons.broken_image_outlined,
             color: BookNestColors.cyan),
       );
@@ -1799,14 +1799,14 @@ class _VoiceContentState extends State<_VoiceContent> {
                 height: 38,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: tint.withOpacity(.16),
-                  border: Border.all(color: tint.withOpacity(.5)),
+                  color: tint.withValues(alpha: .16),
+                  border: Border.all(color: tint.withValues(alpha: .5)),
                 ),
                 child: _loading
                     ? Padding(
                         padding: const EdgeInsets.all(10),
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: fg.withOpacity(.7)),
+                            strokeWidth: 2, color: fg.withValues(alpha: .7)),
                       )
                     : Icon(
                         _playing
@@ -1849,7 +1849,7 @@ class _VoiceContentState extends State<_VoiceContent> {
                           painter: _VoiceWavePainter(
                             progress: progress,
                             played: onMySide ? Colors.white : BookNestColors.cyan,
-                            rest: fg.withOpacity(.32),
+                            rest: fg.withValues(alpha: .32),
                           ),
                         ),
                       ),
@@ -1857,7 +1857,7 @@ class _VoiceContentState extends State<_VoiceContent> {
                       Text(
                         '${_clock(_playing || _position > Duration.zero ? _position : Duration.zero)}'
                         ' · ${total > Duration.zero ? _clock(total) : '--:--'}',
-                        style: TextStyle(fontSize: 10.5, color: fg.withOpacity(.75)),
+                        style: TextStyle(fontSize: 10.5, color: fg.withValues(alpha: .75)),
                       ),
                     ],
                   ),
@@ -1872,7 +1872,7 @@ class _VoiceContentState extends State<_VoiceContent> {
                     const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  color: fg.withOpacity(.12),
+                  color: fg.withValues(alpha: .12),
                 ),
                 child: Text(
                   '${_speeds[_speedIndex].toStringAsFixed(_speeds[_speedIndex] == 2.0 ? 0 : 1)}×',
@@ -1887,7 +1887,7 @@ class _VoiceContentState extends State<_VoiceContent> {
           if (_error != null) ...[
             const SizedBox(height: 4),
             Text(_error!,
-                style: TextStyle(fontSize: 10.5, color: fg.withOpacity(.7))),
+                style: TextStyle(fontSize: 10.5, color: fg.withValues(alpha: .7))),
           ],
         ],
       ),
@@ -1968,7 +1968,6 @@ class _FileContent extends StatelessWidget {
       final segments = uri.pathSegments;
       if (segments.isNotEmpty) {
         final last = Uri.decodeComponent(segments.last);
-        final dot = last.indexOf('.', last.indexOf('/') == -1 ? 0 : last.length - 8);
         final clean = last.contains('/') ? last.split('/').last : last;
         // Cloudinary appends an extension: 'invoice1234.pdf' stays, hashed
         // ids keep their extension too — show as-is, minus version suffix.
@@ -1992,8 +1991,8 @@ class _FileContent extends StatelessWidget {
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: dark ? Colors.white.withOpacity(.06) : Colors.white,
-          border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+          color: dark ? Colors.white.withValues(alpha: .06) : Colors.white,
+          border: Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -2077,8 +2076,8 @@ class _BookShareContent extends StatelessWidget {
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: dark ? Colors.white.withOpacity(.06) : Colors.white,
-          border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+          color: dark ? Colors.white.withValues(alpha: .06) : Colors.white,
+          border: Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -2145,10 +2144,10 @@ class ChatDayChip extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
-          color: dark ? Colors.white.withOpacity(.07) : BookNestColors.navyDeep.withOpacity(.07),
+          color: dark ? Colors.white.withValues(alpha: .07) : BookNestColors.navyDeep.withValues(alpha: .07),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: dark ? Colors.white.withOpacity(.08) : BookNestColors.navyDeep.withOpacity(.08),
+            color: dark ? Colors.white.withValues(alpha: .08) : BookNestColors.navyDeep.withValues(alpha: .08),
           ),
         ),
         child: Text(
@@ -2156,7 +2155,7 @@ class ChatDayChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 11.5,
             fontWeight: FontWeight.w700,
-            color: dark ? BookNestColors.darkTextPrimary.withOpacity(.85) : BookNestColors.navyDeep,
+            color: dark ? BookNestColors.darkTextPrimary.withValues(alpha: .85) : BookNestColors.navyDeep,
           ),
         ),
       ),
@@ -2247,7 +2246,7 @@ Future<void> showMessageTranslation(
                               height: 1.45,
                               color: dark
                                   ? Colors.white54
-                                  : BookNestColors.navyDeep.withOpacity(.7))),
+                                  : BookNestColors.navyDeep.withValues(alpha: .7))),
                       const SizedBox(height: 12),
                     ],
                     Text(translated,
@@ -2336,9 +2335,9 @@ class BadgedAvatar extends StatelessWidget {
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: dark ? Colors.white.withOpacity(.08) : Colors.white,
+              color: dark ? Colors.white.withValues(alpha: .08) : Colors.white,
               border: Border.all(
-                  color: BookNestColors.cyan.withOpacity(.5), width: .8),
+                  color: BookNestColors.cyan.withValues(alpha: .5), width: .8),
             ),
             child: Icon(icon, size: 10, color: BookNestColors.cyan),
           )
@@ -2421,7 +2420,7 @@ Future<void> showForwardPicker(
                                   return ListTile(
                                     leading: CircleAvatar(
                                       backgroundColor: BookNestColors.cyan
-                                          .withOpacity(.15),
+                                          .withValues(alpha: .15),
                                       child: Icon(
                                         t.isClub
                                             ? Icons.groups_rounded
@@ -2577,7 +2576,7 @@ void showMessageInfo(
                         : Icons.done_all_rounded,
                     size: 18,
                     color: readBy.isEmpty
-                        ? BookNestColors.navyDeep.withOpacity(.5)
+                        ? BookNestColors.navyDeep.withValues(alpha: .5)
                         : BookNestColors.cyan,
                   ),
                   const SizedBox(width: 10),
@@ -2601,7 +2600,7 @@ void showMessageInfo(
                 'Sent ${chatTimeLabel(message['createdAt'])}',
                 style: TextStyle(
                     fontSize: 12.5,
-                    color: dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.6)),
+                    color: dark ? Colors.white54 : BookNestColors.navyDeep.withValues(alpha: .6)),
               ),
               if ((message['type']?.toString() == 'file') &&
                   message['fileSize'] != null) ...[
@@ -2611,7 +2610,7 @@ void showMessageInfo(
                   '${((message['fileSize'] as num?)?.toInt() ?? 0) < 1024 * 1024 ? '${((message['fileSize'] as num?)!.toInt() / 1024).toStringAsFixed(0)} KB' : '${((message['fileSize'] as num?)!.toInt() / (1024 * 1024)).toStringAsFixed(1)} MB'}',
                   style: TextStyle(
                       fontSize: 12.5,
-                      color: dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.6)),
+                      color: dark ? Colors.white54 : BookNestColors.navyDeep.withValues(alpha: .6)),
                 ),
               ],
               if (readBy.isNotEmpty) ...[
@@ -3064,8 +3063,8 @@ class _ChatComposerState extends State<ChatComposer> {
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
-        color: (dark ? BookNestColors.darkChatBackground : Colors.white).withOpacity(.97),
-        border: Border(top: BorderSide(color: theme.dividerColor.withOpacity(.5))),
+        color: (dark ? BookNestColors.darkChatBackground : Colors.white).withValues(alpha: .97),
+        border: Border(top: BorderSide(color: theme.dividerColor.withValues(alpha: .5))),
       ),
       child: SafeArea(
         top: false,
@@ -3662,7 +3661,7 @@ class _ChatThemeSheetState extends State<_ChatThemeSheet> {
                                 ? BookNestColors.cyan
                                 : Theme.of(context)
                                     .dividerColor
-                                    .withOpacity(.6),
+                                    .withValues(alpha: .6),
                           ),
                         ),
                         child: ClipRRect(
@@ -3815,7 +3814,7 @@ class _LinkTextState extends State<_LinkText> {
         style: TextStyle(
             color: widget.linkColor,
             decoration: TextDecoration.underline,
-            decorationColor: widget.linkColor.withOpacity(.5),
+            decorationColor: widget.linkColor.withValues(alpha: .5),
             fontWeight: FontWeight.w600),
         recognizer: recognizer,
       ));
@@ -3906,7 +3905,7 @@ class _LinkPreviewCardState extends State<_LinkPreviewCard> {
             Text('Loading preview…',
                 style: TextStyle(
                     fontSize: 11.5,
-                    color: BookNestColors.cyan.withOpacity(.8))),
+                    color: BookNestColors.cyan.withValues(alpha: .8))),
           ],
         ),
       );
@@ -3919,7 +3918,7 @@ class _LinkPreviewCardState extends State<_LinkPreviewCard> {
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Material(
-        color: Colors.black.withOpacity(.18),
+        color: Colors.black.withValues(alpha: .18),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),

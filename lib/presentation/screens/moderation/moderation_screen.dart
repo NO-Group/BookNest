@@ -274,7 +274,7 @@ class _ReportsTabState extends State<_ReportsTab>
                       children: [
                         Icon(Icons.verified_rounded,
                             size: 46,
-                            color: BookNestColors.cyan.withOpacity(.6)),
+                            color: BookNestColors.cyan.withValues(alpha: .6)),
                         const SizedBox(height: 12),
                         Text(
                           _showResolved
@@ -306,10 +306,10 @@ class _ReportsTabState extends State<_ReportsTab>
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(18),
                             color: dark
-                                ? Colors.white.withOpacity(.04)
-                                : BookNestColors.navyDeep.withOpacity(.03),
+                                ? Colors.white.withValues(alpha: .04)
+                                : BookNestColors.navyDeep.withValues(alpha: .03),
                             border: Border.all(
-                                color: BookNestColors.cyan.withOpacity(.2)),
+                                color: BookNestColors.cyan.withValues(alpha: .2)),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,7 +322,7 @@ class _ReportsTabState extends State<_ReportsTab>
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(20),
                                       color:
-                                          BookNestColors.cyan.withOpacity(.14),
+                                          BookNestColors.cyan.withValues(alpha: .14),
                                     ),
                                     child: Text('$kind · $reason',
                                         style: const TextStyle(
@@ -399,7 +399,7 @@ class _ReportsTabState extends State<_ReportsTab>
                                   child: Chip(
                                     visualDensity: VisualDensity.compact,
                                     backgroundColor:
-                                        BookNestColors.cyan.withOpacity(.12),
+                                        BookNestColors.cyan.withValues(alpha: .12),
                                     label: Text(
                                         r['outcome']?.toString() ??
                                             'resolved',
@@ -439,8 +439,8 @@ class _ActionChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(.5)),
-          color: color.withOpacity(.08),
+          border: Border.all(color: color.withValues(alpha: .5)),
+          color: color.withValues(alpha: .08),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -673,12 +673,12 @@ class _ReadersTabState extends State<_ReadersTab>
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
                         color: dark
-                            ? Colors.white.withOpacity(.04)
-                            : BookNestColors.navyDeep.withOpacity(.03),
+                            ? Colors.white.withValues(alpha: .04)
+                            : BookNestColors.navyDeep.withValues(alpha: .03),
                         border: Border.all(
                             color: banned
-                                ? const Color(0xFFD06A6A).withOpacity(.5)
-                                : BookNestColors.cyan.withOpacity(.2)),
+                                ? const Color(0xFFD06A6A).withValues(alpha: .5)
+                                : BookNestColors.cyan.withValues(alpha: .2)),
                       ),
                       child: Row(
                         children: [
@@ -844,10 +844,10 @@ class _StatsTabState extends State<_StatsTab>
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(18),
                     color: dark
-                        ? Colors.white.withOpacity(.04)
-                        : BookNestColors.navyDeep.withOpacity(.03),
+                        ? Colors.white.withValues(alpha: .04)
+                        : BookNestColors.navyDeep.withValues(alpha: .03),
                     border: Border.all(
-                        color: BookNestColors.cyan.withOpacity(.2)),
+                        color: BookNestColors.cyan.withValues(alpha: .2)),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -887,8 +887,8 @@ class _StatsTabState extends State<_StatsTab>
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
                   color: dark
-                      ? Colors.white.withOpacity(.03)
-                      : BookNestColors.navyDeep.withOpacity(.02),
+                      ? Colors.white.withValues(alpha: .03)
+                      : BookNestColors.navyDeep.withValues(alpha: .02),
                 ),
                 child: Row(
                   children: [
@@ -1063,13 +1063,13 @@ class _GenresTabState extends State<_GenresTab>
               ? 'The tags readers choose when they start a club.'
               : 'The shelves every book lives on. Changes reach all devices.',
           style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurface.withOpacity(.6)),
+              ?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: .6)),
         ),
         const SizedBox(height: 12),
         if (genres.isEmpty)
           Text('Nothing here yet — add the first one below.',
               style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(.5)))
+                  color: theme.colorScheme.onSurface.withValues(alpha: .5)))
         else
           Wrap(
             spacing: 8,

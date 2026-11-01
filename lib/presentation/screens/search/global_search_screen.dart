@@ -137,10 +137,10 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                 color: (Theme.of(context).brightness == Brightness.dark
                         ? BookNestColors.darkChatBackground
                         : Colors.white)
-                    .withOpacity(.66),
+                    .withValues(alpha: .66),
                 border: Border(
                   bottom: BorderSide(
-                      color: BookNestColors.cyan.withOpacity(.15)),
+                      color: BookNestColors.cyan.withValues(alpha: .15)),
                 ),
               ),
             ),
@@ -234,12 +234,12 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                             padding: const EdgeInsets.only(bottom: 6),
                             child: Material(
                               color: theme.colorScheme.surface
-                                  .withOpacity(.72),
+                                  .withValues(alpha: .72),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                   side: BorderSide(
                                       color: BookNestColors.cyan
-                                          .withOpacity(.16))),
+                                          .withValues(alpha: .16))),
                               borderRadius: BorderRadius.circular(16),
                               child: ListTile(
                                 shape: RoundedRectangleBorder(
@@ -279,12 +279,12 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                             padding: const EdgeInsets.only(bottom: 6),
                             child: Material(
                               color: theme.colorScheme.surface
-                                  .withOpacity(.72),
+                                  .withValues(alpha: .72),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                   side: BorderSide(
                                       color: BookNestColors.cyan
-                                          .withOpacity(.16))),
+                                          .withValues(alpha: .16))),
                               borderRadius: BorderRadius.circular(16),
                               child: ListTile(
                                 shape: RoundedRectangleBorder(
@@ -332,12 +332,12 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                             padding: const EdgeInsets.only(bottom: 6),
                             child: Material(
                               color: theme.colorScheme.surface
-                                  .withOpacity(.72),
+                                  .withValues(alpha: .72),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                   side: BorderSide(
                                       color: BookNestColors.cyan
-                                          .withOpacity(.16))),
+                                          .withValues(alpha: .16))),
                               borderRadius: BorderRadius.circular(16),
                               child: ListTile(
                                 shape: RoundedRectangleBorder(

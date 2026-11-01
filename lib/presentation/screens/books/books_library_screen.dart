@@ -6,7 +6,7 @@ import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
 import '../../../services/genre_service.dart';
 import '../../../state/book_providers.dart';
-import '../../components/booknest_ui.dart' show BookCover, BookNestLoader, TagChip, kBookNestGenres;
+import '../../components/booknest_ui.dart' show BookCover, TagChip;
 import '../../components/skeleton_kit.dart';
 
 class BooksLibraryScreen extends ConsumerStatefulWidget {
@@ -236,10 +236,10 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                                         decoration: BoxDecoration(
                                           shape: BoxShape.circle,
                                           color: BookNestColors.cyan
-                                              .withOpacity(.12),
+                                              .withValues(alpha: .12),
                                           border: Border.all(
                                               color: BookNestColors.cyan
-                                                  .withOpacity(.4)),
+                                                  .withValues(alpha: .4)),
                                         ),
                                         child: const Icon(
                                             Icons.history_edu_rounded,
@@ -339,11 +339,11 @@ class _BookTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Material(
-        color: Theme.of(context).colorScheme.surface.withOpacity(.72),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: .72),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: BorderSide(
-                color: BookNestColors.cyan.withOpacity(.16))),
+                color: BookNestColors.cyan.withValues(alpha: .16))),
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),

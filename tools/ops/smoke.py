@@ -482,6 +482,34 @@ def cbt_suite(a_tok, b_tok, gid):
     r = api(b_tok, 'cbt.exam.list', {'schoolId': gid})
     mine = next((e for e in data(r).get('exams', []) if e.get('id') == live_id), {}).get('myAttempt') or {}
     step('student sees final score', mine.get('score') == 5, str(mine)[:120])
+    r = api(a_tok, 'cbt.results', {'examId': live_id or ''})
+    items = data(r).get('items', [])
+    first = next((i for i in items if i.get('text', '').startswith('What is')), {})
+    step('question analysis: 2+2 answered right by 1 of 1',
+         ok(r) and first.get('correct') == 1 and first.get('sat') == 1, str(items)[:160])
+    r = api(b_tok, 'notifications.list', {'limit': 50})
+    kinds = [n for n in data(r).get('notifications', []) if n.get('type') == 'school']
+    step('student notified: new exam + results out',
+         any('New exam' in n.get('text', '') for n in kinds) and
+         any('Results are out' in n.get('text', '') for n in kinds) and
+         all(n.get('schoolId') == gid for n in kinds), f'{len(kinds)} school notifications')
+    r = api(a_tok, 'cbt.exam.duplicate', {'examId': live_id or ''})
+    copy_id = data(r).get('exam', {}).get('id')
+    g = api(a_tok, 'cbt.exam.get', {'examId': copy_id or ''})
+    copy = data(g).get('exam', {})
+    step('duplicate exam = unpublished draft with the same 3 questions',
+         ok(r) and copy.get('published') is False and len(copy.get('questions', [])) == 3, str(g[1])[:140])
+    r = api(b_tok, 'cbt.exam.start', {'examId': copy_id or ''})
+    step('students cannot open a draft', r[0] == 404, f'HTTP {r[0]}')
+    if copy_id:
+        api(a_tok, 'cbt.exam.delete', {'examId': copy_id})
+    r = api(a_tok, 'schools.exam.create', {'schoolId': gid, 'title': 'Paper exam', 'subject': 'Maths',
+                                           'at': iso(86400)})
+    date_id = data(r).get('exam', {}).get('id')
+    r2 = api(a_tok, 'schools.exam.delete', {'examId': date_id or ''})
+    r3 = api(b_tok, 'schools.exam.list', {'schoolId': gid})
+    gone = not any(e.get('id') == date_id for e in data(r3).get('exams', []))
+    step('written exam date: add and remove', ok(r) and ok(r2) and gone, str(r2[1])[:120])
     for eid in (locked_id, live_id, strict_id):
         if eid:
             api(a_tok, 'cbt.exam.delete', {'examId': eid})

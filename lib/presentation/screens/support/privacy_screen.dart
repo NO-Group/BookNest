@@ -91,7 +91,7 @@ class _Card extends StatelessWidget {
             height: 38,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(11),
-              color: BookNestColors.cyan.withOpacity(.12),
+              color: BookNestColors.cyan.withValues(alpha: .12),
             ),
             child: Icon(icon, size: 19, color: BookNestColors.cyan),
           ),

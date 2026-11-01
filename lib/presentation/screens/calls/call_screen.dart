@@ -74,8 +74,8 @@ class CallScreen extends StatelessWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: LinearGradient(colors: [
-                            BookNestColors.cyan.withOpacity(.25),
-                            BookNestColors.cyan.withOpacity(.06),
+                            BookNestColors.cyan.withValues(alpha: .25),
+                            BookNestColors.cyan.withValues(alpha: .06),
                           ]),
                         ),
                         child: CircleAvatar(
@@ -114,8 +114,8 @@ class CallScreen extends StatelessWidget {
                         horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
                       color: status == CallStatus.active
-                          ? BookNestColors.cyan.withOpacity(.16)
-                          : Colors.white.withOpacity(.08),
+                          ? BookNestColors.cyan.withValues(alpha: .16)
+                          : Colors.white.withValues(alpha: .08),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: status == CallStatus.active
@@ -140,10 +140,10 @@ class CallScreen extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                          color: BookNestColors.cyan.withOpacity(.5)),
+                          color: BookNestColors.cyan.withValues(alpha: .5)),
                       boxShadow: [
                         BoxShadow(
-                            color: Colors.black.withOpacity(.4),
+                            color: Colors.black.withValues(alpha: .4),
                             blurRadius: 16),
                       ],
                     ),
@@ -186,14 +186,14 @@ class CallScreen extends StatelessWidget {
                               ? Icons.videocam_off_rounded
                               : Icons.videocam_rounded,
                           label: service.cameraOff ? 'Off' : 'Camera',
-                          background: Colors.white.withOpacity(.12),
+                          background: Colors.white.withValues(alpha: .12),
                           onTap: () => service.toggleCamera(),
                         ),
                         const SizedBox(width: 16),
                         _CallAction(
                           icon: Icons.flip_camera_android_rounded,
                           label: 'Flip',
-                          background: Colors.white.withOpacity(.12),
+                          background: Colors.white.withValues(alpha: .12),
                           onTap: () => service.switchCamera(),
                         ),
                         const SizedBox(width: 16),
@@ -204,8 +204,8 @@ class CallScreen extends StatelessWidget {
                             : Icons.hearing_rounded,
                         label: service.speakerOn ? 'Speaker' : 'Earpiece',
                         background: service.speakerOn
-                            ? BookNestColors.cyan.withOpacity(.3)
-                            : Colors.white.withOpacity(.12),
+                            ? BookNestColors.cyan.withValues(alpha: .3)
+                            : Colors.white.withValues(alpha: .12),
                         onTap: () => service.toggleSpeaker(),
                       ),
                       const SizedBox(width: 16),
@@ -214,7 +214,7 @@ class CallScreen extends StatelessWidget {
                             ? Icons.mic_off_rounded
                             : Icons.mic_rounded,
                         label: service.muted ? 'Muted' : 'Mic',
-                        background: Colors.white.withOpacity(.12),
+                        background: Colors.white.withValues(alpha: .12),
                         onTap: () => service.toggleMute(),
                       ),
                       const SizedBox(width: 16),
@@ -230,7 +230,7 @@ class CallScreen extends StatelessWidget {
                     const SizedBox(height: 14),
                     Text('Peer-to-peer · encrypted by the transport',
                         style: TextStyle(
-                            color: Colors.white.withOpacity(.45),
+                            color: Colors.white.withValues(alpha: .45),
                             fontSize: 10.5)),
                   ],
                 ]),
@@ -302,7 +302,7 @@ class _CallAction extends StatelessWidget {
           decoration: BoxDecoration(
             color: background,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withOpacity(.14)),
+            border: Border.all(color: Colors.white.withValues(alpha: .14)),
           ),
           child: Icon(icon, color: Colors.white, size: 25),
         ),

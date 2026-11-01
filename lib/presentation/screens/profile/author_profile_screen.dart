@@ -453,7 +453,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
                         const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(20),
-                      color: BookNestColors.cyan.withOpacity(.14),
+                      color: BookNestColors.cyan.withValues(alpha: .14),
                     ),
                     child: Text('${_works.length}',
                         style: const TextStyle(
@@ -520,7 +520,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
             end: Alignment.bottomRight,
             colors: [
               ..._bannerColors,
-              if (_isAuthor) BookNestColors.cyan.withOpacity(.45),
+              if (_isAuthor) BookNestColors.cyan.withValues(alpha: .45),
             ],
           ),
         ),
@@ -752,7 +752,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.auto_stories_outlined,
-                  size: 42, color: BookNestColors.cyan.withOpacity(.6)),
+                  size: 42, color: BookNestColors.cyan.withValues(alpha: .6)),
               const SizedBox(height: 10),
               Text(
                 _isMe
@@ -785,8 +785,8 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          color: BookNestColors.cyan.withOpacity(.14),
-          border: Border.all(color: BookNestColors.cyan.withOpacity(.5)),
+          color: BookNestColors.cyan.withValues(alpha: .14),
+          border: Border.all(color: BookNestColors.cyan.withValues(alpha: .5)),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -927,7 +927,7 @@ class _AuthorProfileScreenState extends State<AuthorProfileScreen> {
     return Material(
       color: filled
           ? BookNestColors.cyan
-          : (dark ? Colors.white.withOpacity(.06) : BookNestColors.navy.withOpacity(.05)),
+          : (dark ? Colors.white.withValues(alpha: .06) : BookNestColors.navy.withValues(alpha: .05)),
       borderRadius: BorderRadius.circular(24),
       child: InkWell(
         borderRadius: BorderRadius.circular(24),

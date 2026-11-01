@@ -1,9 +1,33 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
+import '../../../services/cloudinary_service.dart';
+
+/// Picks a picture for a question (diagram, map, graph) and uploads it to
+/// Cloudinary — images only, never documents. Returns the https URL,
+/// '' when the user cancels, or null when the upload failed.
+Future<String?> pickCbtImage() async {
+  try {
+    final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery, imageQuality: 85, maxWidth: 1600);
+    if (picked == null) return ''; // cancelled
+    final bytes = await picked.readAsBytes();
+    final ext = picked.name.contains('.')
+        ? picked.name.split('.').last.toLowerCase()
+        : 'jpg';
+    return CloudinaryService.uploadImage(
+      bytes: bytes,
+      folder: 'cbt',
+      extension: const ['jpg', 'jpeg', 'png', 'webp'].contains(ext) ? ext : 'jpg',
+    );
+  } catch (_) {
+    return null;
+  }
+}
 
 /// Shared bits of the school CBT: API calls with server error messages,
 /// time formatting, the CSV / Excel paste parser and the exam calculator.
@@ -213,7 +237,7 @@ Future<List<Map<String, dynamic>>?> showCbtBulkImport(
                       color: Theme.of(context)
                           .colorScheme
                           .onSurface
-                          .withOpacity(.7))),
+                          .withValues(alpha: .7))),
               const SizedBox(height: 10),
               TextField(
                 controller: ctrl,
@@ -293,6 +317,10 @@ Future<Map<String, dynamic>?> showCbtQuestionEditor(
   }
   var answer = (q['answer'] as num?)?.toInt() ?? 0;
   var practice = q['practice'] != false;
+  String? imageUrl = (q['imageUrl']?.toString() ?? '').startsWith('https://')
+      ? q['imageUrl'].toString()
+      : null;
+  var uploading = false;
   String? error;
 
   return showDialog<Map<String, dynamic>>(
@@ -333,22 +361,79 @@ Future<Map<String, dynamic>?> showCbtQuestionEditor(
                           labelText: 'Question',
                           border: OutlineInputBorder()),
                     ),
+                    const SizedBox(height: 8),
+                    if (imageUrl != null)
+                      Stack(children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(imageUrl!,
+                              height: 160,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) =>
+                                  const SizedBox(height: 40)),
+                        ),
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: IconButton.filledTonal(
+                            tooltip: 'Remove picture',
+                            onPressed: () => setLocal(() => imageUrl = null),
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                          ),
+                        ),
+                      ])
+                    else
+                      TextButton.icon(
+                        onPressed: uploading
+                            ? null
+                            : () async {
+                                setLocal(() => uploading = true);
+                                final url = await pickCbtImage();
+                                if (!context.mounted) return;
+                                if (url == null) {
+                                  ScaffoldMessenger.maybeOf(context)
+                                      ?.showSnackBar(const SnackBar(
+                                          content: Text(
+                                              'Picture not added — try again.')));
+                                }
+                                setLocal(() {
+                                  uploading = false;
+                                  if (url != null && url.isNotEmpty) {
+                                    imageUrl = url;
+                                  }
+                                });
+                              },
+                        icon: uploading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.add_photo_alternate_outlined),
+                        label: Text(uploading
+                            ? 'Uploading…'
+                            : 'Add a picture (diagram, map, graph)'),
+                      ),
                     if (type == 'mcq') ...[
                       const SizedBox(height: 10),
                       Text('Options — tap the circle to mark the answer',
                           style: TextStyle(
                               fontSize: 12,
-                              color: onSurface.withOpacity(.65))),
+                              color: onSurface.withValues(alpha: .65))),
                       for (var i = 0; i < opts.length; i++)
                         Padding(
                           padding: const EdgeInsets.only(top: 6),
                           child: Row(children: [
-                            Radio<int>(
-                              value: i,
-                              groupValue: answer,
-                              activeColor: BookNestColors.cyan,
-                              onChanged: (v) =>
-                                  setLocal(() => answer = v ?? 0),
+                            IconButton(
+                              tooltip: 'Correct answer',
+                              onPressed: () => setLocal(() => answer = i),
+                              icon: Icon(
+                                  answer == i
+                                      ? Icons.radio_button_checked_rounded
+                                      : Icons.radio_button_unchecked_rounded,
+                                  color: answer == i
+                                      ? BookNestColors.cyan
+                                      : null),
                             ),
                             Expanded(
                               child: TextField(
@@ -445,7 +530,7 @@ Future<Map<String, dynamic>?> showCbtQuestionEditor(
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         value: practice,
-                        activeColor: BookNestColors.cyan,
+                        activeThumbColor: BookNestColors.cyan,
                         onChanged: (v) => setLocal(() => practice = v),
                         title: const Text('Students can practise this'),
                         subtitle: const Text(
@@ -499,6 +584,7 @@ Future<Map<String, dynamic>?> showCbtQuestionEditor(
                   'topic': topic.text.trim(),
                   'year': year.text.trim(),
                   'practice': practice,
+                  'imageUrl': imageUrl,
                 });
               },
               child: const Text('Save'),
@@ -578,7 +664,7 @@ class _CalculatorState extends State<_Calculator> {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: onSurface.withOpacity(.06),
+              color: onSurface.withValues(alpha: .06),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [

@@ -97,8 +97,8 @@ class _ServerStatusBannerState extends State<ServerStatusBanner> {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            color: color.withOpacity(.12),
-            border: Border.all(color: color.withOpacity(.55)),
+            color: color.withValues(alpha: .12),
+            border: Border.all(color: color.withValues(alpha: .55)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,7 +129,7 @@ class _ServerStatusBannerState extends State<ServerStatusBanner> {
                         color: Theme.of(context)
                             .colorScheme
                             .onSurface
-                            .withOpacity(.9),
+                            .withValues(alpha: .9),
                       ),
                     ),
                   ),
@@ -162,7 +162,7 @@ class _ServerStatusBannerState extends State<ServerStatusBanner> {
                     color: Theme.of(context)
                         .colorScheme
                         .onSurface
-                        .withOpacity(.75),
+                        .withValues(alpha: .75),
                   ),
                 ),
               ],

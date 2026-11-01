@@ -427,7 +427,7 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
                           fontStyle: typing.isEmpty
                               ? FontStyle.normal
                               : FontStyle.italic,
-                          color: BookNestColors.cyan.withOpacity(.85),
+                          color: BookNestColors.cyan.withValues(alpha: .85),
                         ),
                       ),
                     ),
@@ -460,7 +460,7 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
                         Icon(Icons.search_off_rounded,
                             size: 40,
-                            color: BookNestColors.cyan.withOpacity(.5)),
+                            color: BookNestColors.cyan.withValues(alpha: .5)),
                         const SizedBox(height: 10),
                         Text('No matches in this chat',
                             style: theme.textTheme.titleMedium
@@ -477,7 +477,7 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.waving_hand_rounded,
-                                  color: BookNestColors.cyan.withOpacity(.6),
+                                  color: BookNestColors.cyan.withValues(alpha: .6),
                                   size: 42),
                               const SizedBox(height: 10),
                               Text('Say hello to $_peerName 👋',

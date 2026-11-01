@@ -279,11 +279,11 @@ class _FeedScreenState extends State<FeedScreen>
                               ),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: BookNestColors.navyDeep.withOpacity(.25),
+                                color: BookNestColors.navyDeep.withValues(alpha: .25),
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: BookNestColors.cyan.withOpacity(0.35),
+                                  color: BookNestColors.cyan.withValues(alpha: 0.35),
                                   blurRadius: 18,
                                   offset: const Offset(0, 5),
                                 ),
@@ -436,10 +436,10 @@ class _FeedScreenState extends State<FeedScreen>
               color: (dark
                       ? BookNestColors.darkChatBackground
                       : Colors.white)
-                  .withOpacity(.55),
+                  .withValues(alpha: .55),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                  color: BookNestColors.cyan.withOpacity(.24)),
+                  color: BookNestColors.cyan.withValues(alpha: .24)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -546,7 +546,7 @@ class _QuotePostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: BookNestColors.cyan.withOpacity(0.1),
+              color: BookNestColors.cyan.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -691,7 +691,7 @@ class _NewsPostCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: BookNestColors.navy.withOpacity(0.1),
+                    color: BookNestColors.navy.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
@@ -787,7 +787,7 @@ class _PollPostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: BookNestColors.cyan.withOpacity(0.1),
+              color: BookNestColors.cyan.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -886,7 +886,7 @@ class _EventPostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: BookNestColors.navy.withOpacity(0.1),
+              color: BookNestColors.navy.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -985,7 +985,7 @@ class _ArticlePostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: BookNestColors.navy.withOpacity(0.1),
+              color: BookNestColors.navy.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -1267,7 +1267,7 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
       alignment: WrapAlignment.end,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Icon(Icons.visibility_outlined, color: muted.withOpacity(.8), size: 18),
+        Icon(Icons.visibility_outlined, color: muted.withValues(alpha: .8), size: 18),
         const SizedBox(width: 4),
         AnimatedCount(
           value: _views,
@@ -1336,7 +1336,7 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
         if (_mine)
           IconButton(
             icon: Icon(Icons.delete_outline_rounded,
-                color: muted.withOpacity(.7), size: 18),
+                color: muted.withValues(alpha: .7), size: 18),
             tooltip: 'Delete post',
             visualDensity: VisualDensity.compact,
             padding: const EdgeInsets.all(4),
@@ -1346,7 +1346,7 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
         else
           IconButton(
             icon: Icon(Icons.flag_outlined,
-                color: muted.withOpacity(.7), size: 18),
+                color: muted.withValues(alpha: .7), size: 18),
             tooltip: 'Report post',
           visualDensity: VisualDensity.compact,
           padding: const EdgeInsets.all(4),
@@ -1509,7 +1509,7 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
               width: 44,
               height: 4,
               decoration: BoxDecoration(
-                color: Theme.of(context).hintColor.withOpacity(.4),
+                color: Theme.of(context).hintColor.withValues(alpha: .4),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -1531,7 +1531,7 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
                                   size: 34,
                                   color: Theme.of(context)
                                       .hintColor
-                                      .withOpacity(.5)),
+                                      .withValues(alpha: .5)),
                               const SizedBox(height: 10),
                               Text(
                                 'Start the thread — say something first',
@@ -1585,7 +1585,7 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
                   children: [
                     Icon(Icons.subdirectory_arrow_right_rounded,
                         size: 15,
-                        color: BookNestColors.cyan.withOpacity(.9)),
+                        color: BookNestColors.cyan.withValues(alpha: .9)),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -1603,7 +1603,7 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
                           size: 16,
                           color:
                               Theme.of(context).colorScheme.onSurface
-                                  .withOpacity(.6)),
+                                  .withValues(alpha: .6)),
                     ),
                   ],
                 ),
@@ -1699,8 +1699,8 @@ class _ThreadTile extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         color: dark
-            ? Colors.white.withOpacity(.05)
-            : BookNestColors.navyDeep.withOpacity(.04),
+            ? Colors.white.withValues(alpha: .05)
+            : BookNestColors.navyDeep.withValues(alpha: .04),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1733,7 +1733,7 @@ class _ThreadTile extends StatelessWidget {
                           color: Theme.of(context)
                               .colorScheme
                               .onSurface
-                              .withOpacity(.5))),
+                              .withValues(alpha: .5))),
                 ),
               ),
             for (final reply in replies)
@@ -1809,7 +1809,7 @@ class _CommentRow extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w700,
-                      color: BookNestColors.cyan.withOpacity(.85))),
+                      color: BookNestColors.cyan.withValues(alpha: .85))),
             ),
           ],
         ),
@@ -1823,7 +1823,7 @@ class _CommentRow extends StatelessWidget {
                     color: Theme.of(context)
                         .colorScheme
                         .onSurface
-                        .withOpacity(.55))),
+                        .withValues(alpha: .55))),
           ),
         const SizedBox(height: 6),
         Text(comment['text']?.toString() ?? '',
@@ -1846,10 +1846,10 @@ void _showEventDetails(BuildContext context, dynamic post) {
       backgroundColor: (Theme.of(dialogContext).brightness == Brightness.dark
               ? BookNestColors.darkChatBackground
               : Colors.white)
-          .withOpacity(.88),
+          .withValues(alpha: .88),
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(22),
-          side: BorderSide(color: BookNestColors.cyan.withOpacity(.3))),
+          side: BorderSide(color: BookNestColors.cyan.withValues(alpha: .3))),
       title: Text(post?['title']?.toString() ?? 'Event'),
       content: Column(
         mainAxisSize: MainAxisSize.min,

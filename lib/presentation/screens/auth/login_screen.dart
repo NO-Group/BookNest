@@ -74,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              BookNestColors.navyDeep.withOpacity(.12),
+              BookNestColors.navyDeep.withValues(alpha: .12),
               theme.scaffoldBackgroundColor,
               theme.scaffoldBackgroundColor,
             ],
@@ -140,7 +140,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: BookNestColors.cyan.withOpacity(.3),
+                          color: BookNestColors.cyan.withValues(alpha: .3),
                           blurRadius: 18,
                           offset: const Offset(0, 8),
                         ),

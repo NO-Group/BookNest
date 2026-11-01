@@ -51,7 +51,6 @@ import '../presentation/screens/support/terms_screen.dart';
 import '../presentation/screens/settings/chat_backup_screen.dart';
 import '../presentation/screens/moderation/moderation_screen.dart';
 import '../presentation/screens/brainstorm/brainstorm_screen.dart';
-import '../presentation/screens/auth/suspend_gate_screen.dart';
 import '../presentation/screens/moderator/insights_screen.dart';
 import '../presentation/screens/moderator/mass_message_screen.dart';
 import '../presentation/screens/moderator/users_screen.dart';

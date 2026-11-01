@@ -279,7 +279,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
         child: Text(
           'English definitions · WordNet 3.1, Princeton University',
           style: TextStyle(
-              fontSize: 10.5, color: theme.hintColor.withOpacity(.8)),
+              fontSize: 10.5, color: theme.hintColor.withValues(alpha: .8)),
         ),
       ));
     }
@@ -364,7 +364,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
             child: Text(
               'English definitions · WordNet 3.1, Princeton University',
               style: TextStyle(
-                  fontSize: 10.5, color: theme.hintColor.withOpacity(.8)),
+                  fontSize: 10.5, color: theme.hintColor.withValues(alpha: .8)),
             ),
           ),
         ],

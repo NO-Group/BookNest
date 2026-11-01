@@ -698,7 +698,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
               padding: const EdgeInsets.only(bottom: 4),
               child: Material(
                 color: i == _currentChapter
-                    ? BookNestColors.cyan.withOpacity(.16)
+                    ? BookNestColors.cyan.withValues(alpha: .16)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
                 child: ListTile(
@@ -709,7 +709,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                     radius: 13,
                     backgroundColor: i == _currentChapter
                         ? BookNestColors.cyan
-                        : BookNestColors.cyan.withOpacity(.14),
+                        : BookNestColors.cyan.withValues(alpha: .14),
                     child: Text('${i + 1}',
                         style: TextStyle(
                             fontSize: 11.5,
@@ -875,7 +875,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: () =>
-                DefaultTabController.of(context)?.animateTo(1),
+                DefaultTabController.of(context).animateTo(1),
             icon: const Icon(Icons.edit_note_rounded),
             label: const Text('Next: write the chapters'),
           ),
@@ -915,7 +915,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
                             : FontWeight.w500,
                         fontSize: 12.5,
                       ),
-                      selectedColor: BookNestColors.cyan.withOpacity(.22),
+                      selectedColor: BookNestColors.cyan.withValues(alpha: .22),
                       labelPadding:
                           const EdgeInsets.symmetric(horizontal: 10),
                     ),
@@ -1060,7 +1060,7 @@ class _BookEditorScreenState extends State<BookEditorScreen> {
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             border: Border(
-              top: BorderSide(color: theme.dividerColor.withOpacity(.6)),
+              top: BorderSide(color: theme.dividerColor.withValues(alpha: .6)),
             ),
           ),
           child: Row(
@@ -1124,11 +1124,11 @@ class _ImagePickerCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: dark ? Colors.white.withOpacity(.04) : Colors.white,
+        color: dark ? Colors.white.withValues(alpha: .04) : Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
             color: url != null
-                ? BookNestColors.cyan.withOpacity(.45)
+                ? BookNestColors.cyan.withValues(alpha: .45)
                 : theme.dividerColor),
       ),
       child: Column(
@@ -1157,7 +1157,7 @@ class _ImagePickerCard extends StatelessWidget {
               height: 120,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: BookNestColors.cyan.withOpacity(.06),
+                color: BookNestColors.cyan.withValues(alpha: .06),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const CircularProgressIndicator(
@@ -1181,16 +1181,16 @@ class _ImagePickerCard extends StatelessWidget {
                 height: 96,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: BookNestColors.cyan.withOpacity(.06),
+                  color: BookNestColors.cyan.withValues(alpha: .06),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                      color: BookNestColors.cyan.withOpacity(.25)),
+                      color: BookNestColors.cyan.withValues(alpha: .25)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.add_photo_alternate_outlined,
-                        color: BookNestColors.cyan.withOpacity(.8)),
+                        color: BookNestColors.cyan.withValues(alpha: .8)),
                     const SizedBox(width: 8),
                     Text('Upload from your gallery',
                         style: TextStyle(color: theme.hintColor)),

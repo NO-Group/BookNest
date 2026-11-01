@@ -77,7 +77,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
       leading: Icon(icon,
           size: 21,
-          color: selected ? BookNestColors.cyan : onSurface.withOpacity(.6)),
+          color: selected ? BookNestColors.cyan : onSurface.withValues(alpha: .6)),
       title: Text(title,
           style: TextStyle(
               fontWeight: FontWeight.w800,
@@ -645,9 +645,9 @@ class _SettingsCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            color: Theme.of(context).colorScheme.surface.withOpacity(.72),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: .72),
             border: Border.all(
-                color: BookNestColors.cyan.withOpacity(.16)),
+                color: BookNestColors.cyan.withValues(alpha: .16)),
           ),
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -690,8 +690,8 @@ class _SettingsGroup extends StatelessWidget {
         child: Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Theme.of(context).colorScheme.surface.withOpacity(.72),
-        border: Border.all(color: BookNestColors.cyan.withOpacity(.16)),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: .72),
+        border: Border.all(color: BookNestColors.cyan.withValues(alpha: .16)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(children: [
@@ -760,7 +760,7 @@ class _SwitchTile extends StatelessWidget {
         onChanged: (v) => notifier.value = v,
         secondary: Icon(icon, size: 21, color: BookNestColors.cyan),
         activeThumbColor: BookNestColors.cyan,
-        activeTrackColor: BookNestColors.cyan.withOpacity(.35),
+        activeTrackColor: BookNestColors.cyan.withValues(alpha: .35),
         title: Text(title,
             style: const TextStyle(
                 fontWeight: FontWeight.w600, fontSize: 14.5)),
@@ -876,7 +876,7 @@ class _SignOutButton extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           foregroundColor: Theme.of(context).colorScheme.error,
           side: BorderSide(
-              color: Theme.of(context).colorScheme.error.withOpacity(.5)),
+              color: Theme.of(context).colorScheme.error.withValues(alpha: .5)),
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -997,7 +997,7 @@ class _DeleteAccountButtonState extends State<_DeleteAccountButton> {
     return OutlinedButton.icon(
       style: OutlinedButton.styleFrom(
         foregroundColor: const Color(0xFFD06A6A),
-        side: BorderSide(color: const Color(0xFFD06A6A).withOpacity(.5)),
+        side: BorderSide(color: const Color(0xFFD06A6A).withValues(alpha: .5)),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

@@ -94,7 +94,7 @@ class _CreateQuoteScreenState extends State<CreateQuoteScreen> {
         ),
         side: BorderSide(
             color: _selectedPostDate != null
-                ? BookNestColors.cyan.withOpacity(.6)
+                ? BookNestColors.cyan.withValues(alpha: .6)
                 : theme.dividerColor),
         backgroundColor: theme.colorScheme.surface,
         onPressed: () async {

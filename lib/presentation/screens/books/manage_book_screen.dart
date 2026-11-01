@@ -6,7 +6,6 @@ import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../../services/genre_service.dart';
 import '../../../services/cloudinary_service.dart';
-import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 
 /// Manage a published book: metadata, cover art, genre. Writes to the

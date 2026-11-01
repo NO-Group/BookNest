@@ -184,16 +184,16 @@ class _StreaksScreenState extends State<StreaksScreen> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 gradient: LinearGradient(colors: [
-                                  BookNestColors.cyan.withOpacity(.25),
-                                  BookNestColors.cyanSoft.withOpacity(.15),
+                                  BookNestColors.cyan.withValues(alpha: .25),
+                                  BookNestColors.cyanSoft.withValues(alpha: .15),
                                 ]),
                                 border: Border.all(
                                     color: BookNestColors.cyan
-                                        .withOpacity(.55)),
+                                        .withValues(alpha: .55)),
                                 boxShadow: [
                                   BoxShadow(
                                       color: BookNestColors.cyan
-                                          .withOpacity(.3),
+                                          .withValues(alpha: .3),
                                       blurRadius: 22),
                                 ],
                               ),

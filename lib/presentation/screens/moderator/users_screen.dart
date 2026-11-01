@@ -304,7 +304,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                         style: TextStyle(
                                             fontSize: 11.5,
                                             color: onSurface
-                                                .withOpacity(.55))),
+                                                .withValues(alpha: .55))),
                                     if ((u['phone']?.toString() ?? '')
                                         .isNotEmpty)
                                       Text(
@@ -312,7 +312,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                           style: TextStyle(
                                               fontSize: 10.5,
                                               color: onSurface
-                                                  .withOpacity(.45))),
+                                                  .withValues(alpha: .45))),
                                   ]),
                             ),
                             if (banLabel.isNotEmpty)
@@ -321,7 +321,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                     horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFD06A6A)
-                                      .withOpacity(.14),
+                                      .withValues(alpha: .14),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(banLabel,
@@ -333,7 +333,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             else
                               Icon(Icons.chevron_right_rounded,
                                   size: 18,
-                                  color: onSurface.withOpacity(.35)),
+                                  color: onSurface.withValues(alpha: .35)),
                           ]),
                         ),
                       ),

@@ -283,9 +283,9 @@ class _StoreScreenState extends State<StoreScreen> {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(18),
-                      color: BookNestColors.cyan.withOpacity(.10),
+                      color: BookNestColors.cyan.withValues(alpha: .10),
                       border:
-                          Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+                          Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
                     ),
                     child: Row(
                       children: [
@@ -312,8 +312,8 @@ class _StoreScreenState extends State<StoreScreen> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(18),
                       color: dark
-                          ? Colors.white.withOpacity(.05)
-                          : BookNestColors.navyDeep.withOpacity(.04),
+                          ? Colors.white.withValues(alpha: .05)
+                          : BookNestColors.navyDeep.withValues(alpha: .04),
                       border: Border.all(color: theme.dividerColor),
                     ),
                     child: Column(

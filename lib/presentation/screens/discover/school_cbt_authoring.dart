@@ -52,7 +52,7 @@ class _CbtSetExamScreenState extends State<CbtSetExamScreen> {
     final classes = await BackendApi.instance
         .call('schools.class.list', {'schoolId': widget.schoolId});
     Map<String, dynamic>? exam;
-    if (widget.examId != null) {
+    if (widget.examId != null && mounted) {
       final res = await cbtCall(
           context, 'cbt.exam.get', {'examId': widget.examId},
           fallback: 'Could not open the exam.');
@@ -175,7 +175,7 @@ class _CbtSetExamScreenState extends State<CbtSetExamScreen> {
 
   Future<void> _bulk() async {
     final list = await showCbtBulkImport(context);
-    if (list == null) return;
+    if (list == null || !mounted) return;
     setState(() => _questions.addAll(list));
     cbtToast(context, 'Added ${list.length} question(s) to the paper.');
   }
@@ -185,7 +185,7 @@ class _CbtSetExamScreenState extends State<CbtSetExamScreen> {
       context: context,
       builder: (_) => _BankPicker(schoolId: widget.schoolId),
     );
-    if (picked == null || picked.isEmpty) return;
+    if (picked == null || picked.isEmpty || !mounted) return;
     setState(() => _questions.addAll(picked.map((q) => {
           ...q,
           'id': null, // a fresh id per paper
@@ -205,7 +205,7 @@ class _CbtSetExamScreenState extends State<CbtSetExamScreen> {
           : Column(children: [
               if (_locked)
                 MaterialBanner(
-                  backgroundColor: Colors.orangeAccent.withOpacity(.15),
+                  backgroundColor: Colors.orangeAccent.withValues(alpha: .15),
                   content: Text(
                       '$_attempts student(s) have sat this exam. The questions are '
                       'locked; you can still change the closing time and how results are shown.'),
@@ -284,7 +284,7 @@ class _CbtSetExamScreenState extends State<CbtSetExamScreen> {
       Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: DropdownButtonFormField<String>(
-          value: _classId,
+          initialValue: _classId,
           decoration: const InputDecoration(
               labelText: 'Who sits it', border: OutlineInputBorder()),
           items: [
@@ -333,7 +333,7 @@ class _CbtSetExamScreenState extends State<CbtSetExamScreen> {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
-        activeColor: BookNestColors.cyan,
+        activeThumbColor: BookNestColors.cyan,
         value: _strict,
         onChanged: _locked ? null : (v) => setState(() => _strict = v),
         title: const Text('Leaving submits the exam'),
@@ -343,21 +343,21 @@ class _CbtSetExamScreenState extends State<CbtSetExamScreen> {
       ),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
-        activeColor: BookNestColors.cyan,
+        activeThumbColor: BookNestColors.cyan,
         value: _shuffleQ,
         onChanged: _locked ? null : (v) => setState(() => _shuffleQ = v),
         title: const Text('Shuffle question order for each student'),
       ),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
-        activeColor: BookNestColors.cyan,
+        activeThumbColor: BookNestColors.cyan,
         value: _shuffleO,
         onChanged: _locked ? null : (v) => setState(() => _shuffleO = v),
         title: const Text('Shuffle options (A–D) for each student'),
       ),
       const SizedBox(height: 8),
       DropdownButtonFormField<String>(
-        value: _results,
+        initialValue: _results,
         decoration: const InputDecoration(
             labelText: 'Students see their score', border: OutlineInputBorder()),
         items: const [
@@ -405,7 +405,7 @@ class _CbtSetExamScreenState extends State<CbtSetExamScreen> {
           padding: const EdgeInsets.all(20),
           child: Text(
               'No questions yet. Students only see them once the exam starts.',
-              style: TextStyle(color: onSurface.withOpacity(.6))),
+              style: TextStyle(color: onSurface.withValues(alpha: .6))),
         ),
       for (var i = 0; i < _questions.length; i++)
         Card(
@@ -768,7 +768,7 @@ class _CbtQuestionBankScreenState extends State<CbtQuestionBankScreen> {
                                 'whole sheet from Excel with the upload button.',
                                 textAlign: TextAlign.center,
                                 style:
-                                    TextStyle(color: onSurface.withOpacity(.6))),
+                                    TextStyle(color: onSurface.withValues(alpha: .6))),
                           ),
                         )
                       : ListView.builder(
@@ -803,7 +803,7 @@ class _CbtQuestionBankScreenState extends State<CbtQuestionBankScreen> {
                     style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w700,
-                        color: onSurface.withOpacity(.55))),
+                        color: onSurface.withValues(alpha: .55))),
               ),
               Chip(
                 visualDensity: VisualDensity.compact,
@@ -823,7 +823,7 @@ class _CbtQuestionBankScreenState extends State<CbtQuestionBankScreen> {
             const SizedBox(height: 6),
             if (r['type'] == 'theory')
               Text('Theory · ${cbtNum(r['marks'])} marks',
-                  style: TextStyle(color: onSurface.withOpacity(.6)))
+                  style: TextStyle(color: onSurface.withValues(alpha: .6)))
             else
               for (var k = 0; k < options.length; k++)
                 Text('${cbtLetters[k]}. ${options[k]}',

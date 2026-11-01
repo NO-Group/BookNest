@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
-import '../../../services/backend_api.dart';
 import '../../../services/book_repository.dart';
 import '../../components/booknest_ui.dart';
 import '../../../state/book_providers.dart';
@@ -110,9 +109,9 @@ class _ChapterManagerScreenState extends ConsumerState<ChapterManagerScreen> {
                     padding: const EdgeInsets.all(13),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      color: BookNestColors.cyan.withOpacity(.08),
+                      color: BookNestColors.cyan.withValues(alpha: .08),
                       border: Border.all(
-                          color: BookNestColors.cyan.withOpacity(.3)),
+                          color: BookNestColors.cyan.withValues(alpha: .3)),
                     ),
                     child: Row(
                       children: [
@@ -160,7 +159,7 @@ class _ChapterManagerScreenState extends ConsumerState<ChapterManagerScreen> {
                           leading: CircleAvatar(
                             radius: 17,
                             backgroundColor:
-                                BookNestColors.cyan.withOpacity(.15),
+                                BookNestColors.cyan.withValues(alpha: .15),
                             child: Text('$number',
                                 style: const TextStyle(
                                     color: BookNestColors.cyan,

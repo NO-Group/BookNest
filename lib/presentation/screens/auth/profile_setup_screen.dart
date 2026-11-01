@@ -139,7 +139,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = dark ? Colors.white.withOpacity(.05) : Colors.white;
+    final cardColor = dark ? Colors.white.withValues(alpha: .05) : Colors.white;
     final ink = dark ? Colors.white : BookNestColors.navyDeep;
     return Scaffold(
       backgroundColor: dark ? BookNestColors.navyDeep : BookNestColors.lightSurface,
@@ -155,7 +155,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             'This personalises BookNest — translations, your flag and badges. '
             'You can change any of it later in Settings.',
             style: TextStyle(
-                fontSize: 13, height: 1.5, color: ink.withOpacity(.75)),
+                fontSize: 13, height: 1.5, color: ink.withValues(alpha: .75)),
           ),
           const SizedBox(height: 18),
 
@@ -166,7 +166,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             decoration: BoxDecoration(
               color: cardColor,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: BookNestColors.cyan.withOpacity(.3)),
+              border: Border.all(color: BookNestColors.cyan.withValues(alpha: .3)),
             ),
             child: DropdownButton<CountryChoice>(
               value: _country,
@@ -220,7 +220,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       color: _gender == g.$1
                           ? BookNestColors.navyDeep
                           : ink),
-                  side: BorderSide(color: BookNestColors.cyan.withOpacity(.4)),
+                  side: BorderSide(color: BookNestColors.cyan.withValues(alpha: .4)),
                 ),
             ],
           ),
@@ -256,7 +256,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           Text(
             'Add every language you read or speak, with how well. '
             'Your strongest becomes your preferred language.',
-            style: TextStyle(fontSize: 12.5, height: 1.45, color: ink.withOpacity(.65)),
+            style: TextStyle(fontSize: 12.5, height: 1.45, color: ink.withValues(alpha: .65)),
           ),
           const SizedBox(height: 10),
           for (final l in _languages)
@@ -269,7 +269,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 border: Border.all(
                     color: _computedPreferred == l['code']
                         ? BookNestColors.cyan
-                        : BookNestColors.cyan.withOpacity(.25)),
+                        : BookNestColors.cyan.withValues(alpha: .25)),
               ),
               child: Row(
                 children: [
@@ -287,7 +287,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 7, vertical: 2),
                               decoration: BoxDecoration(
-                                color: BookNestColors.cyan.withOpacity(.18),
+                                color: BookNestColors.cyan.withValues(alpha: .18),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text('PREFERRED',
@@ -303,7 +303,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         ]),
                         Text(languageLevelLabel(l['level'] ?? 'basic'),
                             style: TextStyle(
-                                fontSize: 12, color: ink.withOpacity(.6))),
+                                fontSize: 12, color: ink.withValues(alpha: .6))),
                       ],
                     ),
                   ),
@@ -329,7 +329,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   IconButton(
                     visualDensity: VisualDensity.compact,
                     icon: Icon(Icons.close_rounded,
-                        size: 18, color: ink.withOpacity(.5)),
+                        size: 18, color: ink.withValues(alpha: .5)),
                     onPressed: () {
                       setState(() {
                         _languages.remove(l);
@@ -345,7 +345,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             decoration: BoxDecoration(
               color: cardColor,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: BookNestColors.cyan.withOpacity(.3)),
+              border: Border.all(color: BookNestColors.cyan.withValues(alpha: .3)),
             ),
             child: Column(
               children: [
@@ -411,7 +411,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
-                        color: ink.withOpacity(.75))),
+                        color: ink.withValues(alpha: .75))),
                 const Spacer(),
                 DropdownButton<String>(
                   value: _computedPreferred,
@@ -442,7 +442,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               onPressed: _canSave ? _save : null,
               style: TextButton.styleFrom(
                 backgroundColor:
-                    _canSave ? BookNestColors.cyan : BookNestColors.cyan.withOpacity(.3),
+                    _canSave ? BookNestColors.cyan : BookNestColors.cyan.withValues(alpha: .3),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
               ),

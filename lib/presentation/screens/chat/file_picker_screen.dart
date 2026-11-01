@@ -237,8 +237,8 @@ class _BookNestFilePickerState extends State<BookNestFilePicker> {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: dark
-                          ? Colors.white.withOpacity(.05)
-                          : BookNestColors.navyDeep.withOpacity(.05),
+                          ? Colors.white.withValues(alpha: .05)
+                          : BookNestColors.navyDeep.withValues(alpha: .05),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Column(
@@ -266,7 +266,7 @@ class _BookNestFilePickerState extends State<BookNestFilePicker> {
                               height: 1.45,
                               color: dark
                                   ? Colors.white70
-                                  : BookNestColors.navyDeep.withOpacity(.75)),
+                                  : BookNestColors.navyDeep.withValues(alpha: .75)),
                         ),
                         const SizedBox(height: 12),
                         TextButton.icon(
@@ -293,9 +293,9 @@ class _BookNestFilePickerState extends State<BookNestFilePicker> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: BookNestColors.cyan.withOpacity(dark ? .1 : .09),
+        color: BookNestColors.cyan.withValues(alpha: dark ? .1 : .09),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: BookNestColors.cyan.withOpacity(.3)),
+        border: Border.all(color: BookNestColors.cyan.withValues(alpha: .3)),
       ),
       child: Row(
         children: [
@@ -346,7 +346,7 @@ class _BookNestFilePickerState extends State<BookNestFilePicker> {
           style: TextStyle(
               fontSize: 12.5,
               height: 1.4,
-              color: dark ? Colors.white38 : BookNestColors.navyDeep.withOpacity(.5))),
+              color: dark ? Colors.white38 : BookNestColors.navyDeep.withValues(alpha: .5))),
     );
   }
 
@@ -360,11 +360,11 @@ class _BookNestFilePickerState extends State<BookNestFilePicker> {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: dark ? Colors.white.withOpacity(.05) : Colors.white,
+            color: dark ? Colors.white.withValues(alpha: .05) : Colors.white,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
                 color: (isRecent ? BookNestColors.cyan : BookNestColors.navyDeep)
-                    .withOpacity(.18)),
+                    .withValues(alpha: .18)),
           ),
           child: Row(
             children: [
@@ -377,7 +377,7 @@ class _BookNestFilePickerState extends State<BookNestFilePicker> {
                   color: (isRecent
                           ? BookNestColors.cyan
                           : BookNestColors.navyDeep)
-                      .withOpacity(.12),
+                      .withValues(alpha: .12),
                 ),
                 child: Icon(_iconFor(ext),
                     size: 21,
@@ -408,7 +408,7 @@ class _BookNestFilePickerState extends State<BookNestFilePicker> {
                           fontSize: 11.5,
                           color: dark
                               ? Colors.white38
-                              : BookNestColors.navyDeep.withOpacity(.5)),
+                              : BookNestColors.navyDeep.withValues(alpha: .5)),
                     ),
                   ],
                 ),

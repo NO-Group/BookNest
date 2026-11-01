@@ -485,7 +485,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                             style: OutlinedButton.styleFrom(
                               side: BorderSide(
                                   color: BookNestColors.cyan
-                                      .withOpacity(.55)),
+                                      .withValues(alpha: .55)),
                               foregroundColor: BookNestColors.cyan,
                             ),
                             icon: Icon(isMember
@@ -636,7 +636,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                       ' · led by ${g['ownerName']?.toString() ?? 'a reader'}',
                       style: TextStyle(
                           fontSize: 12,
-                          color: onSurface.withOpacity(.65)),
+                          color: onSurface.withValues(alpha: .65)),
                     ),
                   ],
                 ),
@@ -646,7 +646,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
               const SizedBox(height: 12),
               Text(g['description'].toString(),
                   style: TextStyle(
-                      fontSize: 13.5, height: 1.45, color: onSurface.withOpacity(.9))),
+                      fontSize: 13.5, height: 1.45, color: onSurface.withValues(alpha: .9))),
             ],
             if (kind == 'organizations' &&
                 (g['mission']?.toString() ?? '').isNotEmpty) ...[
@@ -660,12 +660,12 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                         fontSize: 11.5,
                         fontWeight: FontWeight.w800,
                         letterSpacing: .4,
-                        color: onSurface.withOpacity(.6))),
+                        color: onSurface.withValues(alpha: .6))),
               ]),
               const SizedBox(height: 4),
               Text(g['mission'].toString(),
                   style: TextStyle(
-                      fontSize: 13, height: 1.4, color: onSurface.withOpacity(.85))),
+                      fontSize: 13, height: 1.4, color: onSurface.withValues(alpha: .85))),
             ],
             if (kind == 'schools' &&
                 ((g['location']?.toString() ?? '').isNotEmpty ||
@@ -680,7 +680,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                       child: Text(g['location'].toString(),
                           style: TextStyle(
                               fontSize: 12.5,
-                              color: onSurface.withOpacity(.8)))),
+                              color: onSurface.withValues(alpha: .8)))),
                 ]),
               if ((g['website']?.toString() ?? '').isNotEmpty)
                 Padding(
@@ -693,7 +693,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                         child: Text(g['website'].toString(),
                             style: TextStyle(
                                 fontSize: 12.5,
-                                color: onSurface.withOpacity(.8)))),
+                                color: onSurface.withValues(alpha: .8)))),
                   ]),
                 ),
             ],
@@ -794,7 +794,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                     ? 'Post the first announcement — every member sees it.'
                     : 'No announcements yet.',
                 style: TextStyle(
-                    fontSize: 12.5, color: onSurface.withOpacity(.55)),
+                    fontSize: 12.5, color: onSurface.withValues(alpha: .55)),
               ),
             )
           else
@@ -823,7 +823,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                           onTap: () => _deleteAnnouncement(a),
                           child: Icon(Icons.delete_outline_rounded,
                               size: 16,
-                              color: onSurface.withOpacity(.45)),
+                              color: onSurface.withValues(alpha: .45)),
                         ),
                     ]),
                     const SizedBox(height: 4),
@@ -842,7 +842,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                       fontSize: 10.8,
-                                      color: onSurface.withOpacity(.5))),
+                                      color: onSurface.withValues(alpha: .5))),
                             ),
                           if (a['published'] == false) ...[
                             const SizedBox(width: 6),
@@ -850,7 +850,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 1),
                               decoration: BoxDecoration(
-                                color: BookNestColors.cyan.withOpacity(.14),
+                                color: BookNestColors.cyan.withValues(alpha: .14),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Text('DRAFT',
@@ -872,7 +872,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                           style: TextStyle(
                               fontSize: 12.8,
                               height: 1.4,
-                              color: onSurface.withOpacity(.85))),
+                              color: onSurface.withValues(alpha: .85))),
                     ),
                   ],
                 ),
@@ -983,7 +983,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                     ],
                     if (isOwner && !memberIsOwner(m))
                       Icon(Icons.chevron_right_rounded,
-                          size: 17, color: onSurface.withOpacity(.35)),
+                          size: 17, color: onSurface.withValues(alpha: .35)),
                   ]),
                 ),
               ),
@@ -993,7 +993,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
               padding: const EdgeInsets.only(top: 10),
               child: Text('and ${members.length - 60} more…',
                   style: TextStyle(
-                      fontSize: 12, color: onSurface.withOpacity(.5))),
+                      fontSize: 12, color: onSurface.withValues(alpha: .5))),
             ),
         ]),
       ),
@@ -1004,9 +1004,9 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
       decoration: BoxDecoration(
-        color: color.withOpacity(.14),
+        color: color.withValues(alpha: .14),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(.4)),
+        border: Border.all(color: color.withValues(alpha: .4)),
       ),
       child: Text(label,
           style: TextStyle(
@@ -1279,7 +1279,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
                           'Outreach or Design.'
                       : 'No departments yet.',
                   style: TextStyle(
-                      fontSize: 12.5, color: onSurface.withOpacity(.6))),
+                      fontSize: 12.5, color: onSurface.withValues(alpha: .6))),
             )
           else
             for (final unit in _units)
@@ -1296,8 +1296,8 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
                         height: 30,
                         decoration: BoxDecoration(
                           color: _isJoined(unit)
-                              ? BookNestColors.cyan.withOpacity(.16)
-                              : BookNestColors.navy.withOpacity(.08),
+                              ? BookNestColors.cyan.withValues(alpha: .16)
+                              : BookNestColors.navy.withValues(alpha: .08),
                           borderRadius: BorderRadius.circular(9),
                         ),
                         child: Icon(
@@ -1327,7 +1327,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                       fontSize: 11.5,
-                                      color: onSurface.withOpacity(.6))),
+                                      color: onSurface.withValues(alpha: .6))),
                             ]),
                       ),
                       if (_state.isMember)

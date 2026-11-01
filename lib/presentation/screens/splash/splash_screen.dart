@@ -68,7 +68,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   borderRadius: BorderRadius.circular(30),
                   boxShadow: [
                     BoxShadow(
-                      color: BookNestColors.cyan.withOpacity(.28),
+                      color: BookNestColors.cyan.withValues(alpha: .28),
                       blurRadius: 40,
                       spreadRadius: 2,
                       offset: const Offset(0, 12),
@@ -98,7 +98,7 @@ class _SplashScreenState extends State<SplashScreen> {
               Text(
                 'by N.O Group',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(.65),
+                  color: Colors.white.withValues(alpha: .65),
                   fontSize: 14,
                 ),
               ),

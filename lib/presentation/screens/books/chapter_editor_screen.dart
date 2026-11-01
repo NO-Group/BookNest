@@ -402,7 +402,7 @@ class _ChapterEditorScreenState extends State<ChapterEditorScreen> {
           if (_showPreview)
             Expanded(
               child: Container(
-                color: theme.colorScheme.surface.withOpacity(.45),
+                color: theme.colorScheme.surface.withValues(alpha: .45),
                 child: Column(
                   children: [
                     Padding(

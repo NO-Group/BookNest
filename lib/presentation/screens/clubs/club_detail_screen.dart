@@ -51,7 +51,6 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
       _loading = true;
       _error = null;
     });
-    final client = SupabaseService().client;
     try {
       final gres = await BackendApi.instance
           .call('groups.get', {'kind': 'clubs', 'groupId': widget.clubId});
@@ -91,7 +90,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
             (viewerId != null && owner == viewerId) ||
                 (viewerId != null && vice == viewerId);
         _memberCount = (members as List).length;
-        _books = (books as List)
+        _books = books
             .map((row) => Map<String, dynamic>.from(row as Map))
             .toList();
         _announcements = (((announcementsRes?['announcements'] as List?) ?? const []))
@@ -263,7 +262,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                     tooltip: 'Clear the club read',
                     onPressed: _clearPotm,
                     icon: Icon(Icons.delete_outline_rounded,
-                        size: 18, color: onSurface.withOpacity(.5)),
+                        size: 18, color: onSurface.withValues(alpha: .5)),
                   ),
               ]),
               const SizedBox(height: 8),
@@ -273,7 +272,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                       ? 'Pick the book every member should read this month.'
                       : 'The club has not picked its read yet.',
                   style: TextStyle(
-                      fontSize: 12.5, color: onSurface.withOpacity(.6)),
+                      fontSize: 12.5, color: onSurface.withValues(alpha: .6)),
                 )
               else
                 Row(children: [
@@ -305,7 +304,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                             'by ${potm['authorName']?.toString() ?? 'Unknown'}',
                             style: TextStyle(
                                 fontSize: 12,
-                                color: onSurface.withOpacity(.6))),
+                                color: onSurface.withValues(alpha: .6))),
                         const SizedBox(height: 10),
                         FilledButton.icon(
                           onPressed: () => context.push(
@@ -333,7 +332,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                   onPressed: _potmBusy ? null : _pickPotm,
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(
-                        color: BookNestColors.cyan.withOpacity(.55)),
+                        color: BookNestColors.cyan.withValues(alpha: .55)),
                     foregroundColor: BookNestColors.cyan,
                   ),
                   icon: const Icon(Icons.emoji_events_rounded, size: 17),
@@ -495,7 +494,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                                           BorderRadius.circular(16),
                                       border: Border.all(
                                           color: BookNestColors.cyan
-                                              .withOpacity(.5)),
+                                              .withValues(alpha: .5)),
                                     ),
                                     child: const Icon(Icons.groups_rounded,
                                         color: Colors.white),
@@ -530,7 +529,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                                 const SizedBox(height: 14),
                                 Text(_club!['description'].toString(),
                                     style: TextStyle(
-                                        color: onSurface.withOpacity(.85),
+                                        color: onSurface.withValues(alpha: .85),
                                         fontSize: 13.5,
                                         height: 1.5)),
                               ],
@@ -541,11 +540,11 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
                                       horizontal: 10, vertical: 5),
                                   decoration: BoxDecoration(
                                     color:
-                                        BookNestColors.cyan.withOpacity(.14),
+                                        BookNestColors.cyan.withValues(alpha: .14),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
                                         color: BookNestColors.cyan
-                                            .withOpacity(.4)),
+                                            .withValues(alpha: .4)),
                                   ),
                                   child: const Text('You own this club',
                                       style: TextStyle(
@@ -773,7 +772,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen> {
         decoration: BoxDecoration(
           color: filled ? BookNestColors.cyan : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: BookNestColors.cyan.withOpacity(.6)),
+          border: Border.all(color: BookNestColors.cyan.withValues(alpha: .6)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -875,11 +874,11 @@ class _AnnouncementsSection extends StatelessWidget {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: dark
-                        ? Colors.white.withOpacity(.04)
+                        ? Colors.white.withValues(alpha: .04)
                         : BookNestColors.lightSurface,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                        color: BookNestColors.cyan.withOpacity(pinned ? .45 : .2)),
+                        color: BookNestColors.cyan.withValues(alpha: pinned ? .45 : .2)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -918,7 +917,7 @@ class _AnnouncementsSection extends StatelessWidget {
                             fontSize: 13,
                             color: dark
                                 ? BookNestColors.darkTextSecondary
-                                : BookNestColors.navyDeep.withOpacity(.85)),
+                                : BookNestColors.navyDeep.withValues(alpha: .85)),
                       ),
                     ],
                   ),

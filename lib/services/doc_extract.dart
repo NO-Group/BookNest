@@ -745,8 +745,8 @@ ExtractedDoc _docx(_Zip z) {
     if (p == null) return;
     if (tblDepth > 0) {
       if (cell != null && !p.blank) {
-        if (cell!.isNotEmpty) cell!.write('\n');
-        cell!.write(p.text.trim());
+        if (cell.isNotEmpty) cell.write('\n');
+        cell.write(p.text.trim());
       }
     } else if (!p.blank) {
       final name = styleNames[pStyle] ?? pStyle;
@@ -783,7 +783,7 @@ ExtractedDoc _docx(_Zip z) {
         } else if (tblDepth > 0) {
           tblDepth--;
           if (tblDepth == 0 && rows != null) {
-            if (rows!.isNotEmpty) blocks.add(DocBlock(DocBlockType.table, rows: rows!));
+            if (rows.isNotEmpty) blocks.add(DocBlock(DocBlockType.table, rows: rows));
             rows = null;
             for (final img in pendingImages) {
               blocks.add(DocBlock(DocBlockType.image, image: img));
@@ -797,7 +797,7 @@ ExtractedDoc _docx(_Zip z) {
           if (start) {
             row = [];
           } else if (row != null) {
-            rows?.add(row!);
+            rows?.add(row);
             row = null;
           }
         }
@@ -1143,7 +1143,7 @@ ExtractedDoc _pptx(_Zip z) {
             rows = [];
           } else {
             tbl--;
-            if (rows != null && rows!.isNotEmpty) blocks.add(DocBlock(DocBlockType.table, rows: rows!));
+            if (rows != null && rows.isNotEmpty) blocks.add(DocBlock(DocBlockType.table, rows: rows));
             rows = null;
           }
           break;
@@ -1151,7 +1151,7 @@ ExtractedDoc _pptx(_Zip z) {
           if (start) {
             row = [];
           } else if (row != null) {
-            rows?.add(row!);
+            rows?.add(row);
             row = null;
           }
           break;
@@ -1168,13 +1168,13 @@ ExtractedDoc _pptx(_Zip z) {
             para = _Para();
             lvl = 0;
           } else if (!start && para != null) {
-            final p = para!;
+            final p = para;
             para = null;
             if (p.blank) break;
             if (tbl > 0) {
               if (cell != null) {
-                if (cell!.isNotEmpty) cell!.write('\n');
-                cell!.write(p.text);
+                if (cell.isNotEmpty) cell.write('\n');
+                cell.write(p.text);
               }
             } else if (titleShape) {
               blocks.add(DocBlock.text(DocBlockType.heading, p.text.trim(), level: 2));
@@ -1255,8 +1255,8 @@ ExtractedDoc _odf(_Zip z, String mimetype, String ext) {
     para = null;
     if (p == null || p.blank) return;
     if (tableDepth > 0 && cell != null) {
-      if (cell!.isNotEmpty) cell!.write('\n');
-      cell!.write(p.text);
+      if (cell.isNotEmpty) cell.write('\n');
+      cell.write(p.text);
     } else if (heading > 0) {
       blocks.add(DocBlock.text(DocBlockType.heading, p.text.trim(), level: heading));
     } else if (listDepth > 0) {
@@ -1282,10 +1282,10 @@ ExtractedDoc _odf(_Zip z, String mimetype, String ext) {
         break;
       case 'style:text-properties':
         if (start && styleName != null) {
-          if (t.attr('font-weight') == 'bold') styleBold.add(styleName!);
-          if (t.attr('font-style') == 'italic') styleItalic.add(styleName!);
+          if (t.attr('font-weight') == 'bold') styleBold.add(styleName);
+          if (t.attr('font-style') == 'italic') styleItalic.add(styleName);
           final u = t.attr('text-underline-style');
-          if (u != null && u != 'none') styleUnder.add(styleName!);
+          if (u != null && u != 'none') styleUnder.add(styleName);
         }
         break;
       case 'office:annotation':
@@ -1376,8 +1376,8 @@ ExtractedDoc _odf(_Zip z, String mimetype, String ext) {
               final r = _gridRows(grid);
               pages.add(DocPage(pageTitle, [if (r.isNotEmpty) DocBlock(DocBlockType.table, rows: r)],
                   isSheet: true));
-            } else if (rows != null && rows!.isNotEmpty) {
-              blocks.add(DocBlock(DocBlockType.table, rows: rows!));
+            } else if (rows != null && rows.isNotEmpty) {
+              blocks.add(DocBlock(DocBlockType.table, rows: rows));
             }
             rows = null;
           }
@@ -1393,18 +1393,18 @@ ExtractedDoc _odf(_Zip z, String mimetype, String ext) {
               row = null;
             }
           } else if (row != null) {
-            final hasText = row!.any((c) => c.isNotEmpty);
+            final hasText = row.any((c) => c.isNotEmpty);
             final times = hasText ? _clampInt(rowRepeat, 1, 50) : 1;
             for (var k = 0; k < times; k++) {
               if (kind == 'sheet') {
                 if (gridRow < _maxRows) {
                   final m = grid[gridRow] ??= {};
-                  for (var ci = 0; ci < row!.length && ci < _maxCols; ci++) {
-                    m[ci] = row![ci];
+                  for (var ci = 0; ci < row.length && ci < _maxCols; ci++) {
+                    m[ci] = row[ci];
                   }
                 }
               } else {
-                final r = List.of(row!);
+                final r = List.of(row);
                 while (r.isNotEmpty && r.last.isEmpty) {
                   r.removeLast();
                 }
@@ -1424,16 +1424,16 @@ ExtractedDoc _odf(_Zip z, String mimetype, String ext) {
             cellRepeat = int.tryParse(t.attr('number-columns-repeated') ?? '1') ?? 1;
             cell = StringBuffer();
             if (t.selfClose) {
-              for (var k = 0; k < _clampInt(cellRepeat, 1, _maxCols) && row!.length < _maxCols; k++) {
-                row!.add('');
+              for (var k = 0; k < _clampInt(cellRepeat, 1, _maxCols) && row.length < _maxCols; k++) {
+                row.add('');
               }
               cell = null;
             }
           } else if (cell != null) {
             final v = cell.toString();
             final times = _clampInt(cellRepeat, 1, _maxCols);
-            for (var k = 0; k < times && row!.length < _maxCols; k++) {
-              row!.add(v);
+            for (var k = 0; k < times && row.length < _maxCols; k++) {
+              row.add(v);
             }
             cell = null;
           }
@@ -1550,8 +1550,8 @@ List<DocBlock> _htmlBlocks(String html,
     }
     if (tableDepth > 0) {
       if (cell != null) {
-        if (cell!.isNotEmpty) cell!.write(' ');
-        cell!.write(para.text.trim());
+        if (cell.isNotEmpty) cell.write(' ');
+        cell.write(para.text.trim());
       }
     } else if (heading > 0) {
       blocks.add(DocBlock.text(DocBlockType.heading, para.text.replaceAll(RegExp(r'\s+'), ' ').trim(),
@@ -1656,8 +1656,8 @@ List<DocBlock> _htmlBlocks(String html,
         } else if (!start && tableDepth > 0) {
           tableDepth--;
           if (tableDepth == 0) {
-            if (rows != null && rows!.isNotEmpty) {
-              blocks.add(DocBlock(DocBlockType.table, rows: rows!));
+            if (rows != null && rows.isNotEmpty) {
+              blocks.add(DocBlock(DocBlockType.table, rows: rows));
             }
             rows = null;
           }
@@ -1669,7 +1669,7 @@ List<DocBlock> _htmlBlocks(String html,
           if (open) {
             row = [];
           } else if (!start && row != null) {
-            if (row!.isNotEmpty) rows?.add(row!);
+            if (row.isNotEmpty) rows?.add(row);
             row = null;
           }
         }
@@ -2328,7 +2328,7 @@ ExtractedDoc _xls(_Cfb c) {
   var filepass = false;
   void put(int r, int col, String v) {
     if (cur == null || r >= _maxRows || col >= _maxCols) return;
-    (cur![r] ??= {})[col] = v;
+    (cur[r] ??= {})[col] = v;
   }
 
   for (var i = 0; i < recs.length; i++) {
@@ -2356,7 +2356,7 @@ ExtractedDoc _xls(_Cfb c) {
       case 0x809: // BOF
         if (d.length >= 4 && u16(d, 2) == 0x10) {
           cur = {};
-          sheets.add(cur!);
+          sheets.add(cur);
         }
         break;
       case 0x0A: // EOF
@@ -2400,7 +2400,7 @@ ExtractedDoc _xls(_Cfb c) {
       case 0x207: // STRING (formula text result)
         if (pendingRow != null && d.length >= 3) {
           final len = u16(d, 0), f = d[2];
-          put(pendingRow!, pendingCol!,
+          put(pendingRow, pendingCol!,
               f & 1 != 0 ? _utf16(d, 3, 3 + 2 * len) : _cp1252(d, 3, 3 + len));
           pendingRow = null;
         }

@@ -190,7 +190,7 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
               IconButton(icon: const Icon(Icons.ios_share_outlined), onPressed: _share),
               IconButton(icon: const Icon(Icons.more_vert_rounded), onPressed: _showMoreMenu),
             ],
-            flexibleSpace: FlexibleSpaceBar(background: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [BookNestColors.navyDeep, BookNestColors.navy.withOpacity(.65), surface], begin: Alignment.topLeft, end: Alignment.bottomRight)))),
+            flexibleSpace: FlexibleSpaceBar(background: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [BookNestColors.navyDeep, BookNestColors.navy.withValues(alpha: .65), surface], begin: Alignment.topLeft, end: Alignment.bottomRight)))),
           ),
           if (book['banner_url'] is String &&
               (book['banner_url'] as String).startsWith('http'))
@@ -455,11 +455,11 @@ class _Cover extends StatelessWidget { final String title; final String? coverUr
   @override
   Widget build(BuildContext context) {
     final url = coverUrl;
-    final box = Container(width: small ? 112 : 118, height: small ? 140 : 164, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [BookNestColors.navy, BookNestColors.navyDeep], begin: Alignment.topLeft, end: Alignment.bottomRight), boxShadow: [BoxShadow(color: BookNestColors.cyan.withOpacity(.18), blurRadius: 18, offset: const Offset(0, 8))]));
+    final box = Container(width: small ? 112 : 118, height: small ? 140 : 164, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [BookNestColors.navy, BookNestColors.navyDeep], begin: Alignment.topLeft, end: Alignment.bottomRight), boxShadow: [BoxShadow(color: BookNestColors.cyan.withValues(alpha: .18), blurRadius: 18, offset: const Offset(0, 8))]));
     if (url != null && url.startsWith('http')) {
       return ClipRRect(borderRadius: BorderRadius.circular(15), child: SizedBox(width: small ? 112 : 118, height: small ? 140 : 164, child: Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => box)));
     }
-    return Container(width: small ? 112 : 118, height: small ? 140 : 164, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [BookNestColors.navy, BookNestColors.navyDeep], begin: Alignment.topLeft, end: Alignment.bottomRight), boxShadow: [BoxShadow(color: BookNestColors.cyan.withOpacity(.18), blurRadius: 18, offset: const Offset(0, 8))]), child: Padding(padding: const EdgeInsets.all(13), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.auto_stories_rounded, color: BookNestColors.cyan), const Spacer(), Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: small ? 12 : 14))])));
+    return Container(width: small ? 112 : 118, height: small ? 140 : 164, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [BookNestColors.navy, BookNestColors.navyDeep], begin: Alignment.topLeft, end: Alignment.bottomRight), boxShadow: [BoxShadow(color: BookNestColors.cyan.withValues(alpha: .18), blurRadius: 18, offset: const Offset(0, 8))]), child: Padding(padding: const EdgeInsets.all(13), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.auto_stories_rounded, color: BookNestColors.cyan), const Spacer(), Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: small ? 12 : 14))])));
   }
 }
 class _Heading extends StatelessWidget { final String text; const _Heading(this.text); @override Widget build(BuildContext context) => Text(text, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)); }
@@ -625,16 +625,16 @@ class _BookShareSheetState extends State<BookShareSheet> {
           child: Container(
             height: MediaQuery.sizeOf(context).height * .72,
             decoration: BoxDecoration(
-              color: background.withOpacity(.94),
+              color: background.withValues(alpha: .94),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-              border: Border.all(color: BookNestColors.cyan.withOpacity(.22)),
+              border: Border.all(color: BookNestColors.cyan.withValues(alpha: .22)),
             ),
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
             child: Column(children: [
               Container(width: 38, height: 4, decoration: BoxDecoration(color: theme.dividerColor, borderRadius: BorderRadius.circular(8))),
               const SizedBox(height: 18),
               Row(children: [
-                Container(width: 46, height: 46, decoration: BoxDecoration(shape: BoxShape.circle, color: BookNestColors.cyan.withOpacity(.14)), child: const Icon(Icons.send_rounded, color: BookNestColors.cyan)),
+                Container(width: 46, height: 46, decoration: BoxDecoration(shape: BoxShape.circle, color: BookNestColors.cyan.withValues(alpha: .14)), child: const Icon(Icons.send_rounded, color: BookNestColors.cyan)),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Send book to', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
@@ -727,8 +727,8 @@ class _Badge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: color.withOpacity(.1),
-        border: Border.all(color: color.withOpacity(.45)),
+        color: color.withValues(alpha: .1),
+        border: Border.all(color: color.withValues(alpha: .45)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
