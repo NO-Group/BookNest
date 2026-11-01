@@ -1,0 +1,84 @@
+name: Code health (flutter analyze)
+
+# Runs the Dart analyzer and commits ops/analyze-report.md: every error
+# and warning with its file and line, plus a count of infos by rule. The
+# release workflows only show analyzer output in the job summary; this
+# report can be read from the repo itself.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a106c8-booknest
+    paths:
+      - '.github/workflows/flutter-analyze.yml'
+      - 'lib/**'
+      - 'test/**'
+      - 'pubspec.yaml'
+      - 'analysis_options.yaml'
+
+concurrency:
+  group: flutter-analyze
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: |
+          set +e
+          flutter analyze --no-fatal-infos --no-fatal-warnings > analyze.log 2>&1
+          status=$?
+          set -e
+          mkdir -p ops
+          errors=$(grep -cE '^\s*error •' analyze.log || true)
+          warnings=$(grep -cE '^\s*warning •' analyze.log || true)
+          infos=$(grep -cE '^\s*info •' analyze.log || true)
+          {
+            echo "# flutter analyze — $(date -u +%Y-%m-%dT%H:%MZ) · ${GITHUB_SHA::7}"
+            echo
+            echo "$(flutter --version | head -1)"
+            echo
+            echo "Exit $status · **$errors errors · $warnings warnings · $infos infos**"
+            echo
+            echo "## Errors"
+            echo '```text'
+            grep -E '^\s*error •' analyze.log | sed 's/^ *//' | head -200 || true
+            echo '```'
+            echo
+            echo "## Warnings"
+            echo '```text'
+            grep -E '^\s*warning •' analyze.log | sed 's/^ *//' | head -300 || true
+            echo '```'
+            echo
+            echo "## Infos by rule"
+            echo '```text'
+            grep -E '^\s*info •' analyze.log | awk -F' • ' '{print $NF}' | sort | uniq -c | sort -rn | head -60 || true
+            echo '```'
+            echo
+            echo "## Infos in lib/presentation/screens/discover/school_cbt*"
+            echo '```text'
+            grep -E '^\s*info •.*school_cbt' analyze.log | sed 's/^ *//' | head -80 || true
+            echo '```'
+          } > ops/analyze-report.md
+          tail -3 analyze.log
+
+      - name: Publish report
+        if: always()
+        run: bash .github/scripts/commit-library-output.sh "Analyzer report" ops/analyze-report.md
