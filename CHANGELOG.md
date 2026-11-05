@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.41.1+76 — 2026-11-05 · Typing indicator
+
+- **Typing indicator, done properly:**
+  - an animated "•••" bubble at the bottom of the chat while the other
+    person types;
+  - "typing…" or "recording audio…" under the chat name;
+  - in group chats, names: "Ada is typing…", "Ada and Tunde are typing…",
+    "Ada and 3 others are typing…";
+  - "typing…" in green on the chat-list row, before you even open the
+    DM.
+- **Fixed:** in DMs the indicator sent the *other person's* name instead
+  of yours. In groups everyone showed up as "Member".
+- **Fixed:** "typing…" now clears the moment a message is sent or the text
+  is deleted, instead of lingering about 4 seconds. Each person times out
+  separately when their pings stop (closed app, lost signal).
+- **Fixed:** on PC, switching between chats could switch the indicator off
+  for the chat you'd just opened.
+- Signing out stops all typing channels, so the next account on the device
+  starts clean.
+- Works with the BookNest keyboard and emotes too, since it follows the
+  text box itself rather than the system keyboard.
+- Uses the same Supabase Realtime broadcast as calls: nothing is stored
+  and there's no server change.
+
 ## 2.41.0+75 — 2026-11-01 · Clean-up, fixes, CBT upgrades
 
 Server 2.34.0.

@@ -122,7 +122,7 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
       final watching = _watching;
       if (watching != null) {
         InboxWatcher.instance.leave(watching);
-        TypingBroadcaster.instance.leave();
+        TypingBroadcaster.instance.leave(watching);
       }
     });
     // The heartbeat lives HERE, not in a widget, so the screen tree never
@@ -210,7 +210,8 @@ class ChatController extends AutoDisposeFamilyNotifier<ChatState, ChatSource> {
     _watching = id;
     if (previous != null) InboxWatcher.instance.leave(previous);
     InboxWatcher.instance.enter(id);
-    TypingBroadcaster.instance.enter(id, myId: ChatRepository.instance.viewerId);
+    TypingBroadcaster.instance.enter(id,
+        myId: ChatRepository.instance.viewerId, peerId: _source.peerId);
   }
 
   /// Pulls the conversation through the repository and publishes it.

@@ -97,7 +97,8 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
     final openConv = widget.conversationId;
     if (openConv != null) InboxWatcher.instance.enter(openConv);
     if (openConv != null) {
-      TypingBroadcaster.instance.enter(openConv, myId: _viewerId);
+      TypingBroadcaster.instance
+          .enter(openConv, myId: _viewerId, peerId: widget.peerId);
     }
     _loadPeer();
   }
@@ -107,8 +108,8 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
     final openConv = _convMirror;
     if (openConv != null && openConv.isNotEmpty) {
       InboxWatcher.instance.leave(openConv);
+      TypingBroadcaster.instance.leave(openConv);
     }
-    TypingBroadcaster.instance.leave();
     _scroll.dispose();
     _searchController.dispose();
     ChatStore.instance.flush();
@@ -418,10 +419,12 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w800)),
-                    ValueListenableBuilder<Map<String, String>>(
-                      valueListenable: TypingBroadcaster.instance.typingPeers,
+                    ValueListenableBuilder<Map<String, TypingActivity>>(
+                      valueListenable: TypingBroadcaster.instance.roomActivity,
                       builder: (context, typing, _) => Text(
-                        typing.isEmpty ? 'View profile' : 'typing…',
+                        typing.isEmpty
+                            ? 'View profile'
+                            : TypingBroadcaster.label(typing, group: false),
                         style: TextStyle(
                           fontSize: 11,
                           fontStyle: typing.isEmpty
@@ -570,6 +573,7 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
                           ],
                         ),
             ),
+            const TypingBubble(),
             ChatComposer(
               onSendText: _sendText,
               onSendImage: _sendImage,
@@ -579,8 +583,6 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
               onSendEmote: _sendEmote,
               replyTo: _replyTo,
               onCancelReply: () => setState(() => _replyTo = null),
-              onTyping: () =>
-                  TypingBroadcaster.instance.iAmTyping(_peerName),
             ),
           ],
         ),

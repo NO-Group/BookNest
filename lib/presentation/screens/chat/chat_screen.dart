@@ -187,13 +187,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return (name == null || name.trim().isEmpty) ? 'Reader' : name.trim();
   }
 
-  String _typingLabel(Map<String, String> typing) {
-    final names = typing.values.take(2).toList();
-    if (names.isEmpty) return '';
-    if (names.length == 1) return names.first;
-    return '${names.first} and ${names.last}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -261,12 +254,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.w800)),
-                  ValueListenableBuilder<Map<String, String>>(
-                    valueListenable: TypingBroadcaster.instance.typingPeers,
+                  ValueListenableBuilder<Map<String, TypingActivity>>(
+                    valueListenable: TypingBroadcaster.instance.roomActivity,
                     builder: (context, typing, _) => Text(
                       typing.isEmpty
                           ? 'Group chat · members only'
-                          : '${_typingLabel(typing)} typing…',
+                          : TypingBroadcaster.label(typing),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -477,6 +470,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                     ],
                                   ),
                           ),
+                          const TypingBubble(group: true),
                           ChatComposer(
                             onSendText: _sendText,
                             onSendImage: _sendImage,
@@ -487,8 +481,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             onSendVideo: _sendVideo,
                             replyTo: _replyTo,
                             onCancelReply: () => setState(() => _replyTo = null),
-                            onTyping: () =>
-                                TypingBroadcaster.instance.iAmTyping('Member'),
                           ),
                         ],
                       ),

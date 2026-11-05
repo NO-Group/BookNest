@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../components/chat_kit.dart';
+import '../../../services/typing_broadcaster.dart';
 import '../../../services/doc_extract.dart';
 import '../../../services/chat_store.dart';
 import '../../../services/chat_backup_service.dart';
@@ -48,6 +49,9 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
   void initState() {
     super.initState();
     _directory = _loadDirectory();
+    // "typing…" on chat rows, WhatsApp-style.
+    final me = viewerId;
+    if (me != null) TypingBroadcaster.instance.listenInbox(me);
     // WhatsApp-style housekeeping: run a due backup silently, then surface
     // any restored-only history and a cloud backup (if one exists).
     ChatBackupService.instance.maybeRunScheduled().catchError((_) => null);
@@ -374,16 +378,35 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
-          subtitle: Text(
-            _preview(conversation),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: unreadish
-                  ? (dark ? BookNestColors.darkTextPrimary : BookNestColors.navyDeep)
-                  : theme.hintColor,
-              fontWeight: unreadish ? FontWeight.w600 : FontWeight.w400,
-            ),
+          subtitle: ValueListenableBuilder<Map<String, TypingActivity>>(
+            valueListenable: TypingBroadcaster.instance.inboxActivity,
+            builder: (context, typing, _) {
+              final now = typing[conversation['id']?.toString() ?? ''];
+              if (now != null) {
+                return Text(
+                  now.recording ? 'recording audio…' : 'typing…',
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: BookNestColors.cyan,
+                    fontWeight: FontWeight.w600,
+                    fontStyle: FontStyle.italic,
+                  ),
+                );
+              }
+              return Text(
+                _preview(conversation),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: unreadish
+                      ? (dark
+                          ? BookNestColors.darkTextPrimary
+                          : BookNestColors.navyDeep)
+                      : theme.hintColor,
+                  fontWeight: unreadish ? FontWeight.w600 : FontWeight.w400,
+                ),
+              );
+            },
           ),
           trailing: Text(
             _timeLabel(conversation['updatedAt']),

@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/theme.dart';
 import '../../config/locales.dart';
+import '../../services/typing_broadcaster.dart';
 import '../../services/reader_profile.dart';
 import '../screens/chat/voice_recorder_sheet.dart';
 import '../screens/chat/camera_screen.dart';
@@ -2692,9 +2693,6 @@ class ChatComposer extends StatefulWidget {
   /// A recorded-and-uploaded voice note from the mic sheet.
   final Future<void> Function(VoiceNoteResult voice)? onSendVoice;
 
-  /// The reader is typing — throttled ping for the typing indicator.
-  final VoidCallback? onTyping;
-
   /// BookNest emote tapped on our own keyboard — sends instantly,
   /// Snapchat-style.
   final Future<void> Function(EmojiDef emote)? onSendEmote;
@@ -2712,10 +2710,6 @@ class ChatComposer extends StatefulWidget {
     this.enabled = true,
     this.replyTo,
     this.onCancelReply,
-
-    /// Fired (throttled inside) while the reader types — feeds the
-    /// room's typing indicator.
-    this.onTyping,
   });
 
   @override
@@ -2736,7 +2730,19 @@ class _ChatComposerState extends State<ChatComposer> {
   void _onInputChanged() {
     final empty = _input.text.trim().isEmpty;
     if (empty != _inputEmpty) setState(() => _inputEmpty = empty);
+    // Live typing indicator for whoever is in this chat. Only real text
+    // changes count (not cursor moves); clearing the field — or sending,
+    // which clears it — tells the others straight away.
+    if (_input.text == _lastTypingText) return;
+    _lastTypingText = _input.text;
+    if (empty) {
+      TypingBroadcaster.instance.stopped();
+    } else {
+      TypingBroadcaster.instance.iAmTyping();
+    }
   }
+
+  String _lastTypingText = '';
 
   Future<void> _sendEmote(EmojiDef emote) async {
     if (_uploading || widget.onSendEmote == null) return;
@@ -2786,7 +2792,7 @@ class _ChatComposerState extends State<ChatComposer> {
       }
     }
     _input.clear();
-    widget.onTyping?.call();
+    TypingBroadcaster.instance.stopped();
     await widget.onSendText(text);
   }
 
@@ -2914,7 +2920,14 @@ class _ChatComposerState extends State<ChatComposer> {
   /// Any file format, through the BookNest picker.
   Future<void> _recordVoice() async {
     if (_uploading || widget.onSendVoice == null) return;
-    final voice = await showVoiceRecorder(context);
+    // "recording audio…" for the others while the recorder is open.
+    TypingBroadcaster.instance.startRecording();
+    VoiceNoteResult? voice;
+    try {
+      voice = await showVoiceRecorder(context);
+    } finally {
+      TypingBroadcaster.instance.stopped();
+    }
     if (voice == null || !mounted) return;
     setState(() => _uploading = true);
     try {
@@ -3145,7 +3158,6 @@ class _ChatComposerState extends State<ChatComposer> {
                 child: TextField(
                   controller: _input,
                   enabled: widget.enabled,
-                  onChanged: (_) => widget.onTyping?.call(),
                   minLines: 1,
                   maxLines: 4,
                   textInputAction: TextInputAction.send,
@@ -3973,6 +3985,145 @@ class _LinkPreviewCardState extends State<_LinkPreviewCard> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// WhatsApp-style bubble at the foot of a chat while someone is typing
+/// (three bouncing dots) or recording a voice note (mic + "recording
+/// audio…"). Takes no space when nobody is. [group] adds names.
+class TypingBubble extends StatelessWidget {
+  final bool group;
+  const TypingBubble({super.key, this.group = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return ValueListenableBuilder<Map<String, TypingActivity>>(
+      valueListenable: TypingBroadcaster.instance.roomActivity,
+      builder: (context, people, _) {
+        final recording =
+            people.isNotEmpty && people.values.every((a) => a.recording);
+        final showText = group || recording;
+        return AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          alignment: Alignment.bottomLeft,
+          child: people.isEmpty
+              ? const SizedBox(width: double.infinity)
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Semantics(
+                      liveRegion: true,
+                      label: TypingBroadcaster.label(people, group: true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: dark ? const Color(0xFF1C2230) : Colors.white,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(18),
+                            topRight: Radius.circular(18),
+                            bottomRight: Radius.circular(18),
+                            bottomLeft: Radius.circular(4),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black
+                                  .withValues(alpha: dark ? .25 : .06),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (recording)
+                              const Icon(Icons.mic_rounded,
+                                  size: 16, color: BookNestColors.cyan)
+                            else
+                              const _TypingDots(),
+                            if (showText) ...[
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  TypingBroadcaster.label(people,
+                                      group: group),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.italic,
+                                    color: Theme.of(context).hintColor,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _TypingDots extends StatefulWidget {
+  const _TypingDots();
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1200))
+    ..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dot = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : BookNestColors.navy;
+    return SizedBox(
+      height: 14,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) => Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: List.generate(3, (i) {
+            final phase = (_c.value - i * 0.18) % 1.0;
+            final lift = phase < .5 ? math.sin(phase * 2 * math.pi) : 0.0;
+            return Padding(
+              padding: EdgeInsets.only(left: i == 0 ? 0 : 4),
+              child: Transform.translate(
+                offset: Offset(0, -4 * lift),
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: dot.withValues(alpha: .35 + .5 * lift),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            );
+          }),
         ),
       ),
     );
