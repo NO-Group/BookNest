@@ -6,7 +6,7 @@ import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
 import '../../../services/genre_service.dart';
 import '../../../state/book_providers.dart';
-import '../../components/booknest_ui.dart' show BookNestLoader, TagChip, kBookNestGenres;
+import '../../components/booknest_ui.dart' show BookCover, TagChip;
 import '../../components/skeleton_kit.dart';
 
 class BooksLibraryScreen extends ConsumerStatefulWidget {
@@ -236,10 +236,10 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                                         decoration: BoxDecoration(
                                           shape: BoxShape.circle,
                                           color: BookNestColors.cyan
-                                              .withOpacity(.12),
+                                              .withValues(alpha: .12),
                                           border: Border.all(
                                               color: BookNestColors.cyan
-                                                  .withOpacity(.4)),
+                                                  .withValues(alpha: .4)),
                                         ),
                                         child: const Icon(
                                             Icons.history_edu_rounded,
@@ -283,14 +283,35 @@ class _BooksLibraryScreenState extends ConsumerState<BooksLibraryScreen> {
                         }
                         return AnimatedSwitcher(
                           duration: const Duration(milliseconds: 250),
-                          child: ListView.builder(
+                          child: LayoutBuilder(
                             key: ValueKey(
                                 '${books.length}-${_search.text}-${_selectedGenres.length}'),
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(20, 4, 20, 110),
-                            itemCount: books.length,
-                            itemBuilder: (_, index) =>
-                                _BookTile(book: books[index]),
+                            builder: (context, box) => box.maxWidth >= 820
+                                // PC / tablet landscape: a shelf grid.
+                                ? GridView.builder(
+                                    physics:
+                                        const AlwaysScrollableScrollPhysics(),
+                                    padding: const EdgeInsets.fromLTRB(
+                                        20, 4, 20, 40),
+                                    gridDelegate:
+                                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                                      maxCrossAxisExtent: 520,
+                                      mainAxisExtent: 150,
+                                      crossAxisSpacing: 14,
+                                    ),
+                                    itemCount: books.length,
+                                    itemBuilder: (_, index) =>
+                                        _BookTile(book: books[index]),
+                                  )
+                                : ListView.builder(
+                                    physics:
+                                        const AlwaysScrollableScrollPhysics(),
+                                    padding: const EdgeInsets.fromLTRB(
+                                        20, 4, 20, 110),
+                                    itemCount: books.length,
+                                    itemBuilder: (_, index) =>
+                                        _BookTile(book: books[index]),
+                                  ),
                           ),
                         );
                       }),
@@ -318,11 +339,11 @@ class _BookTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Material(
-        color: Theme.of(context).colorScheme.surface.withOpacity(.72),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: .72),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: BorderSide(
-                color: BookNestColors.cyan.withOpacity(.16))),
+                color: BookNestColors.cyan.withValues(alpha: .16))),
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
@@ -333,19 +354,10 @@ class _BookTile extends StatelessWidget {
               children: [
                 Hero(
                   tag: 'book-$id',
-                  child: Container(
-                    width: 64,
-                    height: 86,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      gradient: const LinearGradient(
-                        colors: [BookNestColors.navy, BookNestColors.navyDeep],
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.auto_stories_rounded,
-                      color: BookNestColors.cyan,
-                    ),
+                  child: BookCover(
+                    coverUrl: (book['cover_url'] ?? book['coverUrl'])
+                        ?.toString(),
+                    title: title,
                   ),
                 ),
                 const SizedBox(width: 14),

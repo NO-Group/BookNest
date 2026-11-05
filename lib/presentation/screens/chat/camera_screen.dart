@@ -330,8 +330,8 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                                   decoration: BoxDecoration(
                                     color: (_zoom - preset).abs() < .15
                                         ? BookNestColors.cyan
-                                            .withOpacity(.85)
-                                        : Colors.white.withOpacity(.12),
+                                            .withValues(alpha: .85)
+                                        : Colors.white.withValues(alpha: .12),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Text(
@@ -358,8 +358,8 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                                     horizontal: 11, vertical: 5),
                                 decoration: BoxDecoration(
                                   color: _zoom > _maxZoom - .4
-                                      ? BookNestColors.cyan.withOpacity(.85)
-                                      : Colors.white.withOpacity(.12),
+                                      ? BookNestColors.cyan.withValues(alpha: .85)
+                                      : Colors.white.withValues(alpha: .12),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Text(
@@ -414,7 +414,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                         border:
                             Border.all(color: BookNestColors.cyan, width: 4),
                         color: _capturing
-                            ? BookNestColors.cyan.withOpacity(.35)
+                            ? BookNestColors.cyan.withValues(alpha: .35)
                             : Colors.transparent,
                       ),
                       child: Center(

@@ -317,7 +317,7 @@ class _EventsAgendaScreenState extends State<EventsAgendaScreen> {
                                 borderRadius: BorderRadius.circular(18),
                                 border: Border.all(
                                     color: BookNestColors.cyan
-                                        .withOpacity(.7)),
+                                        .withValues(alpha: .7)),
                               ),
                               child: _busy.contains(id)
                                   ? const SizedBox(

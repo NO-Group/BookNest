@@ -57,7 +57,7 @@ class SuspendGateScreen extends StatelessWidget {
                   width: 86,
                   height: 86,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFD06A6A).withOpacity(.14),
+                    color: const Color(0xFFD06A6A).withValues(alpha: .14),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -90,7 +90,7 @@ class SuspendGateScreen extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 14.5,
                       height: 1.45,
-                      color: onSurface.withOpacity(.75)),
+                      color: onSurface.withValues(alpha: .75)),
                 ),
                 if (reason.isNotEmpty) ...[
                   const SizedBox(height: 18),
@@ -106,7 +106,7 @@ class SuspendGateScreen extends StatelessWidget {
                                     fontSize: 11,
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: 1,
-                                    color: onSurface.withOpacity(.5))),
+                                    color: onSurface.withValues(alpha: .5))),
                             const SizedBox(height: 5),
                             Text(reason,
                                 style: TextStyle(
@@ -121,7 +121,7 @@ class SuspendGateScreen extends StatelessWidget {
                 Text(
                   'You can appeal by writing to',
                   style: TextStyle(
-                      fontSize: 13, color: onSurface.withOpacity(.6)),
+                      fontSize: 13, color: onSurface.withValues(alpha: .6)),
                 ),
                 const SizedBox(height: 6),
                 InkWell(
@@ -131,10 +131,10 @@ class SuspendGateScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: BookNestColors.cyan.withOpacity(.12),
+                      color: BookNestColors.cyan.withValues(alpha: .12),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                          color: BookNestColors.cyan.withOpacity(.5)),
+                          color: BookNestColors.cyan.withValues(alpha: .5)),
                     ),
                     child: const Row(mainAxisSize: MainAxisSize.min, children: [
                       Icon(Icons.mail_outline_rounded,

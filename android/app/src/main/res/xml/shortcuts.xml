@@ -9,7 +9,7 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:data="booknest://write"
-            android:targetPackage="com.nogroup.booknest"
+            android:targetPackage="com.n_o_group.booknest"
             android:targetClass="com.nogroup.booknest.MainActivity"/>
     </shortcut>
     <shortcut
@@ -21,7 +21,7 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:data="booknest://word"
-            android:targetPackage="com.nogroup.booknest"
+            android:targetPackage="com.n_o_group.booknest"
             android:targetClass="com.nogroup.booknest.MainActivity"/>
     </shortcut>
     <shortcut
@@ -33,7 +33,7 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:data="booknest://search"
-            android:targetPackage="com.nogroup.booknest"
+            android:targetPackage="com.n_o_group.booknest"
             android:targetClass="com.nogroup.booknest.MainActivity"/>
     </shortcut>
     <shortcut
@@ -45,7 +45,7 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:data="booknest://wallet"
-            android:targetPackage="com.nogroup.booknest"
+            android:targetPackage="com.n_o_group.booknest"
             android:targetClass="com.nogroup.booknest.MainActivity"/>
     </shortcut>
 </shortcuts>

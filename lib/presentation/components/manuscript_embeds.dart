@@ -42,7 +42,7 @@ class ImageEmbedBuilder extends EmbedBuilder {
       child: GestureDetector(
         onTap: () => showDialog<void>(
           context: context,
-          barrierColor: Colors.black.withOpacity(.92),
+          barrierColor: Colors.black.withValues(alpha: .92),
           builder: (_) => Dialog.fullscreen(
             backgroundColor: Colors.black,
             child: Stack(
@@ -62,7 +62,7 @@ class ImageEmbedBuilder extends EmbedBuilder {
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.close_rounded),
                         style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withOpacity(.12),
+                          backgroundColor: Colors.white.withValues(alpha: .12),
                           foregroundColor: Colors.white,
                         ),
                       ),
@@ -85,7 +85,7 @@ class ImageEmbedBuilder extends EmbedBuilder {
                 if (progress == null) return child;
                 return Container(
                   height: 180,
-                  color: BookNestColors.cyan.withOpacity(.06),
+                  color: BookNestColors.cyan.withValues(alpha: .06),
                   child: const Center(
                     child: CircularProgressIndicator(
                         color: BookNestColors.cyan, strokeWidth: 2),
@@ -94,7 +94,7 @@ class ImageEmbedBuilder extends EmbedBuilder {
               },
               errorBuilder: (_, __, ___) => Container(
                 height: 120,
-                color: BookNestColors.cyan.withOpacity(.06),
+                color: BookNestColors.cyan.withValues(alpha: .06),
                 child: const Icon(Icons.broken_image_outlined,
                     color: BookNestColors.cyan),
               ),
@@ -254,9 +254,9 @@ class MathFormulaView extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: (dark ? Colors.white : BookNestColors.navy).withOpacity(.05),
+          color: (dark ? Colors.white : BookNestColors.navy).withValues(alpha: .05),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+          border: Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
         ),
         child: child,
       ),
@@ -271,6 +271,7 @@ Future<String?> askFormula(BuildContext context, {String initial = ''}) {
   return showDialog<String>(
     context: context,
     builder: (dialogContext) => AlertDialog(
+      scrollable: true,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Row(children: const [
         Icon(Icons.functions_rounded, color: BookNestColors.cyan, size: 20),
@@ -301,7 +302,7 @@ hintText: r'x^2 + \frac{a}{b} \sum_{i=1}^{n} i \sqrt{2}',
               constraints: const BoxConstraints(minHeight: 52),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: BookNestColors.cyan.withOpacity(.07),
+                color: BookNestColors.cyan.withValues(alpha: .07),
                 borderRadius: BorderRadius.circular(12),
               ),
               alignment: Alignment.center,
@@ -426,6 +427,22 @@ class MathAwareMarkdown extends StatelessWidget {
     );
   }
 }
+
+/// Fallback for anything the editor doesn't know (older/foreign content).
+/// Without it Quill throws and release builds paint the whole page grey.
+class UnknownEmbedBuilder extends EmbedBuilder {
+  const UnknownEmbedBuilder();
+
+  @override
+  String get key => '__unknown__';
+
+  @override
+  Widget build(BuildContext context, EmbedContext embedContext) {
+    return const SizedBox(height: 4);
+  }
+}
+
+const EmbedBuilder manuscriptUnknownEmbedBuilder = UnknownEmbedBuilder();
 
 /// Everything a manuscript needs, registered in one line.
 final List<EmbedBuilder> manuscriptEmbedBuilders = [

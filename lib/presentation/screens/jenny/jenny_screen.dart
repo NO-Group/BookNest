@@ -104,7 +104,7 @@ class _JennyScreenState extends State<JennyScreen> {
                 ]),
                 boxShadow: [
                   BoxShadow(
-                      color: BookNestColors.cyan.withOpacity(.35),
+                      color: BookNestColors.cyan.withValues(alpha: .35),
                       blurRadius: 12),
                 ],
               ),
@@ -147,11 +147,11 @@ class _JennyScreenState extends State<JennyScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 12),
                             decoration: BoxDecoration(
-                              color: glassBase.withOpacity(.55),
+                              color: glassBase.withValues(alpha: .55),
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
                                   color:
-                                      BookNestColors.cyan.withOpacity(.2)),
+                                      BookNestColors.cyan.withValues(alpha: .2)),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -223,10 +223,10 @@ class _JennyScreenState extends State<JennyScreen> {
                           borderRadius: bubbleRadius,
                         )
                       : BoxDecoration(
-                          color: glassBase.withOpacity(.55),
+                          color: glassBase.withValues(alpha: .55),
                           borderRadius: bubbleRadius,
                           border: Border.all(
-                              color: BookNestColors.cyan.withOpacity(.2)),
+                              color: BookNestColors.cyan.withValues(alpha: .2)),
                         ),
                   child: Text(
                     message.text,
@@ -270,10 +270,10 @@ class _JennyScreenState extends State<JennyScreen> {
                   child: Container(
                     padding: const EdgeInsets.fromLTRB(18, 4, 8, 4),
                     decoration: BoxDecoration(
-                      color: glassBase.withOpacity(.62),
+                      color: glassBase.withValues(alpha: .62),
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
-                          color: BookNestColors.cyan.withOpacity(.25)),
+                          color: BookNestColors.cyan.withValues(alpha: .25)),
                     ),
                     child: Row(
                       children: [

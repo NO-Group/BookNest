@@ -174,13 +174,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
                       style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w800,
-                          color: onSurface.withOpacity(.7)))),
+                          color: onSurface.withValues(alpha: .7)))),
               const SizedBox(width: 8),
               Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
                   child: Stack(children: [
-                    Container(height: 14, color: onSurface.withOpacity(.06)),
+                    Container(height: 14, color: onSurface.withValues(alpha: .06)),
                     FractionallySizedBox(
                       widthFactor: maxV == 0 ? 0 : values[i] / maxV,
                       child: Container(
@@ -204,7 +204,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                       style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w800,
-                          color: onSurface.withOpacity(.8)))),
+                          color: onSurface.withValues(alpha: .8)))),
             ]),
           ),
         if (((ages['unset'] as num?) ?? 0).toInt() > 0)
@@ -213,7 +213,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
             child: Text(
                 '${ages['unset']} reader${((ages['unset'] as num?) ?? 0).toInt() == 1 ? '' : 's'} haven\u2019t set a birth year yet',
                 style: TextStyle(
-                    fontSize: 11, color: onSurface.withOpacity(.45))),
+                    fontSize: 11, color: onSurface.withValues(alpha: .45))),
           ),
       ]),
     );
@@ -286,7 +286,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
             child: OutlinedButton.icon(
               onPressed: () => context.push('/moderator/users'),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: BookNestColors.cyan.withOpacity(.55)),
+                side: BorderSide(color: BookNestColors.cyan.withValues(alpha: .55)),
                 foregroundColor: BookNestColors.cyan,
               ),
               icon: const Icon(Icons.people_rounded, size: 17),
@@ -299,7 +299,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
             child: OutlinedButton.icon(
               onPressed: () => context.push('/moderator/mass'),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: BookNestColors.cyan.withOpacity(.55)),
+                side: BorderSide(color: BookNestColors.cyan.withValues(alpha: .55)),
                 foregroundColor: BookNestColors.cyan,
               ),
               icon: const Icon(Icons.campaign_rounded, size: 17),
@@ -347,7 +347,7 @@ class _Panel extends StatelessWidget {
             const SizedBox(height: 3),
             Text(subtitle!,
                 style: TextStyle(
-                    fontSize: 11, color: onSurface.withOpacity(.5))),
+                    fontSize: 11, color: onSurface.withValues(alpha: .5))),
           ],
           const SizedBox(height: 12),
           child,
@@ -380,7 +380,7 @@ class _StatTile extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Icon(icon,
               size: 20,
-              color: highlight ? BookNestColors.cyan : onSurface.withOpacity(.6)),
+              color: highlight ? BookNestColors.cyan : onSurface.withValues(alpha: .6)),
           const SizedBox(height: 8),
           Text('$value',
               style: TextStyle(
@@ -389,7 +389,7 @@ class _StatTile extends StatelessWidget {
                   color: highlight ? BookNestColors.cyan : onSurface)),
           Text(label,
               style: TextStyle(
-                  fontSize: 12, color: onSurface.withOpacity(.6))),
+                  fontSize: 12, color: onSurface.withValues(alpha: .6))),
         ]),
       ),
     );
@@ -414,7 +414,7 @@ class _MiniStat extends StatelessWidget {
               color: tone ?? BookNestColors.cyan)),
       const SizedBox(height: 2),
       Text(label,
-          style: TextStyle(fontSize: 11.5, color: onSurface.withOpacity(.6))),
+          style: TextStyle(fontSize: 11.5, color: onSurface.withValues(alpha: .6))),
     ]);
   }
 }
@@ -462,7 +462,7 @@ class _LegendDot extends StatelessWidget {
           style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w700,
-              color: onSurface.withOpacity(.75))),
+              color: onSurface.withValues(alpha: .75))),
     ]);
   }
 }

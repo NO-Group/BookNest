@@ -15,6 +15,7 @@ import '../../../services/chat_repository.dart';
 import '../../../services/typing_broadcaster.dart';
 import '../../../services/supabase_service.dart';
 import '../../../state/chat_providers.dart';
+import '../../components/adaptive.dart';
 
 /// Club / community / organization / school group chat — membership-gated
 /// rooms on the BookNest watermark canvas. Everyone in the group sees the
@@ -186,13 +187,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return (name == null || name.trim().isEmpty) ? 'Reader' : name.trim();
   }
 
-  String _typingLabel(Map<String, String> typing) {
-    final names = typing.values.take(2).toList();
-    if (names.isEmpty) return '';
-    if (names.length == 1) return names.first;
-    return '${names.first} and ${names.last}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -212,31 +206,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         elevation: 0,
         leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
-        actions: [
-          IconButton(
-            tooltip: 'Shared media & files',
-            icon: const Icon(Icons.folder_shared_outlined, size: 21),
-            onPressed: (chat.conversationId ?? '').isEmpty
+        actions: adaptiveActions(context, [
+          HeaderAction(
+            icon: Icons.search_rounded,
+            label: 'Search messages',
+            onTap: () => setState(() {
+              _searching = !_searching;
+              if (!_searching) _searchController.clear();
+            }),
+          ),
+          HeaderAction(
+            icon: Icons.folder_shared_outlined,
+            label: 'Shared media & files',
+            onTap: (chat.conversationId ?? '').isEmpty
                 ? null
                 : () => context.push(
                       '/shared/${chat.conversationId}'
                       '?title=${Uri.encodeComponent(widget.title)}',
                     ),
           ),
-          IconButton(
-            tooltip: 'Search messages',
-            icon: const Icon(Icons.search_rounded, size: 21),
-            onPressed: () => setState(() {
-              _searching = !_searching;
-              if (!_searching) _searchController.clear();
-            }),
+          HeaderAction(
+            icon: Icons.palette_outlined,
+            label: 'Chat theme',
+            onTap: _editTheme,
           ),
-          IconButton(
-            tooltip: 'Chat theme',
-            icon: const Icon(Icons.palette_outlined, size: 21),
-            onPressed: _editTheme,
-          ),
-        ],
+        ]),
         titleSpacing: 0,
         title: Row(
           children: [
@@ -260,12 +254,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.w800)),
-                  ValueListenableBuilder<Map<String, String>>(
-                    valueListenable: TypingBroadcaster.instance.typingPeers,
+                  ValueListenableBuilder<Map<String, TypingActivity>>(
+                    valueListenable: TypingBroadcaster.instance.roomActivity,
                     builder: (context, typing, _) => Text(
                       typing.isEmpty
                           ? 'Group chat · members only'
-                          : '${_typingLabel(typing)} typing…',
+                          : TypingBroadcaster.label(typing),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -273,7 +267,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         fontStyle: typing.isEmpty
                             ? FontStyle.normal
                             : FontStyle.italic,
-                        color: BookNestColors.cyan.withOpacity(.85),
+                        color: BookNestColors.cyan.withValues(alpha: .85),
                       ),
                     ),
                   ),
@@ -325,7 +319,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                         Icon(Icons.search_off_rounded,
                                             size: 40,
                                             color: BookNestColors.cyan
-                                                .withOpacity(.5)),
+                                                .withValues(alpha: .5)),
                                         const SizedBox(height: 10),
                                         Text('No matches in this chat',
                                             style: theme.textTheme.titleMedium
@@ -342,7 +336,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                       children: [
                                         Icon(Icons.forum_rounded,
                                             color:
-                                                BookNestColors.cyan.withOpacity(.6),
+                                                BookNestColors.cyan.withValues(alpha: .6),
                                             size: 42),
                                         const SizedBox(height: 10),
                                         Text('Start the conversation',
@@ -476,6 +470,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                     ],
                                   ),
                           ),
+                          const TypingBubble(group: true),
                           ChatComposer(
                             onSendText: _sendText,
                             onSendImage: _sendImage,
@@ -486,8 +481,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             onSendVideo: _sendVideo,
                             replyTo: _replyTo,
                             onCancelReply: () => setState(() => _replyTo = null),
-                            onTyping: () =>
-                                TypingBroadcaster.instance.iAmTyping('Member'),
                           ),
                         ],
                       ),
@@ -570,15 +563,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final author =
         _senderName(pinned['senderId']?.toString() ?? '', chat.people);
     return Material(
-      color: BookNestColors.cyan.withOpacity(.10),
+      color: BookNestColors.cyan.withValues(alpha: .10),
       child: InkWell(
         onTap: () => showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
           context: context,
           showDragHandle: true,
           shape: const RoundedRectangleBorder(
               borderRadius:
                   BorderRadius.vertical(top: Radius.circular(24))),
-          builder: (sheetContext) => SafeArea(
+          builder: (sheetContext) => SheetBody(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
               child: Column(mainAxisSize: MainAxisSize.min,
@@ -646,7 +641,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: BookNestColors.cyan.withOpacity(.7), size: 46),
+            Icon(icon, color: BookNestColors.cyan.withValues(alpha: .7), size: 46),
             const SizedBox(height: 12),
             Text(title,
                 style: theme.textTheme.titleMedium

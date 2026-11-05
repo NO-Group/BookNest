@@ -1,0 +1,76 @@
+name: Production smoke test (accounts, chat, calls, books)
+
+# Exercises the LIVE backend the way the app does with two throw-away
+# accounts (messaging, call relay, R2 book text, account deletion) and
+# commits ops/smoke-report.md. Runs on demand or when this file / the
+# trigger file changes; waits for the server version in this commit.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a106c8-booknest
+    paths:
+      - '.github/workflows/prod-smoke.yml'
+      - 'tools/ops/smoke.py'
+      - 'ops/smoke.trigger'
+
+concurrency:
+  group: prod-smoke
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      REF: ekgbbbbjwgfixqarlnil
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools (coturn test client)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq coturn >/dev/null
+          which turnutils_uclient
+      - name: Wait for this server version and the call relay
+        run: |
+          FN_URL="https://${REF}.supabase.co/functions/v1/booknest-api"
+          ANON="$(grep -A3 'supabaseAnonKey = ' lib/config/app_config.dart | grep -oE "eyJ[^']+")"
+          WANT="$(grep -oE "server: '[0-9.]+'" supabase/functions/booknest-api/index.ts | head -1 | grep -oE '[0-9.]+')"
+          echo "FN_URL=$FN_URL" >> "$GITHUB_ENV"; echo "ANON=$ANON" >> "$GITHUB_ENV"
+          echo "SUPABASE_URL=https://${REF}.supabase.co" >> "$GITHUB_ENV"
+          for i in $(seq 1 60); do
+            GOT="$(curl -s --max-time 20 -X POST "$FN_URL" -H "Authorization: Bearer $ANON" \
+              -H 'Content-Type: application/json' -d '{"action":"ping"}' \
+              | grep -oE '"server":"[0-9.]+"' | grep -oE '[0-9.]+' || true)"
+            [ "$GOT" = "$WANT" ] && { echo "Server $GOT is live."; break; }
+            echo "waiting for server $WANT (live: ${GOT:-?}) — $i/60"; sleep 20
+          done
+          # The deploy workflow stores the TURN key right after deploying;
+          # give it a few minutes to land before testing calls.
+          for i in $(seq 1 15); do
+            R="$(curl -s --max-time 30 -X POST "$FN_URL" -H "Authorization: Bearer $ANON" \
+              -H 'Content-Type: application/json' -d '{"action":"calls.ice"}' || true)"
+            echo "$R" | grep -q '"relay":"cloudflare"' && { echo "Cloudflare relay active."; break; }
+            echo "relay not active yet — $i/15"; sleep 20
+          done
+      - name: Service key (masked, never stored)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          KEY="$(curl -s --max-time 30 "https://api.supabase.com/v1/projects/${REF}/api-keys?reveal=true" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            | python3 -c 'import json,sys; print(next((k.get("api_key","") for k in json.load(sys.stdin) if k.get("name")=="service_role"),""))')"
+          [ -n "$KEY" ] || { echo "could not read the service key" >&2; exit 1; }
+          echo "::add-mask::$KEY"
+          echo "SERVICE_KEY=$KEY" >> "$GITHUB_ENV"
+      - name: Smoke test
+        run: |
+          python3 tools/ops/smoke.py
+          cat ops/smoke-report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish report
+        if: always()
+        run: bash .github/scripts/commit-library-output.sh "Production smoke report" ops/smoke-report.md

@@ -107,7 +107,12 @@ Belong."
 
 - UGC: **yes** (posts, chat, books, reviews).
 - Sharing/location of others: **no**. Personal info sharing: **no**.
-- In-app purchases: **no** (gems are earned, never sold).
+- In-app purchases: **yes**. Gems and the Reader/BookWorm plans are sold
+  through **Paystack**, not Google Play Billing. ⚠️ The owner chose this
+  on 2026-10-21, knowing that Google Play's Payments policy requires Play
+  Billing for digital goods. Play may reject the app or remove it later;
+  the fix would be to hide the Store in the Play build, or to add Play
+  Billing. Gems can also be earned in the app.
 - Expected outcome: **Teen / PEGI 12+** (chat + UGC). Answer the
   questionnaire honestly; the report/block/moderation presence is the
   mitigating answer to every UGC severity question.
@@ -132,14 +137,28 @@ Belong."
 
 - **Support email** (monitored inbox) and, for Play, a contact website or
   the About page URL.
-- **Privacy policy URL**: host the in-app "Privacy & safety" text at a
-  public URL (a GitHub Page is enough) — Play requires an absolute URL,
-  Apple accepts either.
-- **Account deletion URL** (Play, new requirement): point it at the same
-  site with a short page explaining Settings → Delete my account — or use
-  the web link to your support email requesting deletion.
+- **Privacy policy URL**:
+  https://github.com/NO-Group/BookNest/blob/BookNest/docs/legal/PRIVACY.md
+  (the repo is public; mirror it on a website later if you like).
+- **Account deletion URL**:
+  https://github.com/NO-Group/BookNest/blob/BookNest/docs/legal/ACCOUNT_DELETION.md
+  (in-app steps plus an email route that works without the app).
 - **Screenshots**: produce from a device/emulator at 1080×1920+ (Play) and
   6.7" 1290×2796 (iOS), per the shot-list above.
-- **Upload the signed AAB/APK** from the CI artifact `BookNest-release-apk`
-  (Play also accepts the APK while testing; production prefers AAB — ask
-  CI to add `flutter build appbundle` when you are ready).
+- **Upload the App Bundle**: every Android release now carries
+  `booknest-play.aab` next to `booknest.apk`. Upload the `.aab` in Play
+  Console → Test and release. CI also writes a readiness report (target
+  SDK, restricted permissions, 16 KB native-library alignment) to the job
+  summary.
+- **Signing (important)**: the AAB is signed with the committed repo key.
+  With Play App Signing that key is only the *upload key*, and Google signs
+  what phones install with its own key. Phones that installed the direct
+  APK then **cannot update from Play** (or the reverse) without
+  uninstalling first. To let one install move between the two channels,
+  choose "Use an existing app signing key" in Play Console and upload the
+  repo key. Because that key is public in this repo, rotate it (secrets
+  `KEYSTORE_BASE64` + `KEYSTORE_PROPERTIES_BASE64`) before a wide launch.
+- **Foreground service declaration**: the opt-in "background link" uses
+  the `remoteMessaging` foreground-service type. Declare it in Play Console
+  → App content → Foreground services, with a short screen recording of
+  turning it on in Settings.

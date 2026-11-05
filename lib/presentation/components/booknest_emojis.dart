@@ -432,7 +432,7 @@ class _EmojiAuraPainter extends CustomPainter {
     final color = _dominantColor(def);
     final breath = .30 + .22 * ((math.sin(t * 2 * math.pi) + 1) / 2);
     final glow = Paint()
-      ..color = color.withOpacity((motion == _EmojiMotion.flicker
+      ..color = color.withValues(alpha: (motion == _EmojiMotion.flicker
               ? breath * 1.25
               : breath) *
           .55)
@@ -442,7 +442,7 @@ class _EmojiAuraPainter extends CustomPainter {
     final rim = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = size.width * .02
-      ..color = Colors.white.withOpacity(.16);
+      ..color = Colors.white.withValues(alpha: .16);
     canvas.drawCircle(c, radius * .84, rim);
   }
 
@@ -473,9 +473,9 @@ class _EmojiShinePainter extends CustomPainter {
         startAngle: angle,
         endAngle: angle + 1.15,
         colors: [
-          Colors.white.withOpacity(0),
-          Colors.white.withOpacity(.42),
-          Colors.white.withOpacity(0),
+          Colors.white.withValues(alpha: 0),
+          Colors.white.withValues(alpha: .42),
+          Colors.white.withValues(alpha: 0),
         ],
         transform: GradientRotation(angle),
       ).createShader(Rect.fromCircle(center: c, radius: radius));
@@ -533,7 +533,7 @@ class BookNestEmojiPainter extends CustomPainter {
           c,
           size.width * .46,
           Paint()
-            ..color = BookNestEmojiPalette.cyan.withOpacity(.25 * glow)
+            ..color = BookNestEmojiPalette.cyan.withValues(alpha: .25 * glow)
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
         );
       case EmojiEffect.shake:
@@ -571,7 +571,7 @@ class BookNestEmojiPainter extends CustomPainter {
       rect.center.translate(0, radius * .1),
       radius,
       Paint()
-        ..color = BookNestEmojiPalette.navyDeep.withOpacity(.18)
+        ..color = BookNestEmojiPalette.navyDeep.withValues(alpha: .18)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
     );
 
@@ -596,7 +596,7 @@ class BookNestEmojiPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = size.width * .035
-        ..color = BookNestEmojiPalette.cyan.withOpacity(.35)
+        ..color = BookNestEmojiPalette.cyan.withValues(alpha: .35)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
     );
 
@@ -607,7 +607,7 @@ class BookNestEmojiPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = size.width * .028
-        ..color = BookNestEmojiPalette.navyDeep.withOpacity(.75),
+        ..color = BookNestEmojiPalette.navyDeep.withValues(alpha: .75),
     );
 
     // Glossy highlight, top-left.
@@ -621,7 +621,7 @@ class BookNestEmojiPainter extends CustomPainter {
         height: radius * .62,
       ),
       Paint()
-        ..color = Colors.white.withOpacity(.32)
+        ..color = Colors.white.withValues(alpha: .32)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
     );
     canvas.restore();
@@ -659,7 +659,7 @@ class BookNestEmojiPainter extends CustomPainter {
           canvas.drawCircle(
               Offset(x - eyeR * .3, eyeY - eyeR * .35),
               eyeR * .32,
-              Paint()..color = Colors.white.withOpacity(.9));
+              Paint()..color = Colors.white.withValues(alpha: .9));
         case EmojiEyes.happy:
           canvas.drawArc(
             Rect.fromCircle(center: Offset(x, eyeY + eyeR * .8), radius: eyeR * 1.4),
@@ -699,11 +699,11 @@ class BookNestEmojiPainter extends CustomPainter {
         case EmojiEyes.star:
           _drawStar(canvas, Offset(x, eyeY), eyeR * 2.2, ink);
           canvas.drawCircle(Offset(x + eyeR * .4, eyeY - eyeR * .5),
-              eyeR * .28, Paint()..color = Colors.white.withOpacity(.95));
+              eyeR * .28, Paint()..color = Colors.white.withValues(alpha: .95));
         case EmojiEyes.heart:
           _drawHeart(canvas, Offset(x, eyeY), eyeR * 2.4,
               BookNestEmojiPalette.blushPink,
-              outline: BookNestEmojiPalette.navyDeep.withOpacity(.55));
+              outline: BookNestEmojiPalette.navyDeep.withValues(alpha: .55));
         case EmojiEyes.sunglasses:
           break; // drawn as the accessory band below
         case EmojiEyes.glasses:
@@ -733,7 +733,7 @@ class BookNestEmojiPainter extends CustomPainter {
             ..style = PaintingStyle.stroke
             ..strokeWidth = eyeR * .7
             ..strokeCap = StrokeCap.round
-            ..color = Colors.white.withOpacity(.9 * glint),
+            ..color = Colors.white.withValues(alpha: .9 * glint),
         );
       }
     }
@@ -741,7 +741,7 @@ class BookNestEmojiPainter extends CustomPainter {
     // blush
     if (def.face == BookNestEmojiPalette.lavender ||
         def.face == BookNestEmojiPalette.white) {
-      final blush = Paint()..color = BookNestEmojiPalette.blushPink.withOpacity(.5);
+      final blush = Paint()..color = BookNestEmojiPalette.blushPink.withValues(alpha: .5);
       canvas.drawCircle(
           Offset(rect.center.dx - eyeDx * 1.7, eyeY + eyeR * 2.6), eyeR * .8, blush);
       canvas.drawCircle(
@@ -836,7 +836,7 @@ class BookNestEmojiPainter extends CustomPainter {
       final blushY = rect.center.dy + rect.height * .1;
       final blushPaint = Paint()
         ..color = BookNestEmojiPalette.blushPink
-            .withOpacity(dark ? .5 : .42);
+            .withValues(alpha: dark ? .5 : .42);
       canvas.drawOval(
         Rect.fromCenter(
             center: Offset(rect.center.dx - rect.width * .27, blushY),
@@ -903,7 +903,7 @@ class BookNestEmojiPainter extends CustomPainter {
       canvas.drawCircle(
         Offset(rect.center.dx + eyeDx, eyeY + eyeR * 2 + rect.height * .3 * dropY),
         rect.width * .035,
-        Paint()..color = BookNestEmojiPalette.cyan.withOpacity(1 - dropY * .4),
+        Paint()..color = BookNestEmojiPalette.cyan.withValues(alpha: 1 - dropY * .4),
       );
     }
     if (def.effect == EmojiEffect.floatZ) {
@@ -915,7 +915,7 @@ class BookNestEmojiPainter extends CustomPainter {
           zz[i],
           Offset(rect.center.dx + rect.width * (.3 + .08 * i), rect.top - rect.height * (.04 + .16 * phase)),
           rect.width * (.09 + .03 * i),
-          BookNestEmojiPalette.white.withOpacity(1 - phase * .7),
+          BookNestEmojiPalette.white.withValues(alpha: 1 - phase * .7),
         );
       }
     }
@@ -934,7 +934,7 @@ class BookNestEmojiPainter extends CustomPainter {
         height: w * .1,
       ),
       Paint()
-        ..color = BookNestEmojiPalette.navyDeep.withOpacity(.15)
+        ..color = BookNestEmojiPalette.navyDeep.withValues(alpha: .15)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
     );
     switch (object) {
@@ -954,14 +954,14 @@ class BookNestEmojiPainter extends CustomPainter {
           ..strokeWidth = w * .03
           ..color = BookNestEmojiPalette.navyDeep);
         canvas.drawLine(Offset(c.dx, c.dy - w * .18), Offset(c.dx, c.dy + w * .3), Paint()
-          ..color = BookNestEmojiPalette.navyDeep.withOpacity(.6)
+          ..color = BookNestEmojiPalette.navyDeep.withValues(alpha: .6)
           ..strokeWidth = w * .025);
         // Page block under the cover.
         canvas.drawLine(
           Offset(c.dx - w * .4, c.dy + w * .27),
           Offset(c.dx + w * .4, c.dy + w * .27),
           Paint()
-            ..color = BookNestEmojiPalette.navyDeep.withOpacity(.45)
+            ..color = BookNestEmojiPalette.navyDeep.withValues(alpha: .45)
             ..strokeWidth = w * .035
             ..strokeCap = StrokeCap.round,
         );
@@ -971,7 +971,7 @@ class BookNestEmojiPainter extends CustomPainter {
               Offset(c.dx + sx * w * (.1 + i * .09), c.dy - w * (.1 - i * .01)),
               Offset(c.dx + sx * w * (.1 + i * .09), c.dy + w * (.12 - i * .01)),
               Paint()
-                ..color = BookNestEmojiPalette.cyan.withOpacity(.75)
+                ..color = BookNestEmojiPalette.cyan.withValues(alpha: .75)
                 ..strokeWidth = w * .022
                 ..strokeCap = StrokeCap.round,
             );
@@ -1011,7 +1011,7 @@ class BookNestEmojiPainter extends CustomPainter {
             canvas.drawCircle(
               Offset(c.dx - w * .28 + i * w * .05, c.dy + w * .4 - phase * w * .1),
               w * .03,
-              Paint()..color = BookNestEmojiPalette.cyan.withOpacity(1 - phase),
+              Paint()..color = BookNestEmojiPalette.cyan.withValues(alpha: 1 - phase),
             );
           }
         }
@@ -1043,7 +1043,7 @@ class BookNestEmojiPainter extends CustomPainter {
         );
         canvas.drawOval(
           Rect.fromCenter(center: Offset(c.dx, c.dy + w * .2), width: w * .4, height: w * .3),
-          Paint()..color = BookNestEmojiPalette.cyan.withOpacity(.35),
+          Paint()..color = BookNestEmojiPalette.cyan.withValues(alpha: .35),
         );
       case EmojiObject.bookHeart:
         _drawHeart(canvas, Offset(c.dx, c.dy), w * .72, BookNestEmojiPalette.blushPink);
@@ -1088,7 +1088,7 @@ class BookNestEmojiPainter extends CustomPainter {
           ..strokeWidth = w * .05);
       case EmojiObject.moon:
         final glow = def.effect == EmojiEffect.pulse ? .5 + .5 * (1 - (2 * t - 1).abs()) : .8;
-        canvas.drawCircle(c, w * .34, Paint()..color = BookNestEmojiPalette.cyan.withOpacity(.3 * glow));
+        canvas.drawCircle(c, w * .34, Paint()..color = BookNestEmojiPalette.cyan.withValues(alpha: .3 * glow));
         final outer = Path()..addOval(Rect.fromCircle(center: c, radius: w * .3));
         final bite = Path()
           ..addOval(Rect.fromCircle(center: Offset(c.dx + w * .14, c.dy - w * .08), radius: w * .26));
@@ -1104,9 +1104,9 @@ class BookNestEmojiPainter extends CustomPainter {
         final tw = def.effect == EmojiEffect.twinkle
             ? [t, (t + .33) % 1, (t + .66) % 1].map((p) => .35 + .65 * (1 - (2 * p - 1).abs())).toList()
             : [1.0, .7, .85];
-        _drawStar(canvas, Offset(c.dx - w * .18, c.dy - w * .14), w * .3, BookNestEmojiPalette.cyan.withOpacity(tw[0]));
-        _drawStar(canvas, Offset(c.dx + w * .2, c.dy + w * .05), w * .22, Colors.white.withOpacity(tw[1]));
-        _drawStar(canvas, Offset(c.dx - w * .02, c.dy + w * .28), w * .16, BookNestEmojiPalette.lavender.withOpacity(tw[2]));
+        _drawStar(canvas, Offset(c.dx - w * .18, c.dy - w * .14), w * .3, BookNestEmojiPalette.cyan.withValues(alpha: tw[0]));
+        _drawStar(canvas, Offset(c.dx + w * .2, c.dy + w * .05), w * .22, Colors.white.withValues(alpha: tw[1]));
+        _drawStar(canvas, Offset(c.dx - w * .02, c.dy + w * .28), w * .16, BookNestEmojiPalette.lavender.withValues(alpha: tw[2]));
       case EmojiObject.bookworm:
         canvas.drawOval(
           Rect.fromCenter(center: Offset(c.dx, c.dy + w * .05), width: w * .7, height: w * .5),
@@ -1174,7 +1174,7 @@ class BookNestEmojiPainter extends CustomPainter {
           Offset(c.dx + w * .3, c.dy - w * .3),
           Offset(c.dx - w * .18, c.dy + w * .18),
           Paint()
-            ..color = BookNestEmojiPalette.cyan.withOpacity(.6)
+            ..color = BookNestEmojiPalette.cyan.withValues(alpha: .6)
             ..strokeWidth = w * .06
             ..strokeCap = StrokeCap.round,
         );

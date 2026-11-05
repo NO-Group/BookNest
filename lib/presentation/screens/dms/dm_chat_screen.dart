@@ -19,6 +19,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/chat_repository.dart';
 import '../../../services/inbox_watcher.dart';
 import '../../../state/chat_providers.dart';
+import '../../components/adaptive.dart';
 
 /// 1:1 chat on the BookNest watermark canvas — glass bubbles, delivery
 /// ticks, day separators, photos via Cloudinary and rich book-share cards.
@@ -29,7 +30,12 @@ class DMChatScreen extends ConsumerStatefulWidget {
   final String? conversationId;
   final String? peerId;
 
-  const DMChatScreen({super.key, this.conversationId, this.peerId});
+  /// Shown inside the PC two-pane Messages page (no back arrow; the list
+  /// stays beside it).
+  final bool embedded;
+
+  const DMChatScreen(
+      {super.key, this.conversationId, this.peerId, this.embedded = false});
 
   @override
   ConsumerState<DMChatScreen> createState() => _DMChatScreenState();
@@ -91,7 +97,8 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
     final openConv = widget.conversationId;
     if (openConv != null) InboxWatcher.instance.enter(openConv);
     if (openConv != null) {
-      TypingBroadcaster.instance.enter(openConv, myId: _viewerId);
+      TypingBroadcaster.instance
+          .enter(openConv, myId: _viewerId, peerId: widget.peerId);
     }
     _loadPeer();
   }
@@ -101,8 +108,8 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
     final openConv = _convMirror;
     if (openConv != null && openConv.isNotEmpty) {
       InboxWatcher.instance.leave(openConv);
+      TypingBroadcaster.instance.leave(openConv);
     }
-    TypingBroadcaster.instance.leave();
     _scroll.dispose();
     _searchController.dispose();
     ChatStore.instance.flush();
@@ -327,48 +334,61 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
     return Scaffold(
       appBar: AppBar(
         elevation: 0,
-        leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded), onPressed: context.pop),
-        actions: [
-          IconButton(
-            tooltip: 'Shared media & files',
-            icon: const Icon(Icons.folder_shared_outlined, size: 21),
-            onPressed: conversationId == null || conversationId.isEmpty
+        automaticallyImplyLeading: !widget.embedded,
+        leading: widget.embedded
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: context.pop),
+        // Phones: everything folds into ⋮ (the header was crowded with
+        // five icons). Tablets / PC: plain icons.
+        actions: adaptiveActions(context, [
+          HeaderAction(
+            icon: Icons.call_outlined,
+            label: 'Voice call',
+            onTap: widget.peerId == null || widget.peerId!.isEmpty
+                ? null
+                : () => _startCall(video: false),
+          ),
+          HeaderAction(
+            icon: Icons.videocam_outlined,
+            label: 'Video call',
+            onTap: widget.peerId == null || widget.peerId!.isEmpty
+                ? null
+                : () => _startCall(video: true),
+          ),
+          HeaderAction(
+            icon: Icons.search_rounded,
+            label: 'Search messages',
+            onTap: () => setState(() {
+              _searching = !_searching;
+              if (!_searching) _searchController.clear();
+            }),
+          ),
+          HeaderAction(
+            icon: Icons.folder_shared_outlined,
+            label: 'Shared media & files',
+            onTap: conversationId == null || conversationId.isEmpty
                 ? null
                 : () => context.push(
                       '/shared/$conversationId'
                       '?title=${Uri.encodeComponent(_peerName)}',
                     ),
           ),
-          IconButton(
-            tooltip: 'Search messages',
-            icon: const Icon(Icons.search_rounded, size: 21),
-            onPressed: () => setState(() {
-              _searching = !_searching;
-              if (!_searching) _searchController.clear();
-            }),
+          HeaderAction(
+            icon: Icons.palette_outlined,
+            label: 'Chat theme',
+            onTap: _editTheme,
           ),
-          IconButton(
-            tooltip: 'Voice call',
-            icon: const Icon(Icons.call_outlined, size: 20),
-            onPressed: widget.peerId == null || widget.peerId!.isEmpty
+          HeaderAction(
+            icon: Icons.person_outline_rounded,
+            label: 'View profile',
+            onTap: widget.peerId == null || widget.peerId!.isEmpty
                 ? null
-                : () => _startCall(video: false),
+                : () => context.push('/user/${widget.peerId}'),
           ),
-          IconButton(
-            tooltip: 'Video call',
-            icon: const Icon(Icons.videocam_outlined, size: 21),
-            onPressed: widget.peerId == null || widget.peerId!.isEmpty
-                ? null
-                : () => _startCall(video: true),
-          ),
-          IconButton(
-            tooltip: 'Chat theme',
-            icon: const Icon(Icons.palette_outlined, size: 21),
-            onPressed: _editTheme,
-          ),
-        ],
-        titleSpacing: 0,
+        ]),
+        titleSpacing: widget.embedded ? 16 : 0,
         title: InkWell(
           borderRadius: BorderRadius.circular(10),
           onTap: widget.peerId == null || widget.peerId!.isEmpty
@@ -399,16 +419,18 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w800)),
-                    ValueListenableBuilder<Map<String, String>>(
-                      valueListenable: TypingBroadcaster.instance.typingPeers,
+                    ValueListenableBuilder<Map<String, TypingActivity>>(
+                      valueListenable: TypingBroadcaster.instance.roomActivity,
                       builder: (context, typing, _) => Text(
-                        typing.isEmpty ? 'View profile' : 'typing…',
+                        typing.isEmpty
+                            ? 'View profile'
+                            : TypingBroadcaster.label(typing, group: false),
                         style: TextStyle(
                           fontSize: 11,
                           fontStyle: typing.isEmpty
                               ? FontStyle.normal
                               : FontStyle.italic,
-                          color: BookNestColors.cyan.withOpacity(.85),
+                          color: BookNestColors.cyan.withValues(alpha: .85),
                         ),
                       ),
                     ),
@@ -441,7 +463,7 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
                         Icon(Icons.search_off_rounded,
                             size: 40,
-                            color: BookNestColors.cyan.withOpacity(.5)),
+                            color: BookNestColors.cyan.withValues(alpha: .5)),
                         const SizedBox(height: 10),
                         Text('No matches in this chat',
                             style: theme.textTheme.titleMedium
@@ -458,7 +480,7 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.waving_hand_rounded,
-                                  color: BookNestColors.cyan.withOpacity(.6),
+                                  color: BookNestColors.cyan.withValues(alpha: .6),
                                   size: 42),
                               const SizedBox(height: 10),
                               Text('Say hello to $_peerName 👋',
@@ -551,6 +573,7 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
                           ],
                         ),
             ),
+            const TypingBubble(),
             ChatComposer(
               onSendText: _sendText,
               onSendImage: _sendImage,
@@ -560,8 +583,6 @@ class _DMChatScreenState extends ConsumerState<DMChatScreen> {
               onSendEmote: _sendEmote,
               replyTo: _replyTo,
               onCancelReply: () => setState(() => _replyTo = null),
-              onTyping: () =>
-                  TypingBroadcaster.instance.iAmTyping(_peerName),
             ),
           ],
         ),

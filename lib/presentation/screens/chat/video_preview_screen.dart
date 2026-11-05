@@ -140,14 +140,14 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
                           color: BookNestColors.cyan)
                       : GestureDetector(
                           onTap: () => setState(() {
-                            controller!.value.isPlaying
-                                ? controller!.pause()
-                                : controller!.play();
+                            controller.value.isPlaying
+                                ? controller.pause()
+                                : controller.play();
                           }),
                           child: AspectRatio(
                             aspectRatio:
-                                controller!.value.aspectRatio > 0
-                                    ? controller!.value.aspectRatio
+                                controller.value.aspectRatio > 0
+                                    ? controller.value.aspectRatio
                                     : 16 / 9,
                             child: Stack(
                               alignment: Alignment.center,
@@ -158,7 +158,7 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       color: BookNestColors.navyDeep
-                                          .withOpacity(.55),
+                                          .withValues(alpha: .55),
                                     ),
                                     padding: const EdgeInsets.all(14),
                                     child: const Icon(

@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 
 import '../../../config/theme.dart';
-import '../../../services/cloudinary_service.dart';
+import '../../../services/chat_relay_service.dart';
 
 /// ─────────────────────────────────────────────────────────────────────────────
 /// Hold-to-record voice notes, BookNest-styled — record, preview, send.
@@ -141,16 +141,14 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
     try {
       final Uint8List bytes = await File(_path!).readAsBytes();
       final seconds = _elapsed.inSeconds.clamp(1, 120);
-      final url = await CloudinaryService.uploadRaw(
-        bytes: bytes,
-        filename: 'voice_$seconds.m4a',
-      );
+      final url = await ChatRelay.upload(bytes, 'voice_$seconds.m4a');
       if (!mounted) return;
       if (url == null) {
         setState(() {
           _stage = _VrStage.recorded;
-          _notice = 'The voice message could not be uploaded — '
-              'check your connection and try again.';
+          _notice = ChatRelay.lastError ??
+              'The voice message could not be uploaded — '
+                  'check your connection and try again.';
         });
         return;
       }
@@ -198,7 +196,7 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
                   gradient: const LinearGradient(
                       colors: [BookNestColors.navy, BookNestColors.navyDeep]),
                   border: Border.all(
-                      color: BookNestColors.cyan.withOpacity(_stage == _VrStage.recording ? 1 : .35),
+                      color: BookNestColors.cyan.withValues(alpha: _stage == _VrStage.recording ? 1 : .35),
                       width: _stage == _VrStage.recording ? 4 : 2),
                 ),
                 child: Icon(
@@ -226,7 +224,7 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: BookNestColors.cyan.withOpacity(.1),
+                    color: BookNestColors.cyan.withValues(alpha: .1),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(_notice!,
@@ -304,10 +302,10 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen> {
         decoration: BoxDecoration(
           color: primary
               ? BookNestColors.cyan
-              : (dark ? Colors.white.withOpacity(.07) : Colors.white),
+              : (dark ? Colors.white.withValues(alpha: .07) : Colors.white),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-              color: primary ? BookNestColors.cyan : BookNestColors.cyan.withOpacity(.4)),
+              color: primary ? BookNestColors.cyan : BookNestColors.cyan.withValues(alpha: .4)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

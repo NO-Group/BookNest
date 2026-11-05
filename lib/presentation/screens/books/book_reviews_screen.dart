@@ -46,6 +46,7 @@ class _BookReviewsScreenState extends State<BookReviewsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Delete your review?'),
         content: const Text('You can always write a new one.'),
         actions: [
@@ -178,7 +179,7 @@ class _BookReviewsScreenState extends State<BookReviewsScreen> {
                                     style: TextStyle(
                                         color: theme
                                             .colorScheme.onSurface
-                                            .withOpacity(.85),
+                                            .withValues(alpha: .85),
                                         height: 1.45,
                                         fontSize: 13.5)),
                               ],

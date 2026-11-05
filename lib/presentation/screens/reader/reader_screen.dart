@@ -18,8 +18,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../services/backend_api.dart';
+import '../../../services/chapter_cache.dart';
 import '../../../services/home_widgets_service.dart';
-import '../../../services/supabase_service.dart';
+import '../../components/adaptive.dart';
 
 /// The BookNest Reader — a distraction-free, full-screen reading room for
 /// published chapters. Typography controls, tap-to-reveal chrome, a
@@ -156,7 +157,7 @@ class _ReaderScreenState extends State<ReaderScreen>
       if (progress is Map) {
         startChapter = (progress['chapterNumber'] as num?)?.toInt() ?? 1;
         startScroll = (progress['scroll'] as num?)?.toDouble() ?? 0;
-        final marks = (progress as Map)['bookmarks'];
+        final marks = progress['bookmarks'];
         if (marks is List) {
           _bookmarks = marks
               .whereType<Map>()
@@ -186,10 +187,9 @@ class _ReaderScreenState extends State<ReaderScreen>
       _restoredScroll = false;
       _scrollFraction = 0;
     });
-    final res = await BackendApi.instance.call('books.chapter', {
-      'bookId': widget.bookId,
-      'chapterNumber': chapterNumber,
-    });
+    // Saved chapters open from the device (classics with no request at
+    // all; members' books with a few-byte "unchanged?" check).
+    final res = await ChapterCache.instance.load(widget.bookId, chapterNumber);
     if (!mounted) return;
     if (res == null) {
       setState(() => _cloudOffline = true);
@@ -453,11 +453,11 @@ class _ReaderScreenState extends State<ReaderScreen>
           decoration: TextDecoration.underline),
       quote: block(
         base.copyWith(
-            fontStyle: FontStyle.italic, color: color.withOpacity(.85)),
+            fontStyle: FontStyle.italic, color: color.withValues(alpha: .85)),
         deco: BoxDecoration(
           border: Border(
             left: BorderSide(
-                color: BookNestColors.cyan.withOpacity(.6), width: 3),
+                color: BookNestColors.cyan.withValues(alpha: .6), width: 3),
           ),
         ),
       ),
@@ -595,7 +595,7 @@ class _ReaderScreenState extends State<ReaderScreen>
           decoration: BoxDecoration(
             color: Theme.of(sheetContext).colorScheme.surface,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: BookNestColors.cyan.withOpacity(.22)),
+            border: Border.all(color: BookNestColors.cyan.withValues(alpha: .22)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -642,7 +642,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                         decoration: BoxDecoration(
                           color: current
                               ? BookNestColors.cyan
-                              : BookNestColors.cyan.withOpacity(.12),
+                              : BookNestColors.cyan.withValues(alpha: .12),
                           borderRadius: BorderRadius.circular(9),
                         ),
                         child: Text(
@@ -708,7 +708,7 @@ class _ReaderScreenState extends State<ReaderScreen>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.auto_stories_rounded,
-                    size: 44, color: BookNestColors.cyan.withOpacity(.7)),
+                    size: 44, color: BookNestColors.cyan.withValues(alpha: .7)),
                 const SizedBox(height: 14),
                 Text('End of chapter $_chapterNumber',
                     textAlign: TextAlign.center,
@@ -721,7 +721,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontSize: 13,
-                        color: pageText.withOpacity(.65))),
+                        color: pageText.withValues(alpha: .65))),
               ],
             ),
           );
@@ -759,7 +759,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                   style: TextStyle(
                       fontSize: 10.5,
                       letterSpacing: 1.1,
-                      color: pageText.withOpacity(.4)),
+                      color: pageText.withValues(alpha: .4)),
                 ),
               ),
             ],
@@ -786,16 +786,18 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   void _openTypography() {
     showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Container(
           margin: const EdgeInsets.all(12),
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
           decoration: BoxDecoration(
             color: Theme.of(sheetContext).colorScheme.surface,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: BookNestColors.cyan.withOpacity(.22)),
+            border: Border.all(color: BookNestColors.cyan.withValues(alpha: .22)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -838,7 +840,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                   selected: {_paginated},
                   style: SegmentedButton.styleFrom(
                     selectedBackgroundColor:
-                        BookNestColors.cyan.withOpacity(.18),
+                        BookNestColors.cyan.withValues(alpha: .18),
                     selectedForegroundColor: BookNestColors.cyan,
                   ),
                   onSelectionChanged: (selection) {
@@ -862,7 +864,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                   selected: {_fontSerif},
                   style: SegmentedButton.styleFrom(
                     selectedBackgroundColor:
-                        BookNestColors.cyan.withOpacity(.18),
+                        BookNestColors.cyan.withValues(alpha: .18),
                     selectedForegroundColor: BookNestColors.cyan,
                   ),
                   onSelectionChanged: (selection) {
@@ -988,7 +990,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                 selectedIcon: const Icon(Icons.check_rounded),
                 style: SegmentedButton.styleFrom(
                   selectedBackgroundColor:
-                      BookNestColors.cyan.withOpacity(.18),
+                      BookNestColors.cyan.withValues(alpha: .18),
                   selectedForegroundColor: BookNestColors.cyan,
                 ),
                 onSelectionChanged: (selection) {
@@ -1074,17 +1076,17 @@ class _ReaderScreenState extends State<ReaderScreen>
           blockquote: baseStyle.copyWith(
               fontStyle: FontStyle.italic,
               color: dark
-                  ? BookNestColors.darkTextPrimary.withOpacity(.85)
-                  : BookNestColors.navyDeep.withOpacity(.85)),
+                  ? BookNestColors.darkTextPrimary.withValues(alpha: .85)
+                  : BookNestColors.navyDeep.withValues(alpha: .85)),
           blockquoteDecoration: BoxDecoration(
             border: Border(
-              left: BorderSide(color: BookNestColors.cyan.withOpacity(.6), width: 3),
+              left: BorderSide(color: BookNestColors.cyan.withValues(alpha: .6), width: 3),
             ),
           ),
           blockquotePadding: const EdgeInsets.only(left: 14),
           horizontalRuleDecoration: BoxDecoration(
             border: Border(
-              top: BorderSide(color: BookNestColors.cyan.withOpacity(.35)),
+              top: BorderSide(color: BookNestColors.cyan.withValues(alpha: .35)),
             ),
           ),
           strong: baseStyle.copyWith(fontWeight: FontWeight.w800),
@@ -1111,7 +1113,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                       value: _scrollFraction <= 0 ? null : _scrollFraction,
                       minHeight: 2,
                       backgroundColor: Colors.transparent,
-                      color: BookNestColors.cyan.withOpacity(.75),
+                      color: BookNestColors.cyan.withValues(alpha: .75),
                     ),
                     Expanded(
                       child: _loading
@@ -1174,6 +1176,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                                                       ink: pageText),
                                               embedBuilders:
                                                   manuscriptEmbedBuilders,
+                                              unknownEmbedBuilder: manuscriptUnknownEmbedBuilder,
                                               padding:
                                                   const EdgeInsets.fromLTRB(
                                                       24, 20, 24, 120),
@@ -1256,7 +1259,7 @@ class _ReaderScreenState extends State<ReaderScreen>
               child: IgnorePointer(
                 child: ColoredBox(
                     color: const Color(0xFF3A2A14)
-                        .withOpacity(_dim)),
+                        .withValues(alpha: _dim)),
               ),
             ),
 
@@ -1271,10 +1274,10 @@ class _ReaderScreenState extends State<ReaderScreen>
                 height: kToolbarHeight,
                 decoration: BoxDecoration(
                   color: (dark ? BookNestColors.darkChatBackground : Colors.white)
-                      .withOpacity(.96),
+                      .withValues(alpha: .96),
                   border: Border(
                     bottom: BorderSide(
-                        color: Theme.of(context).dividerColor.withOpacity(.4)),
+                        color: Theme.of(context).dividerColor.withValues(alpha: .4)),
                   ),
                 ),
                 child: Row(
@@ -1359,10 +1362,10 @@ class _ReaderScreenState extends State<ReaderScreen>
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
               decoration: BoxDecoration(
                 color: (dark ? BookNestColors.darkChatBackground : Colors.white)
-                    .withOpacity(.97),
+                    .withValues(alpha: .97),
                 border: Border(
                   top: BorderSide(
-                      color: Theme.of(context).dividerColor.withOpacity(.4)),
+                      color: Theme.of(context).dividerColor.withValues(alpha: .4)),
                 ),
               ),
               child: SafeArea(
@@ -1455,7 +1458,6 @@ class _FinishSheetState extends State<_FinishSheet>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
     return SafeArea(
       child: Container(
         margin: const EdgeInsets.all(12),
@@ -1476,10 +1478,10 @@ class _FinishSheetState extends State<_FinishSheet>
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(28),
                 border:
-                    Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+                    Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
                 boxShadow: [
                   BoxShadow(
-                    color: BookNestColors.navyDeep.withOpacity(.35),
+                    color: BookNestColors.navyDeep.withValues(alpha: .35),
                     blurRadius: 30,
                     offset: const Offset(0, 10),
                   ),
@@ -1494,11 +1496,11 @@ class _FinishSheetState extends State<_FinishSheet>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: LinearGradient(colors: [
-                        BookNestColors.cyan.withOpacity(.3),
-                        BookNestColors.cyanSoft.withOpacity(.15),
+                        BookNestColors.cyan.withValues(alpha: .3),
+                        BookNestColors.cyanSoft.withValues(alpha: .15),
                       ]),
                       border: Border.all(
-                          color: BookNestColors.cyan.withOpacity(.6), width: 2),
+                          color: BookNestColors.cyan.withValues(alpha: .6), width: 2),
                     ),
                     child: const Icon(Icons.emoji_events_rounded,
                         color: BookNestColors.cyan, size: 38),
@@ -1529,10 +1531,10 @@ class _FinishSheetState extends State<_FinishSheet>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: BookNestColors.cyan.withOpacity(.12),
+                      color: BookNestColors.cyan.withValues(alpha: .12),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                          color: BookNestColors.cyan.withOpacity(.35)),
+                          color: BookNestColors.cyan.withValues(alpha: .35)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1609,7 +1611,7 @@ class _ConfettiPainter extends CustomPainter {
       final x = rnd.nextDouble() * size.width +
           math.sin(t * 2 * math.pi + i * 1.3) * 14;
       final w = 5 + rnd.nextDouble() * 5;
-      paint.color = _colors[i % _colors.length].withOpacity(.8);
+      paint.color = _colors[i % _colors.length].withValues(alpha: .8);
       canvas.save();
       canvas.translate(x, y);
       canvas.rotate(t * 4 * math.pi + i);

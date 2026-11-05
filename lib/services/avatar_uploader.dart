@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:image_picker/image_picker.dart';
 
-import '../config/app_config.dart';
 import 'cloudinary_service.dart';
 
 /// Picks an image from the gallery and uploads it to Cloudinary under

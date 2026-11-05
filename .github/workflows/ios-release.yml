@@ -1,0 +1,171 @@
+name: iOS Release (iPhone .ipa)
+
+# Builds the iPhone app on a macOS runner and publishes it on a GitHub
+# Release (tag ios-<version>-<run>), next to the Android APK and the PC
+# installer — for direct download from the BookNest website (no App Store).
+#
+# • Default: an UNSIGNED BookNest.ipa. iPhones install it through a
+#   sideloading/signing tool (AltStore, Sideloadly, eSign, TrollStore…),
+#   which signs it with the installer's Apple ID.
+# • Optional signed build: add GitHub secrets
+#     IOS_P12_BASE64        distribution/development certificate (.p12, base64)
+#     IOS_P12_PASSWORD      its password
+#     IOS_PROFILE_BASE64    matching ad-hoc/development provisioning profile
+#                           for com.n-o-group.booknest (base64)
+#   and a signed BookNest-signed.ipa is published as well.
+# • Google Drive media backup on iPhone: secret GOOGLE_IOS_CLIENT_ID (the
+#   iOS OAuth client id from Google Cloud for com.n-o-group.booknest).
+#
+# iOS bundle id: com.n-o-group.booknest (Apple forbids "_" in bundle ids;
+# Android keeps com.n_o_group.booknest).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - BookNest
+      - main
+      - arena/01a106c8-booknest
+    paths:
+      - 'lib/**'
+      - 'ios/**'
+      - 'assets/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/ios-release.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          flutter --version
+          flutter pub get
+
+      - name: Google sign-in for iPhone (Drive media backup)
+        env:
+          GOOGLE_IOS_CLIENT_ID: ${{ secrets.GOOGLE_IOS_CLIENT_ID }}
+        run: |
+          set +e
+          if [ -z "$GOOGLE_IOS_CLIENT_ID" ]; then
+            echo "GOOGLE_IOS_CLIENT_ID not set — Drive media backup stays hidden on iPhone." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "DEFINES=" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          python3 - <<'PY'
+          import os, plistlib
+          cid = os.environ['GOOGLE_IOS_CLIENT_ID'].strip()
+          rev = '.'.join(reversed(cid.split('.')))
+          p = 'ios/Runner/Info.plist'
+          d = plistlib.load(open(p, 'rb'))
+          d['GIDClientID'] = cid
+          types = d.setdefault('CFBundleURLTypes', [])
+          if not any(rev in t.get('CFBundleURLSchemes', []) for t in types):
+              types.append({'CFBundleURLName': 'google', 'CFBundleURLSchemes': [rev]})
+          plistlib.dump(d, open(p, 'wb'))
+          print('Google sign-in configured for iOS')
+          PY
+          echo "DEFINES=--dart-define=GOOGLE_IOS_CLIENT_ID=$GOOGLE_IOS_CLIENT_ID" >> "$GITHUB_ENV"
+          echo "Google sign-in (Drive media backup) built in ✅" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build iPhone app (release, unsigned)
+        run: |
+          set -o pipefail
+          flutter build ios --release --no-codesign $DEFINES 2>&1 | tee build.log
+          test -d build/ios/iphoneos/Runner.app
+
+      - name: Package unsigned .ipa
+        run: |
+          set -e
+          rm -rf Payload dist && mkdir -p Payload dist
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          ditto -c -k --sequesterRsrc --keepParent Payload dist/BookNest.ipa
+          ls -la dist
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Payload/Runner.app/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Payload/Runner.app/Info.plist
+
+      - name: Sign .ipa (only when Apple signing secrets exist)
+        env:
+          IOS_P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+        run: |
+          set +e
+          if [ -z "$IOS_P12_BASE64" ] || [ -z "$IOS_PROFILE_BASE64" ]; then
+            echo "No Apple signing secrets — publishing the unsigned .ipa only." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          set -e
+          KC="$RUNNER_TEMP/bn.keychain-db"; KP="$(uuidgen)"
+          echo "$IOS_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          echo "$IOS_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          security import "$RUNNER_TEMP/cert.p12" -P "$IOS_P12_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KP" "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          IDENTITY="$(security find-identity -v -p codesigning "$KC" | head -1 | awk '{print $2}')"
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          /usr/libexec/PlistBuddy -x -c 'Print :Entitlements' "$RUNNER_TEMP/profile.plist" > "$RUNNER_TEMP/ent.plist"
+          rm -rf SPayload && mkdir SPayload && cp -R build/ios/iphoneos/Runner.app SPayload/
+          APP=SPayload/Runner.app
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$APP/embedded.mobileprovision"
+          find "$APP/Frameworks" -maxdepth 1 \( -name '*.framework' -o -name '*.dylib' \) -print0 |
+            xargs -0 -I{} codesign -f -s "$IDENTITY" --timestamp=none {}
+          codesign -f -s "$IDENTITY" --timestamp=none --entitlements "$RUNNER_TEMP/ent.plist" "$APP"
+          codesign --verify --deep --strict "$APP"
+          rm -rf Payload && mv SPayload Payload
+          ditto -c -k --sequesterRsrc --keepParent Payload dist/BookNest-signed.ipa
+          echo "Signed .ipa built ✅" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          VER="$(grep '^version:' pubspec.yaml | sed 's/version: //;s/+.*//')"
+          TAG="ios-${VER}-${GITHUB_RUN_ID}"
+          cat > notes.md <<EOF
+          BookNest ${VER} for iPhone and iPad (iOS 14 or newer) — bundle id com.n-o-group.booknest.
+
+          **BookNest.ipa** is unsigned: install it with a sideloading tool (AltStore, Sideloadly, eSign, TrollStore…), which signs it with your Apple ID.
+          $( [ -f dist/BookNest-signed.ipa ] && echo '**BookNest-signed.ipa** is signed with the BookNest certificate (installs on the devices in its provisioning profile).' )
+
+          Push notifications on iPhone need an Apple Developer account; in-app notifications work while BookNest is open.
+          EOF
+          gh release create "$TAG" dist/*.ipa --target "$GITHUB_SHA" \
+            --title "BookNest ${VER} for iPhone" --notes-file notes.md ||
+          gh release create "$TAG" dist/*.ipa --title "BookNest ${VER} for iPhone" --notes-file notes.md
+          echo "iPhone build live on release $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build diagnostics (failure only)
+        if: failure()
+        run: |
+          set +e
+          mkdir -p diag
+          tail -n 300 build.log 2>/dev/null | cut -c1-240 > diag/ios-build-error-tail.txt
+          [ -s diag/ios-build-error-tail.txt ] || exit 0
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git add diag/ios-build-error-tail.txt
+          git commit -q -m "iOS build diagnostics for ${GITHUB_SHA} [skip ci]"
+          for i in 1 2 3; do git pull --rebase -q origin "${GITHUB_REF_NAME}" && git push -q origin "HEAD:${GITHUB_REF_NAME}" && break; sleep 5; done
+          exit 0

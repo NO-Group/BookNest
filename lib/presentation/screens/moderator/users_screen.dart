@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../components/booknest_ui.dart';
+import '../../components/adaptive.dart';
 
 /// Every reader on BookNest, with the levers: suspend for a stretch,
 /// ban outright, or lift it and welcome them back. All enforced at the
@@ -75,10 +76,12 @@ class _UsersScreenState extends State<UsersScreen> {
   Future<void> _act(Map<String, dynamic> u) async {
     final banned = u['banned']?.toString();
     final action = await showModalBottomSheet<String>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 6),
           ListTile(
@@ -120,6 +123,7 @@ class _UsersScreenState extends State<UsersScreen> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Suspend ${_nameOf(u)}?',
             style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -169,6 +173,7 @@ class _UsersScreenState extends State<UsersScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Ban ${_nameOf(u)} permanently?',
             style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -299,7 +304,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                         style: TextStyle(
                                             fontSize: 11.5,
                                             color: onSurface
-                                                .withOpacity(.55))),
+                                                .withValues(alpha: .55))),
                                     if ((u['phone']?.toString() ?? '')
                                         .isNotEmpty)
                                       Text(
@@ -307,7 +312,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                           style: TextStyle(
                                               fontSize: 10.5,
                                               color: onSurface
-                                                  .withOpacity(.45))),
+                                                  .withValues(alpha: .45))),
                                   ]),
                             ),
                             if (banLabel.isNotEmpty)
@@ -316,7 +321,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                     horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFD06A6A)
-                                      .withOpacity(.14),
+                                      .withValues(alpha: .14),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(banLabel,
@@ -328,7 +333,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             else
                               Icon(Icons.chevron_right_rounded,
                                   size: 18,
-                                  color: onSurface.withOpacity(.35)),
+                                  color: onSurface.withValues(alpha: .35)),
                           ]),
                         ),
                       ),

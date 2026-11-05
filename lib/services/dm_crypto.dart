@@ -28,11 +28,15 @@ class DmCrypto {
 
   static const _privKey = 'booknest.dm.identity.priv';
   static const _pubKey = 'booknest.dm.identity.pub';
+  // Identity keys of earlier phones/installs, restored from the reader's
+  // sealed chat backup, so messages sealed to them still open.
+  static const _prevKeys = 'booknest.dm.identity.prev';
   static const _envelopePrefix = 'e1|';
 
   final FlutterSecureStorage _secure = const FlutterSecureStorage();
   Uint8List? _priv;
   String? _pub;
+  final List<Uint8List> _prev = [];
   final Map<String, String> _peerKeys = {};
   bool _ready = false;
   bool _readying = false;
@@ -46,6 +50,7 @@ class DmCrypto {
     if (_ready || _readying) return;
     _readying = true;
     try {
+      await _loadPrevious();
       final privHex = await _secure.read(key: _privKey);
       final pubHex = await _secure.read(key: _pubKey);
       if (privHex != null && pubHex != null && privHex.length == 64) {
@@ -135,11 +140,76 @@ class DmCrypto {
     }
   }
 
-  /// Opens an envelope with this device's identity key. Returns the
-  /// plaintext, or null when it cannot be opened (never crashes a chat).
-  String? open(String text) {
+  Future<void> _loadPrevious() async {
     try {
-      if (!text.startsWith(_envelopePrefix) || _priv == null) return null;
+      final raw = await _secure.read(key: _prevKeys) ?? '';
+      _prev
+        ..clear()
+        ..addAll(raw
+            .split(',')
+            .where((h) => h.length == 64)
+            .map(_unhex));
+    } catch (_) {}
+  }
+
+  /// This install's identity (and any earlier ones) for the reader's
+  /// passphrase-sealed chat backup — the backup is the only place a private
+  /// key ever goes, and only inside the reader's own encrypted envelope.
+  Future<Map<String, dynamic>?> exportForBackup() async {
+    try {
+      final cur = await _secure.read(key: _privKey);
+      await _loadPrevious();
+      final prev = _prev.map(_hex).toList();
+      if ((cur == null || cur.length != 64) && prev.isEmpty) return null;
+      return {
+        if (cur != null && cur.length == 64) 'cur': cur,
+        'prev': prev,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Keeps the identity keys from a restored backup as *previous* keys:
+  /// this phone keeps its own identity (peers may already use it), and
+  /// messages sealed to the old phone open too.
+  Future<void> adoptFromBackup(Map<String, dynamic>? keys) async {
+    if (keys == null) return;
+    try {
+      await _loadPrevious();
+      final current = await _secure.read(key: _privKey);
+      final known = <String>{..._prev.map(_hex)};
+      final incoming = <String>[
+        if (keys['cur'] is String) keys['cur'] as String,
+        if (keys['prev'] is List) ...(keys['prev'] as List).whereType<String>(),
+      ];
+      for (final hex in incoming) {
+        if (hex.length != 64 || hex == current || known.contains(hex)) continue;
+        known.add(hex);
+        _prev.add(_unhex(hex));
+      }
+      while (_prev.length > 8) {
+        _prev.removeAt(0);
+      }
+      await _secure.write(key: _prevKeys, value: _prev.map(_hex).join(','));
+    } catch (_) {}
+  }
+
+  /// Opens an envelope with this device's identity key (then any earlier
+  /// identity restored from a backup). Returns the plaintext, or null when
+  /// it cannot be opened (never crashes a chat).
+  String? open(String text) {
+    if (!text.startsWith(_envelopePrefix)) return null;
+    final keys = <Uint8List>[if (_priv != null) _priv!, ..._prev];
+    for (final key in keys) {
+      final plain = _openWith(text, key);
+      if (plain != null) return plain;
+    }
+    return null;
+  }
+
+  String? _openWith(String text, Uint8List privKey) {
+    try {
       final parts = text.substring(_envelopePrefix.length).split('|');
       if (parts.length != 3) return null;
       final iv = _unhex(parts[0]);
@@ -148,7 +218,7 @@ class DmCrypto {
       final params = ECDomainParameters('prime256v1');
       final peerPoint = params.curve.decodePoint(ephPub);
       if (peerPoint == null) return null;
-      final priv = ECPrivateKey(_bytesToBigInt(_priv!), params);
+      final priv = ECPrivateKey(_bytesToBigInt(privKey), params);
       final agreement = ECDHBasicAgreement()..init(priv);
       final shared =
           _bigIntTo32(agreement.calculateAgreement(ECPublicKey(

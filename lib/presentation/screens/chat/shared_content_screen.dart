@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
 import '../../components/booknest_ui.dart';
-import '../../components/chat_kit.dart';
 import 'media_viewer_screen.dart';
 
 /// Everything a conversation has exchanged, in tabs: photos, shared
@@ -70,7 +68,7 @@ class _SharedContentScreenState extends State<SharedContentScreen> {
               child: Column(children: [
                 TabBar(
                   labelColor: BookNestColors.cyan,
-                  unselectedLabelColor: onSurface.withOpacity(.55),
+                  unselectedLabelColor: onSurface.withValues(alpha: .55),
                   indicatorColor: BookNestColors.cyan,
                   tabs: [
                     const Tab(icon: Icon(Icons.photo_rounded, size: 19), text: 'Media'),
@@ -118,7 +116,7 @@ class _SharedContentScreenState extends State<SharedContentScreen> {
             borderRadius: BorderRadius.circular(8),
             child: Image.network(url, fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Container(
-                    color: BookNestColors.navy.withOpacity(.3),
+                    color: BookNestColors.navy.withValues(alpha: .3),
                     child: const Icon(Icons.broken_image_outlined,
                         color: BookNestColors.cyan))),
           ),
@@ -243,10 +241,10 @@ class _EmptyShared extends StatelessWidget {
     final onSurface = Theme.of(context).colorScheme.onSurface;
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 40, color: BookNestColors.cyan.withOpacity(.45)),
+        Icon(icon, size: 40, color: BookNestColors.cyan.withValues(alpha: .45)),
         const SizedBox(height: 10),
         Text(label,
-            style: TextStyle(fontSize: 13.5, color: onSurface.withOpacity(.6))),
+            style: TextStyle(fontSize: 13.5, color: onSurface.withValues(alpha: .6))),
       ]),
     );
   }

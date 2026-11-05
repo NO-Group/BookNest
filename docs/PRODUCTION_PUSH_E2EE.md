@@ -5,27 +5,33 @@
 The app ships FCM-ready: it builds green today and activates the moment
 you complete these clicks.
 
-**A. Firebase project**
+> Updated in 2.36.0 — push is wired through GitHub secrets, nothing is
+> uploaded to the repo (it is public).
+
+**A. Firebase project + Android app**
 1. console.firebase.google.com → Add project → name it BookNest.
-2. Project settings → **Your apps → Android** → register with package
-   name **`com.nogroup.booknest`** (the app's real applicationId — copy
-   it exactly).
-3. Download **`google-services.json`** and add it to the repo at
-   `android/app/google-services.json` (GitHub → Add file → upload; put
-   it in `android/app/`). That single file flips the build to push mode —
-   the Gradle wiring is already conditional on it.
+2. Project settings → **Your apps → Android** → package name
+   **`com.n_o_group.booknest`** (the app's applicationId — copy it exactly).
+3. Download **`google-services.json`** → GitHub → Settings → Secrets →
+   Actions → secret **`GOOGLE_SERVICES_JSON`** = the whole file.
+   The Android build writes it into `android/app/` only when it contains
+   the `com.n_o_group.booknest` app; `ops/play-check.md` → "Push" shows
+   whether it was built in.
 
 **B. Service account (for our server to send)**
-4. Firebase → Project settings → Service accounts → **Generate new
-   private key** → you get a JSON file.
-5. Supabase dashboard → Edge Functions → booknest-api → **Secrets** → add:
-   - `FIREBASE_SERVICE_ACCOUNT` = the ENTIRE JSON file contents (paste it
-     as one line; the function parses it).
-   - `FIREBASE_PROJECT_ID` = the Firebase project id (top of Project
-     settings, looks like `booknest-xxxxx`).
+4. Project settings → Service accounts → **Generate new private key**.
+5. GitHub secret **`FIREBASE_SERVICE_ACCOUNT`** = the whole JSON file.
+   The Supabase deploy copies it (plus the project id read from it) into
+   the server secrets, signs in to Google with it and does a test send;
+   the result lands in `ops/push-setup.md` (no secrets in it). If it says
+   FCM refused the key, enable **Firebase Cloud Messaging API** in Google
+   Cloud for the project.
 
-That's all. Tokens register themselves on app start; DMs and club
-messages push automatically; invalid tokens clean themselves up.
+**How it behaves.** Messages are data-only, high priority. With BookNest
+closed or in the background, Android shows one banner per conversation
+(channel "Messages"); tapping it opens that chat. While BookNest is on
+screen no banner is shown. Sign-out and account deletion remove this
+phone's token. The production smoke test checks `push.status`.
 
 **iOS later:** add the iOS app in Firebase, drop
 `GoogleService-Info.plist` into `ios/Runner/`, enable Push + upload the

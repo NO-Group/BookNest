@@ -7,13 +7,16 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../components/chat_kit.dart';
+import '../../../services/typing_broadcaster.dart';
+import '../../../services/doc_extract.dart';
 import '../../../services/chat_store.dart';
 import '../../../services/chat_backup_service.dart';
-import '../../components/booknest_ui.dart';
 import '../../components/skeleton_kit.dart';
 import '../../../config/theme.dart';
 import '../../../services/supabase_service.dart';
 import '../../../state/chat_providers.dart';
+import '../../components/adaptive.dart';
+import 'dm_chat_screen.dart';
 
 /// Telegram-style conversation list.
 ///
@@ -46,6 +49,9 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
   void initState() {
     super.initState();
     _directory = _loadDirectory();
+    // "typing…" on chat rows, WhatsApp-style.
+    final me = viewerId;
+    if (me != null) TypingBroadcaster.instance.listenInbox(me);
     // WhatsApp-style housekeeping: run a due backup silently, then surface
     // any restored-only history and a cloud backup (if one exists).
     ChatBackupService.instance.maybeRunScheduled().catchError((_) => null);
@@ -73,7 +79,7 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
   Future<void> _scanVault() async {
     try {
       if (ChatStore.instance.conversationIds.isNotEmpty) return;
-      final info = await ChatBackupService.instance.peekDriveBackup();
+      final info = await ChatBackupService.instance.peekServerBackup();
       if (info != null && mounted) {
         setState(() => _restoreAvailable = true);
       }
@@ -86,6 +92,7 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
       builder: (dialogContext) {
         final controller = TextEditingController();
         return AlertDialog(
+          scrollable: true,
           title: const Text('Restore your chats?'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -123,7 +130,7 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
     if (passphrase == null || passphrase.isEmpty || !mounted) return;
     try {
       final count =
-          await ChatBackupService.instance.restoreFromDrive(passphrase);
+          await ChatBackupService.instance.restoreFromServer(passphrase);
       if (!mounted) return;
       setState(() => _restoreAvailable = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -167,7 +174,16 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
     if (type == 'book_share') return '$prefix📖 $text';
     if (type == 'image') return '${prefix}📷 Photo';
     if (type == 'voice') return '${prefix}🎙 Voice note';
-    if (type == 'file') return '${prefix}📎 Attachment';
+    if (type == 'video') return '${prefix}🎬 Video';
+    if (type == 'file') {
+      final name = (last['fileName'] ?? text).toString();
+      final dot = name.lastIndexOf('.');
+      final ext = dot < 0 ? '' : name.substring(dot + 1);
+      if (isVideoExtension(ext)) return '${prefix}🎬 Video';
+      if (isAudioExtension(ext)) return '${prefix}🎵 Audio';
+      if (isImageExtension(ext)) return '${prefix}📷 Photo';
+      return name.trim().isEmpty ? '${prefix}📎 Attachment' : '${prefix}📎 $name';
+    }
     return '$prefix$text';
   }
 
@@ -186,16 +202,58 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
   Future<void> _pickContact() async {
     final directory = await _directory;
     if (!mounted) return;
-    await showModalBottomSheet<void>(
+    final peerId = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _ContactPickerSheet(contacts: directory ?? const <Map<String, dynamic>>[]),
     );
+    if (peerId != null && peerId.isNotEmpty && mounted) _open(peer: peerId);
+  }
+
+  // ── PC two-pane: the open chat lives beside the list ──
+  String? _openConv;
+  String? _openPeer;
+
+  void _open({String? conv, String? peer}) {
+    if (context.isExpanded) {
+      setState(() {
+        _openConv = conv;
+        _openPeer = peer;
+      });
+      return;
+    }
+    if (conv != null && conv.isNotEmpty) {
+      context.push('/chat/$conv?peer=${peer ?? ''}');
+    } else if (peer != null && peer.isNotEmpty) {
+      context.push('/chat/peer/$peer');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!context.isExpanded) return _buildList(context);
+    final theme = Theme.of(context);
+    final hasChat = (_openConv ?? '').isNotEmpty || (_openPeer ?? '').isNotEmpty;
+    return Row(
+      children: [
+        SizedBox(width: context.isWide ? 400 : 360, child: _buildList(context)),
+        VerticalDivider(width: 1, color: theme.dividerColor),
+        Expanded(
+          child: hasChat
+              ? DMChatScreen(
+                  key: ValueKey('${_openConv ?? ''}|${_openPeer ?? ''}'),
+                  conversationId: _openConv,
+                  peerId: _openPeer,
+                  embedded: true,
+                )
+              : const _NoChatSelected(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildList(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
 
@@ -265,7 +323,7 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
         children: [
           const SizedBox(height: 90),
           Icon(Icons.forum_outlined,
-              size: 64, color: BookNestColors.cyan.withOpacity(.5)),
+              size: 64, color: BookNestColors.cyan.withValues(alpha: .5)),
           const SizedBox(height: 14),
           Center(
             child: Text('No conversations yet',
@@ -320,22 +378,44 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
-          subtitle: Text(
-            _preview(conversation),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: unreadish
-                  ? (dark ? BookNestColors.darkTextPrimary : BookNestColors.navyDeep)
-                  : theme.hintColor,
-              fontWeight: unreadish ? FontWeight.w600 : FontWeight.w400,
-            ),
+          subtitle: ValueListenableBuilder<Map<String, TypingActivity>>(
+            valueListenable: TypingBroadcaster.instance.inboxActivity,
+            builder: (context, typing, _) {
+              final now = typing[conversation['id']?.toString() ?? ''];
+              if (now != null) {
+                return Text(
+                  now.recording ? 'recording audio…' : 'typing…',
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: BookNestColors.cyan,
+                    fontWeight: FontWeight.w600,
+                    fontStyle: FontStyle.italic,
+                  ),
+                );
+              }
+              return Text(
+                _preview(conversation),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: unreadish
+                      ? (dark
+                          ? BookNestColors.darkTextPrimary
+                          : BookNestColors.navyDeep)
+                      : theme.hintColor,
+                  fontWeight: unreadish ? FontWeight.w600 : FontWeight.w400,
+                ),
+              );
+            },
           ),
           trailing: Text(
             _timeLabel(conversation['updatedAt']),
             style: TextStyle(color: theme.hintColor, fontSize: 12),
           ),
-          onTap: () => context.push('/chat/${conversation['id']}?peer=$peerId'),
+          selected: context.isExpanded &&
+              conversation['id']?.toString() == _openConv,
+          selectedTileColor: BookNestColors.cyan.withValues(alpha: .10),
+          onTap: () => _open(conv: conversation['id']?.toString(), peer: peerId),
         );
   }
 
@@ -347,8 +427,8 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            color: BookNestColors.cyan.withOpacity(.08),
-            border: Border.all(color: BookNestColors.cyan.withOpacity(.25)),
+            color: BookNestColors.cyan.withValues(alpha: .08),
+            border: Border.all(color: BookNestColors.cyan.withValues(alpha: .25)),
           ),
           child: Row(
             children: [
@@ -414,7 +494,40 @@ class _DMListScreenState extends ConsumerState<DMListScreen> {
           : Text('@${person['username']}'),
       trailing: const Icon(Icons.chat_bubble_outline,
           size: 18, color: BookNestColors.cyan),
-      onTap: () => context.push('/chat/peer/${person['id']}'),
+      onTap: () => _open(peer: person['id']?.toString()),
+    );
+  }
+}
+
+/// Right pane of the PC Messages page before a chat is picked.
+class _NoChatSelected extends StatelessWidget {
+  const _NoChatSelected();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ChatCanvas(
+      child: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: BookNestColors.cyan.withValues(alpha: .10),
+            ),
+            child: const Icon(Icons.forum_rounded,
+                size: 44, color: BookNestColors.cyan),
+          ),
+          const SizedBox(height: 18),
+          Text('Pick a conversation',
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text('Your chats open here, right beside the list.',
+              style: TextStyle(color: theme.hintColor)),
+        ]),
+      ),
     );
   }
 }
@@ -511,10 +624,10 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
               color: (theme.brightness == Brightness.dark
                       ? BookNestColors.darkChatBackground
                       : Colors.white)
-                  .withOpacity(.96),
+                  .withValues(alpha: .96),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(30)),
-              border: Border.all(color: BookNestColors.cyan.withOpacity(.22)),
+              border: Border.all(color: BookNestColors.cyan.withValues(alpha: .22)),
             ),
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
             child: Column(
@@ -569,8 +682,8 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                           subtitle: person['username'] == null
                               ? null
                               : Text('@${person['username']}'),
-                          onTap: () =>
-                              context.push('/chat/peer/${person['id']}'),
+                          onTap: () => Navigator.pop(
+                              context, person['id']?.toString()),
                         );
                       },
                     );
@@ -598,8 +711,8 @@ class _RestoreBanner extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        color: BookNestColors.cyan.withOpacity(.1),
-        border: Border.all(color: BookNestColors.cyan.withOpacity(.4)),
+        color: BookNestColors.cyan.withValues(alpha: .1),
+        border: Border.all(color: BookNestColors.cyan.withValues(alpha: .4)),
       ),
       child: Row(
         children: [

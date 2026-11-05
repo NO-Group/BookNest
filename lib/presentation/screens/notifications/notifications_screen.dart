@@ -75,6 +75,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           context.push('/user/$actorId');
         }
         return;
+      case 'school':
+        final schoolId = item['schoolId']?.toString() ?? '';
+        if (schoolId.isNotEmpty) {
+          context.push('/school/$schoolId');
+        }
+        return;
       default:
         // System notices live here — nothing to open.
         return;
@@ -89,6 +95,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.star_rounded;
       case 'follow':
         return Icons.person_add_alt_rounded;
+      case 'school':
+        return Icons.school_rounded;
       default:
         return Icons.notifications_rounded;
     }
@@ -102,6 +110,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return 'Review';
       case 'follow':
         return 'New follower';
+      case 'school':
+        return 'School';
       default:
         return 'Update';
     }
@@ -175,12 +185,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               : '';
                           return Material(
                             color: theme.colorScheme.surface
-                                .withOpacity(.72),
+                                .withValues(alpha: .72),
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                                 side: BorderSide(
                                     color: BookNestColors.cyan
-                                        .withOpacity(.16))),
+                                        .withValues(alpha: .16))),
                             borderRadius: BorderRadius.circular(16),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(16),
@@ -196,7 +206,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
                                         color: BookNestColors.cyan
-                                            .withOpacity(.12),
+                                            .withValues(alpha: .12),
                                       ),
                                       child: Icon(_icon(type),
                                           size: 19,

@@ -14,6 +14,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/book_repository.dart';
 import '../../../services/supabase_service.dart';
 import '../../../state/book_providers.dart';
+import '../../components/adaptive.dart';
 
 /// Store-style book landing page. Reading opens the immersive Reader.
 /// The page's data lives in [bookDetailProvider] — this widget paints it.
@@ -88,9 +89,11 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
 
   void _showMoreMenu() {
     showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           ListTile(
             leading: const Icon(Icons.flag_rounded, color: BookNestColors.cyan),
@@ -113,9 +116,11 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
     AuthGuard.run(context, () {
       const reasons = ['Spam or scam', 'Hate or harassment', 'Copyright issue', 'Wrong category', 'Something else'];
       showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
         context: context,
         showDragHandle: true,
-        builder: (sheetContext) => SafeArea(
+        builder: (sheetContext) => SheetBody(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
@@ -185,7 +190,7 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
               IconButton(icon: const Icon(Icons.ios_share_outlined), onPressed: _share),
               IconButton(icon: const Icon(Icons.more_vert_rounded), onPressed: _showMoreMenu),
             ],
-            flexibleSpace: FlexibleSpaceBar(background: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [BookNestColors.navyDeep, BookNestColors.navy.withOpacity(.65), surface], begin: Alignment.topLeft, end: Alignment.bottomRight)))),
+            flexibleSpace: FlexibleSpaceBar(background: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [BookNestColors.navyDeep, BookNestColors.navy.withValues(alpha: .65), surface], begin: Alignment.topLeft, end: Alignment.bottomRight)))),
           ),
           if (book['banner_url'] is String &&
               (book['banner_url'] as String).startsWith('http'))
@@ -198,9 +203,8 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
                 errorBuilder: (_, __, ___) => const SizedBox.shrink(),
               ),
             ),
-          SliverToBoxAdapter(child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 30),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SliverToBoxAdapter(child: LayoutBuilder(builder: (context, box) {
+            final hero = <Widget>[
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Hero(tag: 'book-${widget.bookId}', child: _Cover(title: title, coverUrl: book['cover_url']?.toString())), const SizedBox(width: 18),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -300,6 +304,8 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
                     ),
                   ),
                 ]),
+            ];
+            final rest = <Widget>[
               const SizedBox(height: 28), _Heading('About this book'), const SizedBox(height: 10), Text(description, style: theme.textTheme.bodyLarge?.copyWith(height: 1.55, color: muted)),
               const SizedBox(height: 28), _Heading('Ratings and reviews'), const SizedBox(height: 14),
               _Reviews(
@@ -334,8 +340,44 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
                 ),
               const SizedBox(height: 28), _Heading('Recommended for you'), const SizedBox(height: 12),
               SizedBox(height: 184, child: ListView.separated(scrollDirection: Axis.horizontal, itemCount: _recommended.length, separatorBuilder: (_, __) => const SizedBox(width: 12), itemBuilder: (_, i) { final item = _recommended[i]; return InkWell(borderRadius: BorderRadius.circular(16), onTap: () => context.push('/book/${item['id']}'), child: SizedBox(width: 112, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_Cover(title: item['title']?.toString() ?? 'Book', coverUrl: item['cover_url']?.toString(), small: true), const SizedBox(height: 7), Text(item['title']?.toString() ?? 'Untitled', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12))]))); })),
-            ]),
-          )),
+            ];
+            // PC: book card + actions on the left, the reading matter
+            // (about, reviews, recommendations) on the right.
+            if (box.maxWidth >= 980) {
+              return Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1240),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(32, 12, 32, 40),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 420,
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: hero),
+                        ),
+                        const SizedBox(width: 40),
+                        Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: rest),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 30),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [...hero, ...rest]),
+            );
+          })),
         ],
       ),
     );
@@ -345,6 +387,7 @@ class _BookDetailsScreenState extends ConsumerState<BookDetailsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(mode == 'remix'
             ? 'Write a remix of this book?'
             : 'Write the next part?'),
@@ -412,11 +455,11 @@ class _Cover extends StatelessWidget { final String title; final String? coverUr
   @override
   Widget build(BuildContext context) {
     final url = coverUrl;
-    final box = Container(width: small ? 112 : 118, height: small ? 140 : 164, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [BookNestColors.navy, BookNestColors.navyDeep], begin: Alignment.topLeft, end: Alignment.bottomRight), boxShadow: [BoxShadow(color: BookNestColors.cyan.withOpacity(.18), blurRadius: 18, offset: const Offset(0, 8))]));
+    final box = Container(width: small ? 112 : 118, height: small ? 140 : 164, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [BookNestColors.navy, BookNestColors.navyDeep], begin: Alignment.topLeft, end: Alignment.bottomRight), boxShadow: [BoxShadow(color: BookNestColors.cyan.withValues(alpha: .18), blurRadius: 18, offset: const Offset(0, 8))]));
     if (url != null && url.startsWith('http')) {
       return ClipRRect(borderRadius: BorderRadius.circular(15), child: SizedBox(width: small ? 112 : 118, height: small ? 140 : 164, child: Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => box)));
     }
-    return Container(width: small ? 112 : 118, height: small ? 140 : 164, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [BookNestColors.navy, BookNestColors.navyDeep], begin: Alignment.topLeft, end: Alignment.bottomRight), boxShadow: [BoxShadow(color: BookNestColors.cyan.withOpacity(.18), blurRadius: 18, offset: const Offset(0, 8))]), child: Padding(padding: const EdgeInsets.all(13), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.auto_stories_rounded, color: BookNestColors.cyan), const Spacer(), Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: small ? 12 : 14))])));
+    return Container(width: small ? 112 : 118, height: small ? 140 : 164, decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), gradient: const LinearGradient(colors: [BookNestColors.navy, BookNestColors.navyDeep], begin: Alignment.topLeft, end: Alignment.bottomRight), boxShadow: [BoxShadow(color: BookNestColors.cyan.withValues(alpha: .18), blurRadius: 18, offset: const Offset(0, 8))]), child: Padding(padding: const EdgeInsets.all(13), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.auto_stories_rounded, color: BookNestColors.cyan), const Spacer(), Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: small ? 12 : 14))])));
   }
 }
 class _Heading extends StatelessWidget { final String text; const _Heading(this.text); @override Widget build(BuildContext context) => Text(text, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)); }
@@ -582,16 +625,16 @@ class _BookShareSheetState extends State<BookShareSheet> {
           child: Container(
             height: MediaQuery.sizeOf(context).height * .72,
             decoration: BoxDecoration(
-              color: background.withOpacity(.94),
+              color: background.withValues(alpha: .94),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-              border: Border.all(color: BookNestColors.cyan.withOpacity(.22)),
+              border: Border.all(color: BookNestColors.cyan.withValues(alpha: .22)),
             ),
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
             child: Column(children: [
               Container(width: 38, height: 4, decoration: BoxDecoration(color: theme.dividerColor, borderRadius: BorderRadius.circular(8))),
               const SizedBox(height: 18),
               Row(children: [
-                Container(width: 46, height: 46, decoration: BoxDecoration(shape: BoxShape.circle, color: BookNestColors.cyan.withOpacity(.14)), child: const Icon(Icons.send_rounded, color: BookNestColors.cyan)),
+                Container(width: 46, height: 46, decoration: BoxDecoration(shape: BoxShape.circle, color: BookNestColors.cyan.withValues(alpha: .14)), child: const Icon(Icons.send_rounded, color: BookNestColors.cyan)),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Send book to', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
@@ -684,8 +727,8 @@ class _Badge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: color.withOpacity(.1),
-        border: Border.all(color: color.withOpacity(.45)),
+        color: color.withValues(alpha: .1),
+        border: Border.all(color: color.withValues(alpha: .45)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -725,6 +768,7 @@ class _BoostButtonState extends State<_BoostButton> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(active ? 'Extend the boost?' : 'Boost this book?'),
         content: const Text(
             '20 gems put this book at the top of Discover for three days. '

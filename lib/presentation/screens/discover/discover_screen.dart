@@ -7,7 +7,6 @@ import '../../../config/theme.dart';
 import '../../components/booknest_ui.dart';
 import '../../components/skeleton_kit.dart';
 import '../../../services/backend_api.dart';
-import '../../../services/supabase_service.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -145,7 +144,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: BookNestColors.cyan.withOpacity(.3),
+                                      color: BookNestColors.cyan.withValues(alpha: .3),
                                       blurRadius: 14,
                                       offset: const Offset(0, 4),
                                     ),
@@ -277,7 +276,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                                           color: Theme.of(context)
                                               .colorScheme
                                               .onSurface
-                                              .withOpacity(.6))),
+                                              .withValues(alpha: .6))),
                                 ]),
                           ),
                           const Icon(Icons.chevron_right_rounded,
@@ -300,13 +299,45 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                               ? ListView(
                                   children: [_buildEmptyState()],
                                 )
-                              : ListView.builder(
-                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                  itemCount: _filteredItems.length,
-                                  itemBuilder: (context, index) {
-                                    return _DiscoverCard(item: _filteredItems[index]);
-                                  },
-                                ),
+                              : LayoutBuilder(builder: (context, box) {
+                                  // PC: cards flow into 2–3 columns.
+                                  final cols = (box.maxWidth / 440)
+                                      .floor()
+                                      .clamp(1, 3);
+                                  if (cols == 1) {
+                                    return ListView.builder(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 20, vertical: 8),
+                                      itemCount: _filteredItems.length,
+                                      itemBuilder: (context, index) {
+                                        return _DiscoverCard(
+                                            item: _filteredItems[index]);
+                                      },
+                                    );
+                                  }
+                                  const gap = 16.0;
+                                  final w = (box.maxWidth - 40 -
+                                          gap * (cols - 1)) /
+                                      cols;
+                                  return ListView(
+                                    physics:
+                                        const AlwaysScrollableScrollPhysics(),
+                                    padding: const EdgeInsets.fromLTRB(
+                                        20, 8, 20, 40),
+                                    children: [
+                                      Wrap(
+                                        spacing: gap,
+                                        children: [
+                                          for (final item in _filteredItems)
+                                            SizedBox(
+                                                width: w,
+                                                child: _DiscoverCard(
+                                                    item: item)),
+                                        ],
+                                      ),
+                                    ],
+                                  );
+                                }),
                         ),
                 ),
               ],
@@ -342,7 +373,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                           border: Border.all(color: Theme.of(context).dividerColor),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
+                              color: Colors.black.withValues(alpha: 0.3),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
@@ -490,7 +521,7 @@ class _DiscoverCard extends StatelessWidget {
                       child: Icon(
                         _typeIcon,
                         size: 40,
-                        color: _typeColor.withOpacity(0.3),
+                        color: _typeColor.withValues(alpha: 0.3),
                       ),
                     )
                   : null,
@@ -507,7 +538,7 @@ class _DiscoverCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: _typeColor.withOpacity(0.1),
+                          color: _typeColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -632,7 +663,7 @@ class _OrgSpotlightRail extends StatelessWidget {
               const SizedBox(width: 8),
               Text('${orgs.length} on BookNest',
                   style: TextStyle(
-                      fontSize: 11.5, color: onSurface.withOpacity(.55))),
+                      fontSize: 11.5, color: onSurface.withValues(alpha: .55))),
             ]),
           ),
           const SizedBox(height: 10),
@@ -693,7 +724,7 @@ class _OrgSpotlightRail extends StatelessWidget {
                               '$members member${members == 1 ? '' : 's'}',
                               style: TextStyle(
                                   fontSize: 11.5,
-                                  color: onSurface.withOpacity(.6))),
+                                  color: onSurface.withValues(alpha: .6))),
                         ]),
                   ),
                   ),

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Google Play build only (BN_PLAY=true → the .aab). Play allows the
+     remoteMessaging foreground-service type only for moving messages
+     between a user's own devices, so the background link (a foreground
+     service) stays in the direct-download APK. Merged over the main
+     manifest by android/app/build.gradle.kts. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" tools:node="remove"/>
+    <application>
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            tools:node="remove"/>
+    </application>
+</manifest>

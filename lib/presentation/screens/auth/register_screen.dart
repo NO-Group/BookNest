@@ -204,7 +204,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              BookNestColors.navyDeep.withOpacity(.12),
+              BookNestColors.navyDeep.withValues(alpha: .12),
               theme.scaffoldBackgroundColor,
               theme.scaffoldBackgroundColor,
             ],
@@ -214,13 +214,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 350),
-                child: _awaitingConfirmation
-                    ? _buildConfirmation(theme)
-                    : _profileStepActive
-                        ? _buildProfileStep(theme, onSurface)
-                        : _buildAccountForm(theme, onSurface),
+              child: ConstrainedBox(
+                // Readable form width on tablets / PC.
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  child: _awaitingConfirmation
+                      ? _buildConfirmation(theme)
+                      : _profileStepActive
+                          ? _buildProfileStep(theme, onSurface)
+                          : _buildAccountForm(theme, onSurface),
+                ),
               ),
             ),
           ),
@@ -239,8 +243,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: BookNestColors.cyan.withOpacity(.14),
-            border: Border.all(color: BookNestColors.cyan.withOpacity(.5)),
+            color: BookNestColors.cyan.withValues(alpha: .14),
+            border: Border.all(color: BookNestColors.cyan.withValues(alpha: .5)),
           ),
           child: const Icon(Icons.mark_email_read_outlined,
               color: BookNestColors.cyan, size: 42),
@@ -309,10 +313,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             fit: BoxFit.cover)
                         : null,
                     border: Border.all(
-                        color: BookNestColors.cyan.withOpacity(.6), width: 2),
+                        color: BookNestColors.cyan.withValues(alpha: .6), width: 2),
                     boxShadow: [
                       BoxShadow(
-                          color: BookNestColors.cyan.withOpacity(.25),
+                          color: BookNestColors.cyan.withValues(alpha: .25),
                           blurRadius: 20,
                           offset: const Offset(0, 8)),
                     ],
@@ -419,6 +423,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           hintText: 'Password',
           obscureText: _obscure,
           suffix: IconButton(
+            tooltip: _obscure ? 'Show password' : 'Hide password',
             icon: Icon(
               _obscure
                   ? Icons.visibility_off_outlined
@@ -443,7 +448,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: BookNestColors.cyan.withOpacity(.3),
+                  color: BookNestColors.cyan.withValues(alpha: .3),
                   blurRadius: 18,
                   offset: const Offset(0, 8),
                 ),

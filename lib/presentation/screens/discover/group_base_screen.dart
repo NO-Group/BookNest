@@ -6,6 +6,7 @@ import '../../../services/backend_api.dart';
 import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 import 'group_extras.dart';
+import '../../components/adaptive.dart';
 
 /// The full group experience shared by organizations, communities and
 /// schools: real membership, announcements, a named member directory with
@@ -147,8 +148,8 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     if (res == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(isMember
-              ? 'Could not leave right now — try again.'
-              : 'Could not join right now — try again.')));
+              ? BackendApi.instance.errorOr('Could not leave right now — try again.')
+              : BackendApi.instance.errorOr('Could not join right now — try again.'))));
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -176,6 +177,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (sheetContext, setDialog) => AlertDialog(
+          scrollable: true,
           title: const Text('New announcement'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(
@@ -293,6 +295,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     final okToDelete = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Remove announcement?'),
         content: Text('"${a['title']}" disappears for every member.'),
         actions: [
@@ -313,7 +316,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not remove it — try again.'
+            ? BackendApi.instance.errorOr('Could not remove it — try again.')
             : 'Announcement removed.')));
     if (res != null) _loadAnnouncements();
   }
@@ -336,10 +339,12 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     if (userId.isEmpty || isOwner == false) return;
     final isVice = memberIsVice(member);
     final choice = await showModalBottomSheet<String>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 10),
           ListTile(
@@ -368,11 +373,54 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not update the role — try again.'
+            ? BackendApi.instance.errorOr('Could not update the role — try again.')
             : (choice == 'promote'
                 ? '${_nameOf(userId)} is now the deputy.'
                 : 'Deputy role removed.'))));
     if (res != null) reload();
+  }
+
+  /// Owner-only: removes the group with its channels, events, classes,
+  /// reading list and announcements; its group chat is archived.
+  Future<void> _deleteGroup() async {
+    final name = group?['name']?.toString() ?? widget.title;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        scrollable: true,
+        title: Text('Delete "$name"?'),
+        content: const Text(
+            'This removes the group for every member — its channels, '
+            'events, reading list, announcements and departments. The group '
+            'chat is archived. This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(d, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(d, true),
+              child: const Text('Delete',
+                  style: TextStyle(
+                      color: Colors.redAccent, fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final res = await BackendApi.instance
+        .call('groups.delete', {'kind': kind, 'groupId': groupId});
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res != null
+            ? '"$name" was deleted.'
+            : BackendApi.instance
+                .errorOr('Could not delete the group — please try again.'))));
+    if (res != null) {
+      if (context.canPop()) {
+        context.pop(true);
+      } else {
+        context.go('/discover');
+      }
+    }
   }
 
   @override
@@ -380,7 +428,32 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     final theme = Theme.of(context);
     final onSurface = theme.colorScheme.onSurface;
     return Scaffold(
-      appBar: GlassAppBar(title: group?['name']?.toString() ?? widget.title),
+      appBar: GlassAppBar(
+        title: group?['name']?.toString() ?? widget.title,
+        actions: [
+          if (isOwner && !loading)
+            PopupMenuButton<String>(
+              tooltip: 'Group options',
+              icon: const Icon(Icons.more_vert_rounded),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              onSelected: (v) {
+                if (v == 'delete') _deleteGroup();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(children: [
+                    Icon(Icons.delete_forever_rounded,
+                        color: Colors.redAccent, size: 20),
+                    SizedBox(width: 10),
+                    Text('Delete group'),
+                  ]),
+                ),
+              ],
+            ),
+        ],
+      ),
       body: loading
           ? const Center(
               child: CircularProgressIndicator(color: BookNestColors.cyan))
@@ -403,12 +476,8 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                     _loadAnnouncements();
                     await reload();
                   },
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-                    children: [
-                      _headerPanel(theme, onSurface),
-                      const SizedBox(height: 14),
-                      Row(children: [
+                  child: LayoutBuilder(builder: (context, box) {
+                    final actions = Row(children: [
                         Expanded(
                           child: OutlinedButton.icon(
                             onPressed:
@@ -416,7 +485,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                             style: OutlinedButton.styleFrom(
                               side: BorderSide(
                                   color: BookNestColors.cyan
-                                      .withOpacity(.55)),
+                                      .withValues(alpha: .55)),
                               foregroundColor: BookNestColors.cyan,
                             ),
                             icon: Icon(isMember
@@ -451,18 +520,61 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                             ),
                           ),
                         ],
-                      ]),
-                      const SizedBox(height: 16),
+                      ]);
+                    final identity = <Widget>[
+                      _headerPanel(theme, onSurface),
+                      const SizedBox(height: 14),
+                      actions,
+                    ];
+                    final activity = <Widget>[
                       _announcementsPanel(theme, onSurface),
                       if (kind == 'organizations') ...[
                         const SizedBox(height: 16),
                         OrgDepartmentsSection(state: this),
                       ],
-                      const SizedBox(height: 16),
-                      _membersPanel(theme, onSurface),
-                      ...?widget.extraSections?.call(this),
-                    ],
-                  ),
+                    ];
+                    final extras = widget.extraSections?.call(this) ??
+                        const <Widget>[];
+                    // PC: who the group is (left) beside what it does
+                    // (right), each scrolling on its own.
+                    if (box.maxWidth >= 1000) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: box.maxWidth >= 1300 ? 420 : 380,
+                            child: ListView(
+                              padding:
+                                  const EdgeInsets.fromLTRB(24, 16, 12, 40),
+                              children: [
+                                ...identity,
+                                const SizedBox(height: 16),
+                                _membersPanel(theme, onSurface),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: ListView(
+                              padding:
+                                  const EdgeInsets.fromLTRB(12, 16, 28, 40),
+                              children: [...activity, ...extras],
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+                      children: [
+                        ...identity,
+                        const SizedBox(height: 16),
+                        ...activity,
+                        const SizedBox(height: 16),
+                        _membersPanel(theme, onSurface),
+                        ...extras,
+                      ],
+                    );
+                  }),
                 ),
     );
   }
@@ -524,7 +636,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                       ' · led by ${g['ownerName']?.toString() ?? 'a reader'}',
                       style: TextStyle(
                           fontSize: 12,
-                          color: onSurface.withOpacity(.65)),
+                          color: onSurface.withValues(alpha: .65)),
                     ),
                   ],
                 ),
@@ -534,7 +646,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
               const SizedBox(height: 12),
               Text(g['description'].toString(),
                   style: TextStyle(
-                      fontSize: 13.5, height: 1.45, color: onSurface.withOpacity(.9))),
+                      fontSize: 13.5, height: 1.45, color: onSurface.withValues(alpha: .9))),
             ],
             if (kind == 'organizations' &&
                 (g['mission']?.toString() ?? '').isNotEmpty) ...[
@@ -548,12 +660,12 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                         fontSize: 11.5,
                         fontWeight: FontWeight.w800,
                         letterSpacing: .4,
-                        color: onSurface.withOpacity(.6))),
+                        color: onSurface.withValues(alpha: .6))),
               ]),
               const SizedBox(height: 4),
               Text(g['mission'].toString(),
                   style: TextStyle(
-                      fontSize: 13, height: 1.4, color: onSurface.withOpacity(.85))),
+                      fontSize: 13, height: 1.4, color: onSurface.withValues(alpha: .85))),
             ],
             if (kind == 'schools' &&
                 ((g['location']?.toString() ?? '').isNotEmpty ||
@@ -568,7 +680,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                       child: Text(g['location'].toString(),
                           style: TextStyle(
                               fontSize: 12.5,
-                              color: onSurface.withOpacity(.8)))),
+                              color: onSurface.withValues(alpha: .8)))),
                 ]),
               if ((g['website']?.toString() ?? '').isNotEmpty)
                 Padding(
@@ -581,7 +693,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                         child: Text(g['website'].toString(),
                             style: TextStyle(
                                 fontSize: 12.5,
-                                color: onSurface.withOpacity(.8)))),
+                                color: onSurface.withValues(alpha: .8)))),
                   ]),
                 ),
             ],
@@ -638,7 +750,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? (next ? 'Organization verified ✓' : 'Verification removed')
-            : 'Could not update verification — try again.')));
+            : BackendApi.instance.errorOr('Could not update verification — try again.'))));
     if (res != null) await reload();
   }
 
@@ -682,7 +794,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                     ? 'Post the first announcement — every member sees it.'
                     : 'No announcements yet.',
                 style: TextStyle(
-                    fontSize: 12.5, color: onSurface.withOpacity(.55)),
+                    fontSize: 12.5, color: onSurface.withValues(alpha: .55)),
               ),
             )
           else
@@ -711,7 +823,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                           onTap: () => _deleteAnnouncement(a),
                           child: Icon(Icons.delete_outline_rounded,
                               size: 16,
-                              color: onSurface.withOpacity(.45)),
+                              color: onSurface.withValues(alpha: .45)),
                         ),
                     ]),
                     const SizedBox(height: 4),
@@ -730,7 +842,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                       fontSize: 10.8,
-                                      color: onSurface.withOpacity(.5))),
+                                      color: onSurface.withValues(alpha: .5))),
                             ),
                           if (a['published'] == false) ...[
                             const SizedBox(width: 6),
@@ -738,7 +850,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 1),
                               decoration: BoxDecoration(
-                                color: BookNestColors.cyan.withOpacity(.14),
+                                color: BookNestColors.cyan.withValues(alpha: .14),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Text('DRAFT',
@@ -760,7 +872,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                           style: TextStyle(
                               fontSize: 12.8,
                               height: 1.4,
-                              color: onSurface.withOpacity(.85))),
+                              color: onSurface.withValues(alpha: .85))),
                     ),
                   ],
                 ),
@@ -871,7 +983,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
                     ],
                     if (isOwner && !memberIsOwner(m))
                       Icon(Icons.chevron_right_rounded,
-                          size: 17, color: onSurface.withOpacity(.35)),
+                          size: 17, color: onSurface.withValues(alpha: .35)),
                   ]),
                 ),
               ),
@@ -881,7 +993,7 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
               padding: const EdgeInsets.only(top: 10),
               child: Text('and ${members.length - 60} more…',
                   style: TextStyle(
-                      fontSize: 12, color: onSurface.withOpacity(.5))),
+                      fontSize: 12, color: onSurface.withValues(alpha: .5))),
             ),
         ]),
       ),
@@ -892,9 +1004,9 @@ class GroupBaseScreenState extends State<GroupBaseScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
       decoration: BoxDecoration(
-        color: color.withOpacity(.14),
+        color: color.withValues(alpha: .14),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(.4)),
+        border: Border.all(color: color.withValues(alpha: .4)),
       ),
       child: Text(label,
           style: TextStyle(
@@ -949,6 +1061,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('New department',
@@ -981,7 +1094,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? 'Department "$name" created.'
-            : 'Could not create the department — try again.')));
+            : BackendApi.instance.errorOr('Could not create the department — try again.'))));
     if (res != null) _load();
   }
 
@@ -1004,10 +1117,12 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
 
   Future<void> _manageUnit(Map<String, dynamic> unit) async {
     final action = await showModalBottomSheet<String>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 6),
           ListTile(
@@ -1075,7 +1190,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? 'Lead appointed ✓'
-            : 'Could not appoint the lead — try again.')));
+            : BackendApi.instance.errorOr('Could not appoint the lead — try again.'))));
     if (res != null) _load();
   }
 
@@ -1083,6 +1198,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
     final sure = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Remove department?',
             style: TextStyle(fontWeight: FontWeight.w800)),
@@ -1111,7 +1227,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? 'Department removed.'
-            : 'Could not remove the department — try again.')));
+            : BackendApi.instance.errorOr('Could not remove the department — try again.'))));
     if (res != null) _load();
   }
 
@@ -1163,7 +1279,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
                           'Outreach or Design.'
                       : 'No departments yet.',
                   style: TextStyle(
-                      fontSize: 12.5, color: onSurface.withOpacity(.6))),
+                      fontSize: 12.5, color: onSurface.withValues(alpha: .6))),
             )
           else
             for (final unit in _units)
@@ -1180,8 +1296,8 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
                         height: 30,
                         decoration: BoxDecoration(
                           color: _isJoined(unit)
-                              ? BookNestColors.cyan.withOpacity(.16)
-                              : BookNestColors.navy.withOpacity(.08),
+                              ? BookNestColors.cyan.withValues(alpha: .16)
+                              : BookNestColors.navy.withValues(alpha: .08),
                           borderRadius: BorderRadius.circular(9),
                         ),
                         child: Icon(
@@ -1211,7 +1327,7 @@ class _OrgDepartmentsSectionState extends State<OrgDepartmentsSection> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                       fontSize: 11.5,
-                                      color: onSurface.withOpacity(.6))),
+                                      color: onSurface.withValues(alpha: .6))),
                             ]),
                       ),
                       if (_state.isMember)

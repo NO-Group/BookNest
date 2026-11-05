@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
@@ -28,8 +27,12 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    final res = await BackendApi.instance.callFresh('brainstorm.list');
+  /// Cached ideas paint instantly; pull-to-refresh and writes ask the
+  /// server (rev-checked, so an unchanged list costs a few bytes).
+  Future<void> _load({bool fresh = false}) async {
+    final res = fresh
+        ? await BackendApi.instance.callFresh('brainstorm.list')
+        : await BackendApi.instance.call('brainstorm.list');
     if (!mounted) return;
     setState(() {
       _ideas = ((res?['ideas'] as List?) ?? const [])
@@ -134,7 +137,7 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Idea live — the floor is yours. 💡')));
-    _load();
+    _load(fresh: true);
   }
 
   Future<void> _like(Map<String, dynamic> idea) async {
@@ -155,7 +158,7 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => _IdeaThreadSheet(idea: idea),
     );
-    if (changed == true) _load();
+    if (changed == true) _load(fresh: true);
   }
 
   @override
@@ -178,7 +181,7 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
           ? const RowsSkeleton(count: 6)
           : RefreshIndicator(
               color: BookNestColors.cyan,
-              onRefresh: _load,
+              onRefresh: () => _load(fresh: true),
               child: _ideas.isEmpty
                   ? ListView(children: [
                       const SizedBox(height: 120),
@@ -250,7 +253,7 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
                                         style: TextStyle(
                                             fontSize: 10.5,
                                             color: onSurface
-                                                .withOpacity(.5)),
+                                                .withValues(alpha: .5)),
                                       ),
                                     ]),
                                     const SizedBox(height: 10),
@@ -269,7 +272,7 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
                                               fontSize: 13.2,
                                               height: 1.4,
                                               color: onSurface
-                                                  .withOpacity(.85))),
+                                                  .withValues(alpha: .85))),
                                     ],
                                     const SizedBox(height: 12),
                                     Row(children: [
@@ -306,7 +309,7 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
                                       Icon(Icons.mode_comment_outlined,
                                           size: 17,
                                           color: onSurface
-                                              .withOpacity(.55)),
+                                              .withValues(alpha: .55)),
                                       const SizedBox(width: 5),
                                       Text(
                                         '${(idea['replyCount'] as num?)?.toInt() ?? 0}',
@@ -314,7 +317,7 @@ class _BrainstormScreenState extends State<BrainstormScreen> {
                                             fontSize: 12.5,
                                             fontWeight: FontWeight.w700,
                                             color: onSurface
-                                                .withOpacity(.65)),
+                                                .withValues(alpha: .65)),
                                       ),
                                       const Spacer(),
                                       Text('Build on it →',
@@ -475,7 +478,7 @@ class _IdeaThreadSheetState extends State<_IdeaThreadSheet> {
             width: 44,
             height: 4,
             decoration: BoxDecoration(
-              color: Theme.of(context).hintColor.withOpacity(.4),
+              color: Theme.of(context).hintColor.withValues(alpha: .4),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -539,9 +542,9 @@ class _IdeaThreadSheetState extends State<_IdeaThreadSheet> {
                               borderRadius: BorderRadius.circular(14),
                               color: Theme.of(context).brightness ==
                                       Brightness.dark
-                                  ? Colors.white.withOpacity(.05)
+                                  ? Colors.white.withValues(alpha: .05)
                                   : BookNestColors.navyDeep
-                                      .withOpacity(.04),
+                                      .withValues(alpha: .04),
                             ),
                             child: Column(
                               crossAxisAlignment:
@@ -580,7 +583,7 @@ class _IdeaThreadSheetState extends State<_IdeaThreadSheet> {
                                               color: Theme.of(context)
                                                   .colorScheme
                                                   .onSurface
-                                                  .withOpacity(.5))),
+                                                  .withValues(alpha: .5))),
                                     ),
                                   ),
                                   for (final reply in replies)
@@ -606,7 +609,7 @@ class _IdeaThreadSheetState extends State<_IdeaThreadSheet> {
               padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
               child: Row(children: [
                 Icon(Icons.subdirectory_arrow_right_rounded,
-                    size: 15, color: BookNestColors.cyan.withOpacity(.9)),
+                    size: 15, color: BookNestColors.cyan.withValues(alpha: .9)),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text('Replying to ${_nameOf(_replyTarget!)}',
@@ -622,7 +625,7 @@ class _IdeaThreadSheetState extends State<_IdeaThreadSheet> {
                       color: Theme.of(context)
                           .colorScheme
                           .onSurface
-                          .withOpacity(.6)),
+                          .withValues(alpha: .6)),
                 ),
               ]),
             ),
@@ -699,7 +702,7 @@ class _IdeaThreadSheetState extends State<_IdeaThreadSheet> {
                 style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
-                    color: BookNestColors.cyan.withOpacity(.85))),
+                    color: BookNestColors.cyan.withValues(alpha: .85))),
           ),
         ]),
         if (badge != null && badge.isNotEmpty)
@@ -712,7 +715,7 @@ class _IdeaThreadSheetState extends State<_IdeaThreadSheet> {
                     color: Theme.of(context)
                         .colorScheme
                         .onSurface
-                        .withOpacity(.55))),
+                        .withValues(alpha: .55))),
           ),
         const SizedBox(height: 6),
         Text(row['text']?.toString() ?? '',

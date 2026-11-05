@@ -71,6 +71,7 @@ class _GroupChannelsSectionState extends State<GroupChannelsSection> {
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('New channel',
@@ -105,7 +106,7 @@ class _GroupChannelsSectionState extends State<GroupChannelsSection> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? 'Channel "$name" created.'
-            : 'Could not create the channel — try again.')));
+            : BackendApi.instance.errorOr('Could not create the channel — try again.'))));
     if (res != null) _load();
   }
 
@@ -113,6 +114,7 @@ class _GroupChannelsSectionState extends State<GroupChannelsSection> {
     final sure = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Remove channel?',
             style: TextStyle(fontWeight: FontWeight.w800)),
@@ -196,7 +198,7 @@ class _GroupChannelsSectionState extends State<GroupChannelsSection> {
                           'or launches.'
                       : 'No channels yet.',
                   style: TextStyle(
-                      fontSize: 12.5, color: onSurface.withOpacity(.6))),
+                      fontSize: 12.5, color: onSurface.withValues(alpha: .6))),
             )
           else
             for (final channel in _channels)
@@ -229,7 +231,7 @@ class _GroupChannelsSectionState extends State<GroupChannelsSection> {
                               fontWeight: FontWeight.w700,
                               color: BookNestColors.cyan)),
                       Icon(Icons.chevron_right_rounded,
-                          size: 17, color: onSurface.withOpacity(.35)),
+                          size: 17, color: onSurface.withValues(alpha: .35)),
                     ]),
                   ),
                 ),
@@ -424,7 +426,7 @@ class _GroupEventsSectionState extends State<GroupEventsSection> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? 'Event scheduled ✓'
-            : 'Could not schedule the event — try again.')));
+            : BackendApi.instance.errorOr('Could not schedule the event — try again.'))));
     if (res != null) _load();
   }
 
@@ -469,6 +471,7 @@ class _GroupEventsSectionState extends State<GroupEventsSection> {
     final sure = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Remove event?',
             style: TextStyle(fontWeight: FontWeight.w800)),
@@ -540,7 +543,7 @@ class _GroupEventsSectionState extends State<GroupEventsSection> {
                           'or reading night.'
                       : 'No events yet.',
                   style: TextStyle(
-                      fontSize: 12.5, color: onSurface.withOpacity(.6))),
+                      fontSize: 12.5, color: onSurface.withValues(alpha: .6))),
             )
           else
             for (final event in _events)
@@ -548,10 +551,10 @@ class _GroupEventsSectionState extends State<GroupEventsSection> {
                 padding: const EdgeInsets.only(top: 12),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: BookNestColors.cyan.withOpacity(.05),
+                    color: BookNestColors.cyan.withValues(alpha: .05),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                        color: BookNestColors.cyan.withOpacity(.16)),
+                        color: BookNestColors.cyan.withValues(alpha: .16)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(12),
@@ -584,7 +587,7 @@ class _GroupEventsSectionState extends State<GroupEventsSection> {
                                 onTap: () => _removeEvent(event),
                                 child: Icon(Icons.close_rounded,
                                     size: 15,
-                                    color: onSurface.withOpacity(.4)),
+                                    color: onSurface.withValues(alpha: .4)),
                               ),
                             ],
                           ]),
@@ -596,7 +599,7 @@ class _GroupEventsSectionState extends State<GroupEventsSection> {
                                 style: TextStyle(
                                     fontSize: 12.3,
                                     height: 1.35,
-                                    color: onSurface.withOpacity(.75))),
+                                    color: onSurface.withValues(alpha: .75))),
                           ],
                           const SizedBox(height: 10),
                           Row(children: [
@@ -649,20 +652,20 @@ class _RsvpChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
         decoration: BoxDecoration(
           color: selected
-              ? BookNestColors.cyan.withOpacity(.18)
+              ? BookNestColors.cyan.withValues(alpha: .18)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
               color: selected
                   ? BookNestColors.cyan
-                  : BookNestColors.cyan.withOpacity(.35)),
+                  : BookNestColors.cyan.withValues(alpha: .35)),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon,
               size: 14,
               color: selected
                   ? BookNestColors.cyan
-                  : BookNestColors.cyan.withOpacity(.75)),
+                  : BookNestColors.cyan.withValues(alpha: .75)),
           const SizedBox(width: 5),
           Text(label,
               style: TextStyle(
@@ -670,7 +673,7 @@ class _RsvpChip extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                   color: selected
                       ? BookNestColors.cyan
-                      : BookNestColors.cyan.withOpacity(.8))),
+                      : BookNestColors.cyan.withValues(alpha: .8))),
         ]),
       ),
     );
@@ -694,6 +697,7 @@ class GroupRulesSection extends StatelessWidget {
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Group rules',
             style: TextStyle(fontWeight: FontWeight.w800)),
@@ -733,7 +737,7 @@ class GroupRulesSection extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res != null
             ? 'Rules saved ✓'
-            : 'Could not save the rules — try again.')));
+            : BackendApi.instance.errorOr('Could not save the rules — try again.'))));
     if (res != null) state.reload();
   }
 
@@ -777,7 +781,7 @@ class GroupRulesSection extends StatelessWidget {
                           'reader knows the culture.'
                       : 'No rules yet.',
                   style: TextStyle(
-                      fontSize: 12.5, color: onSurface.withOpacity(.6))),
+                      fontSize: 12.5, color: onSurface.withValues(alpha: .6))),
             )
           else
             for (var i = 0; i < rules.length; i++)
@@ -790,7 +794,7 @@ class GroupRulesSection extends StatelessWidget {
                     height: 20,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: BookNestColors.cyan.withOpacity(.14),
+                      color: BookNestColors.cyan.withValues(alpha: .14),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text('${i + 1}',
@@ -805,7 +809,7 @@ class GroupRulesSection extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 12.8,
                             height: 1.35,
-                            color: onSurface.withOpacity(.85))),
+                            color: onSurface.withValues(alpha: .85))),
                   ),
                 ]),
               ),

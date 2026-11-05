@@ -33,6 +33,7 @@ class _MassMessageScreenState extends State<MassMessageScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Send to every reader?',
             style: TextStyle(fontWeight: FontWeight.w800)),
@@ -103,7 +104,7 @@ class _MassMessageScreenState extends State<MassMessageScreen> {
                         'latest broadcasts are kept.',
                         style: TextStyle(
                             fontSize: 11.5,
-                            color: onSurface.withOpacity(.5))),
+                            color: onSurface.withValues(alpha: .5))),
                     const SizedBox(height: 14),
                     TextField(
                       controller: _titleCtrl,

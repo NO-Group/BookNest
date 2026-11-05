@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/theme.dart';
 import '../../config/locales.dart';
+import '../../services/typing_broadcaster.dart';
 import '../../services/reader_profile.dart';
 import '../screens/chat/voice_recorder_sheet.dart';
 import '../screens/chat/camera_screen.dart';
@@ -27,11 +28,14 @@ import '../screens/chat/photo_edit_screen.dart';
 import '../screens/chat/video_preview_screen.dart';
 import '../../services/backend_api.dart';
 import '../../services/cloudinary_service.dart';
+import '../../services/media_backup_service.dart';
+import '../../services/chat_relay_service.dart';
 import '../../services/supabase_service.dart';
 import 'booknest_ui.dart';
 import 'booknest_emojis.dart';
 import 'booknest_keyboard.dart';
 import 'watermark_background.dart';
+import 'adaptive.dart';
 
 /// Shared chat kit — one messaging language across 1:1 and club chats.
 /// Original BookNest styling: navy/cyan glass bubbles on the watermark
@@ -124,9 +128,9 @@ class ChatSearchBar extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
-        color: onSurface.withOpacity(.06),
+        color: onSurface.withValues(alpha: .06),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+        border: Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
       ),
       child: Row(children: [
         const Icon(Icons.search_rounded, size: 19, color: BookNestColors.cyan),
@@ -302,6 +306,22 @@ class _ChatBubbleState extends State<ChatBubble>
       _deletedForEveryone ? 'deleted' : (widget.message['type']?.toString() ?? 'text');
   String get _text => widget.message['text']?.toString() ?? '';
   String get _mediaUrl => widget.message['mediaUrl']?.toString() ?? '';
+  String get _fileName {
+    final n = widget.message['fileName']?.toString() ?? '';
+    return n.isNotEmpty ? n : _text;
+  }
+
+  /// A "file" that is really a video, song or picture plays/shows right in
+  /// the bubble instead of appearing as a file name: 'video', 'audio',
+  /// 'image' or '' for real documents.
+  String get _fileMediaKind {
+    if (_type != 'file' || !_mediaUrl.startsWith('http')) return '';
+    final item = MediaItem(url: _mediaUrl, name: _fileName);
+    if (item.isVideo) return 'video';
+    if (item.isAudio) return 'audio';
+    if (item.isImage) return 'image';
+    return '';
+  }
   bool get _isMine => widget.mine;
 
   /// The blue ticks. True only when someone OTHER than the sender has
@@ -361,9 +381,11 @@ class _ChatBubbleState extends State<ChatBubble>
     final canAct = !_pending && !_failed && !_deletedForEveryone;
     HapticFeedback.mediumImpact();
     showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -372,7 +394,7 @@ class _ChatBubbleState extends State<ChatBubble>
             Builder(builder: (sheetContext) {
               final preview = _text.trim();
               final shade =
-                  Theme.of(context).colorScheme.surface.withOpacity(.9);
+                  Theme.of(context).colorScheme.surface.withValues(alpha: .9);
               if (preview.isEmpty) return const SizedBox.shrink();
               return Container(
                 width: double.infinity,
@@ -394,7 +416,7 @@ class _ChatBubbleState extends State<ChatBubble>
                         .textTheme
                         .bodyMedium
                         ?.color
-                        ?.withOpacity(.85),
+                        ?.withValues(alpha: .85),
                   ),
                 ),
               );
@@ -546,7 +568,7 @@ class _ChatBubbleState extends State<ChatBubble>
               size: 13,
               color: mine
                   ? Colors.white54
-                  : (dark ? Colors.white38 : BookNestColors.navyDeep.withOpacity(.45))),
+                  : (dark ? Colors.white38 : BookNestColors.navyDeep.withValues(alpha: .45))),
           const SizedBox(width: 6),
           Text(
             'This message was deleted',
@@ -555,7 +577,7 @@ class _ChatBubbleState extends State<ChatBubble>
               fontSize: 13.5,
               color: mine
                   ? Colors.white54
-                  : (dark ? Colors.white38 : BookNestColors.navyDeep.withOpacity(.45)),
+                  : (dark ? Colors.white38 : BookNestColors.navyDeep.withValues(alpha: .45)),
             ),
           ),
         ],
@@ -586,6 +608,19 @@ class _ChatBubbleState extends State<ChatBubble>
         _mediaUrl.startsWith('http') &&
         !_deletedForEveryone) {
       content = _ImageContent(url: _mediaUrl, onTap: widget.onOpenImage);
+    } else if (_fileMediaKind.isNotEmpty && !_deletedForEveryone) {
+      final kind = _fileMediaKind;
+      content = kind == 'video'
+          ? _VideoContent(url: _mediaUrl, dark: dark, onOpen: widget.onOpenFile)
+          : kind == 'audio'
+              ? _VoiceContent(
+                  url: _mediaUrl,
+                  durationLabel: '',
+                  dark: dark,
+                  mine: mine,
+                  title: _fileName,
+                )
+              : _ImageContent(url: _mediaUrl, onTap: widget.onOpenFile);
     } else if (_type == 'file' &&
         _mediaUrl.startsWith('http') &&
         !_deletedForEveryone) {
@@ -628,9 +663,12 @@ class _ChatBubbleState extends State<ChatBubble>
         left: mine ? 48 : 0,
         right: mine ? 0 : 48,
       ),
-      padding: (_type == 'book_share' || _type == 'file')
+      padding: (_type == 'book_share' || (_type == 'file' && _fileMediaKind.isEmpty))
           ? const EdgeInsets.all(10)
-          : (_type == 'image' || _type == 'video'
+          : (_type == 'image' ||
+                  _type == 'video' ||
+                  _fileMediaKind == 'video' ||
+                  _fileMediaKind == 'image'
               ? const EdgeInsets.all(4)
               : const EdgeInsets.fromLTRB(13, 8, 13, 6)),
       constraints:
@@ -653,11 +691,11 @@ class _ChatBubbleState extends State<ChatBubble>
           bottomRight: Radius.circular(mine ? 4 : 18),
         ),
         border: mine
-            ? Border.all(color: Colors.white.withOpacity(.06))
-            : Border.all(color: BookNestColors.cyan.withOpacity(.22)),
+            ? Border.all(color: Colors.white.withValues(alpha: .06))
+            : Border.all(color: BookNestColors.cyan.withValues(alpha: .22)),
         boxShadow: [
           BoxShadow(
-            color: BookNestColors.navyDeep.withOpacity(dark ? .28 : .10),
+            color: BookNestColors.navyDeep.withValues(alpha: dark ? .28 : .10),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -684,7 +722,7 @@ class _ChatBubbleState extends State<ChatBubble>
                   fontWeight: FontWeight.w800,
                   decoration:
                       widget.senderId == null ? null : TextDecoration.underline,
-                  decorationColor: BookNestColors.cyan.withOpacity(.5),
+                  decorationColor: BookNestColors.cyan.withValues(alpha: .5),
                 ),
               ),
             ),
@@ -697,7 +735,7 @@ class _ChatBubbleState extends State<ChatBubble>
                 Icon(Icons.shortcut_rounded,
                     size: 12,
                     color: mine
-                        ? Colors.white.withOpacity(.65)
+                        ? Colors.white.withValues(alpha: .65)
                         : BookNestColors.cyan),
                 const SizedBox(width: 4),
                 Text(
@@ -707,7 +745,7 @@ class _ChatBubbleState extends State<ChatBubble>
                       fontStyle: FontStyle.italic,
                       fontWeight: FontWeight.w600,
                       color: mine
-                          ? Colors.white.withOpacity(.65)
+                          ? Colors.white.withValues(alpha: .65)
                           : BookNestColors.cyan),
                 ),
               ],
@@ -729,16 +767,16 @@ class _ChatBubbleState extends State<ChatBubble>
                   style: TextStyle(
                     fontSize: 10,
                     color: mine
-                        ? Colors.white.withOpacity(.65)
+                        ? Colors.white.withValues(alpha: .65)
                         : (dark
-                            ? Colors.white.withOpacity(.45)
-                            : BookNestColors.navyDeep.withOpacity(.5)),
+                            ? Colors.white.withValues(alpha: .45)
+                            : BookNestColors.navyDeep.withValues(alpha: .5)),
                   ),
                 ),
                 if (mine) ...[
                   const SizedBox(width: 4),
                   _ticks(
-                    Colors.white.withOpacity(.55),
+                    Colors.white.withValues(alpha: .55),
                     BookNestColors.cyan,
                   ),
                 ],
@@ -760,7 +798,7 @@ class _ChatBubbleState extends State<ChatBubble>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(.45),
+                    color: Colors.black.withValues(alpha: .45),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -771,7 +809,7 @@ class _ChatBubbleState extends State<ChatBubble>
                               const TextStyle(fontSize: 10, color: Colors.white)),
                       if (mine) ...[
                         const SizedBox(width: 4),
-                        _ticks(Colors.white.withOpacity(.6), BookNestColors.cyan),
+                        _ticks(Colors.white.withValues(alpha: .6), BookNestColors.cyan),
                       ],
                     ],
                   ),
@@ -829,18 +867,18 @@ class _ChatBubbleState extends State<ChatBubble>
                                   horizontal: 7, vertical: 3),
                               decoration: BoxDecoration(
                                 color: _reactedByMe(entry.key)
-                                    ? BookNestColors.cyan.withOpacity(.18)
+                                    ? BookNestColors.cyan.withValues(alpha: .18)
                                     : (dark
-                                        ? Colors.white.withOpacity(.07)
-                                        : BookNestColors.navyDeep.withOpacity(.06)),
+                                        ? Colors.white.withValues(alpha: .07)
+                                        : BookNestColors.navyDeep.withValues(alpha: .06)),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: _reactedByMe(entry.key)
                                       ? BookNestColors.cyan
                                       : (dark
-                                          ? Colors.white.withOpacity(.12)
+                                          ? Colors.white.withValues(alpha: .12)
                                           : BookNestColors.navyDeep
-                                              .withOpacity(.12)),
+                                              .withValues(alpha: .12)),
                                 ),
                               ),
                               child: Row(
@@ -884,9 +922,9 @@ class _ChatBubbleState extends State<ChatBubble>
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: BookNestColors.cyan.withOpacity(.16),
+                        color: BookNestColors.cyan.withValues(alpha: .16),
                         border: Border.all(
-                            color: BookNestColors.cyan.withOpacity(.5)),
+                            color: BookNestColors.cyan.withValues(alpha: .5)),
                       ),
                       child: Icon(
                         mine
@@ -951,8 +989,8 @@ class _ComposerReplyBar extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         color: dark
-            ? Colors.white.withOpacity(.06)
-            : BookNestColors.navyDeep.withOpacity(.05),
+            ? Colors.white.withValues(alpha: .06)
+            : BookNestColors.navyDeep.withValues(alpha: .05),
         border: const Border(
             left: BorderSide(color: BookNestColors.cyan, width: 3)),
       ),
@@ -975,15 +1013,15 @@ class _ComposerReplyBar extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 13,
                       color: dark
-                          ? Colors.white.withOpacity(.75)
-                          : BookNestColors.navyDeep.withOpacity(.75)),
+                          ? Colors.white.withValues(alpha: .75)
+                          : BookNestColors.navyDeep.withValues(alpha: .75)),
                 ),
               ],
             ),
           ),
           IconButton(
             icon: const Icon(Icons.close_rounded, size: 18),
-            color: dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.55),
+            color: dark ? Colors.white54 : BookNestColors.navyDeep.withValues(alpha: .55),
             onPressed: onCancel,
           ),
         ],
@@ -1010,8 +1048,8 @@ class _ReplyStrip extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         color: dark
-            ? Colors.white.withOpacity(.05)
-            : BookNestColors.navyDeep.withOpacity(.05),
+            ? Colors.white.withValues(alpha: .05)
+            : BookNestColors.navyDeep.withValues(alpha: .05),
         border: Border(
           left: BorderSide(
               color: BookNestColors.cyan, width: 2.5),
@@ -1022,7 +1060,7 @@ class _ReplyStrip extends StatelessWidget {
         children: [
           Icon(Icons.reply_rounded,
               size: 13,
-              color: BookNestColors.cyan.withOpacity(.9)),
+              color: BookNestColors.cyan.withValues(alpha: .9)),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
@@ -1033,8 +1071,8 @@ class _ReplyStrip extends StatelessWidget {
                 fontSize: 12.5,
                 fontStyle: FontStyle.italic,
                 color: dark
-                    ? Colors.white.withOpacity(.65)
-                    : BookNestColors.navyDeep.withOpacity(.65),
+                    ? Colors.white.withValues(alpha: .65)
+                    : BookNestColors.navyDeep.withValues(alpha: .65),
               ),
             ),
           ),
@@ -1074,10 +1112,27 @@ class _VideoContentState extends State<_VideoContent> {
       _loading = true;
       _failed = false;
     });
-    final controller =
-        VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    // Already on this device (sent from here, or downloaded): no data spent,
+    // and it still plays after the 3-day relay copy is gone.
+    final cached = File(mediaCachePath(widget.url));
+    final local = cached.existsSync() && cached.lengthSync() > 0;
+    var controller = local
+        ? VideoPlayerController.file(cached)
+        : VideoPlayerController.networkUrl(Uri.parse(widget.url));
     try {
-      await controller.initialize();
+      try {
+        await controller.initialize();
+      } catch (_) {
+        // Older than 30 days → no longer on BookNest: play the copy from
+        // the reader's own Google Drive backup.
+        try {
+          await controller.dispose();
+        } catch (_) {}
+        final file = await MediaBackupService.instance.recover(widget.url);
+        if (file == null) rethrow;
+        controller = VideoPlayerController.file(file);
+        await controller.initialize();
+      }
       if (!mounted) {
         try {
           await controller.dispose();
@@ -1148,7 +1203,15 @@ class _VideoContentState extends State<_VideoContent> {
               alignment: Alignment.center,
               children: [
                 if (_ready) VideoPlayer(c!),
-                if (!_ready)
+                if (!_ready && CloudinaryService.videoThumb(widget.url).isEmpty)
+                  Positioned.fill(
+                    child: Container(
+                      color: BookNestColors.navyDeep,
+                      child: const Icon(Icons.movie_rounded,
+                          color: Colors.white24, size: 40),
+                    ),
+                  ),
+                if (!_ready && CloudinaryService.videoThumb(widget.url).isNotEmpty)
                   Positioned.fill(
                     child: CachedNetworkImage(
                       imageUrl: CloudinaryService.videoThumb(widget.url),
@@ -1188,7 +1251,7 @@ class _VideoContentState extends State<_VideoContent> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color:
-                                BookNestColors.navyDeep.withOpacity(.55),
+                                BookNestColors.navyDeep.withValues(alpha: .55),
                           ),
                           padding: const EdgeInsets.all(12),
                           child: const Icon(Icons.play_arrow_rounded,
@@ -1198,7 +1261,7 @@ class _VideoContentState extends State<_VideoContent> {
                   Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: BookNestColors.navyDeep.withOpacity(.55),
+                      color: BookNestColors.navyDeep.withValues(alpha: .55),
                     ),
                     padding: const EdgeInsets.all(12),
                     child: const Icon(Icons.play_arrow_rounded,
@@ -1209,7 +1272,7 @@ class _VideoContentState extends State<_VideoContent> {
                     top: 6,
                     right: 6,
                     child: Material(
-                      color: Colors.black.withOpacity(.35),
+                      color: Colors.black.withValues(alpha: .35),
                       shape: const CircleBorder(),
                       child: InkWell(
                         customBorder: const CircleBorder(),
@@ -1255,7 +1318,7 @@ class _VideoContentState extends State<_VideoContent> {
                                   inactiveColor: Colors.white24,
                                   onChanged: duration == 0
                                       ? null
-                                      : (v) => c!.seekTo(
+                                      : (v) => c.seekTo(
                                             Duration(
                                                 milliseconds: v.round()),
                                           ),
@@ -1266,7 +1329,7 @@ class _VideoContentState extends State<_VideoContent> {
                         ),
                         const SizedBox(width: 6),
                         ValueListenableBuilder<VideoPlayerValue>(
-                          valueListenable: c!,
+                          valueListenable: c,
                           builder: (context, value, _) => InkWell(
                             onTap: () {
                               final speeds = const [1.0, 1.5, 2.0];
@@ -1275,7 +1338,7 @@ class _VideoContentState extends State<_VideoContent> {
                                       speeds.length];
                               setState(() {
                                 _speed = next;
-                                c!.setPlaybackSpeed(next);
+                                c.setPlaybackSpeed(next);
                               });
                             },
                             child: Text(
@@ -1284,23 +1347,23 @@ class _VideoContentState extends State<_VideoContent> {
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w800,
                                   color: _speed == 1.0
-                                      ? Colors.white.withOpacity(.85)
+                                      ? Colors.white.withValues(alpha: .85)
                                       : BookNestColors.cyan),
                             ),
                           ),
                         ),
                         const SizedBox(width: 4),
                         ValueListenableBuilder<VideoPlayerValue>(
-                          valueListenable: c!,
+                          valueListenable: c,
                           builder: (context, value, _) => InkWell(
-                            onTap: () => c!.value.volume > 0
-                                ? c!.setVolume(0)
-                                : c!.setVolume(1),
+                            onTap: () => c.value.volume > 0
+                                ? c.setVolume(0)
+                                : c.setVolume(1),
                             child: Icon(
-                              c!.value.volume > 0
+                              c.value.volume > 0
                                   ? Icons.volume_up_rounded
                                   : Icons.volume_off_rounded,
-                              color: Colors.white.withOpacity(.85),
+                              color: Colors.white.withValues(alpha: .85),
                               size: 18,
                             ),
                           ),
@@ -1455,9 +1518,9 @@ class _ImageContent extends StatelessWidget {
             maxWidth: MediaQuery.sizeOf(context).width * .72,
             maxHeight: 320,
           ),
-          // CDN-sized + disk-cached: repeat views paint instantly and a
-          // chat photo never downloads heavier than it is shown.
-          child: CachedNetworkImage(
+          // Saved in the BookNest media folder → shown from the phone (no
+          // data, works forever). Otherwise CDN-sized + disk-cached.
+          child: _localPhoto(url) ?? CachedNetworkImage(
             imageUrl: CloudinaryService.transformUrl(url, width: 720),
             fit: BoxFit.cover,
             memCacheWidth: 720,
@@ -1465,24 +1528,92 @@ class _ImageContent extends StatelessWidget {
             placeholder: (_, __) => Container(
               width: 220,
               height: 160,
-              color: Colors.white.withOpacity(.05),
+              color: Colors.white.withValues(alpha: .05),
               child: const Center(
                 child: CircularProgressIndicator(
                     color: BookNestColors.cyan, strokeWidth: 2),
               ),
             ),
-            errorWidget: (_, __, ___) => Container(
-              width: 220,
-              height: 120,
-              color: Colors.white.withOpacity(.05),
-              child: const Icon(Icons.broken_image_outlined,
-                  color: BookNestColors.cyan),
-            ),
+            errorWidget: (_, __, ___) => _RecoveredImage(url: url),
           ),
         ),
       ),
     );
   }
+}
+
+/// The saved copy of a chat photo, painted from the BookNest media folder,
+/// or null when this device does not have it yet.
+Widget? _localPhoto(String url) {
+  try {
+    final file = File(mediaCachePath(url));
+    if (!file.existsSync() || file.lengthSync() == 0) return null;
+    return Image.file(
+      file,
+      fit: BoxFit.cover,
+      cacheWidth: 720,
+      gaplessPlayback: true,
+      errorBuilder: (_, __, ___) => CachedNetworkImage(
+        imageUrl: CloudinaryService.transformUrl(url, width: 720),
+        fit: BoxFit.cover,
+        memCacheWidth: 720,
+        errorWidget: (_, __, ___) => _RecoveredImage(url: url),
+      ),
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+/// A chat photo that is no longer on BookNest (older than 30 days): shown
+/// from the reader's own Google Drive backup when it is there.
+class _RecoveredImage extends StatefulWidget {
+  final String url;
+  const _RecoveredImage({required this.url});
+
+  @override
+  State<_RecoveredImage> createState() => _RecoveredImageState();
+}
+
+class _RecoveredImageState extends State<_RecoveredImage> {
+  late final Future<File?> _file =
+      MediaBackupService.instance.recover(widget.url);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<File?>(
+      future: _file,
+      builder: (context, snap) {
+        final file = snap.data;
+        if (file != null) {
+          return Image.file(file,
+              fit: BoxFit.cover,
+              cacheWidth: 720,
+              errorBuilder: (_, __, ___) => _broken());
+        }
+        if (snap.connectionState != ConnectionState.done) {
+          return Container(
+            width: 220,
+            height: 160,
+            color: Colors.white.withValues(alpha: .05),
+            child: const Center(
+              child: CircularProgressIndicator(
+                  color: BookNestColors.cyan, strokeWidth: 2),
+            ),
+          );
+        }
+        return _broken();
+      },
+    );
+  }
+
+  Widget _broken() => Container(
+        width: 220,
+        height: 120,
+        color: Colors.white.withValues(alpha: .05),
+        child: const Icon(Icons.broken_image_outlined,
+            color: BookNestColors.cyan),
+      );
 }
 
 /// An attachment chip for any file type — tap to open or download.
@@ -1494,12 +1625,16 @@ class _VoiceContent extends StatefulWidget {
     required this.durationLabel,
     required this.dark,
     required this.mine,
+    this.title,
   });
 
   final String url;
   final String durationLabel;
   final bool dark;
   final bool mine;
+
+  /// Shown above the waveform for audio files (songs, recordings).
+  final String? title;
 
   @override
   State<_VoiceContent> createState() => _VoiceContentState();
@@ -1578,13 +1713,27 @@ class _VoiceContentState extends State<_VoiceContent> {
     });
     try {
       if (!_ready) {
-        await _player.play(UrlSource(widget.url));
+        final cached = File(mediaCachePath(widget.url));
+        await _player.play(cached.existsSync() && cached.lengthSync() > 0
+            ? DeviceFileSource(cached.path)
+            : UrlSource(widget.url));
         await _player.setPlaybackRate(_speeds[_speedIndex]);
       } else {
         await _player.resume();
         await _player.setPlaybackRate(_speeds[_speedIndex]);
       }
     } catch (_) {
+      // Older than 30 days → from the reader's Google Drive backup.
+      final file = _ready
+          ? null
+          : await MediaBackupService.instance.recover(widget.url);
+      if (file != null) {
+        try {
+          await _player.play(DeviceFileSource(file.path));
+          await _player.setPlaybackRate(_speeds[_speedIndex]);
+          return;
+        } catch (_) {}
+      }
       if (mounted) {
         setState(() {
           _loading = false;
@@ -1619,13 +1768,30 @@ class _VoiceContentState extends State<_VoiceContent> {
     final progress =
         total > Duration.zero ? played / total.inMilliseconds : 0.0;
     final onMySide = widget.mine;
+    // Received bubbles are white in light mode — draw in navy there.
+    final fg = onMySide || widget.dark ? Colors.white : BookNestColors.navyDeep;
     final tint = onMySide ? Colors.white : BookNestColors.cyan;
+    final title = widget.title?.trim() ?? '';
     return Container(
       width: 248,
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (title.isNotEmpty) ...[
+            Row(children: [
+              Icon(Icons.audiotrack_rounded, size: 14, color: tint),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
+              ),
+            ]),
+            const SizedBox(height: 6),
+          ],
           Row(children: [
             GestureDetector(
               onTap: _loading ? null : _toggle,
@@ -1634,64 +1800,68 @@ class _VoiceContentState extends State<_VoiceContent> {
                 height: 38,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: tint.withOpacity(.16),
-                  border: Border.all(color: tint.withOpacity(.5)),
+                  color: tint.withValues(alpha: .16),
+                  border: Border.all(color: tint.withValues(alpha: .5)),
                 ),
                 child: _loading
-                    ? const Padding(
-                        padding: EdgeInsets.all(10),
+                    ? Padding(
+                        padding: const EdgeInsets.all(10),
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white70),
+                            strokeWidth: 2, color: fg.withValues(alpha: .7)),
                       )
                     : Icon(
                         _playing
                             ? Icons.pause_rounded
                             : Icons.play_arrow_rounded,
                         size: 22,
-                        color: Colors.white,
+                        color: fg,
                       ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: (details) async {
-                  if (total <= Duration.zero) return;
-                  final box = context.findRenderObject() as RenderBox;
-                  final ratio =
-                      (details.localPosition.dx / box.size.width)
-                          .clamp(0.0, 1.0);
-                  try {
-                    await _player
-                        .seek(Duration(milliseconds: (ratio * total.inMilliseconds).round()));
-                    setState(() =>
-                        _position = Duration(milliseconds: (ratio * total.inMilliseconds).round()));
-                  } catch (_) {}
-                },
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Waveform: fixed bars, filled by progress.
-                    SizedBox(
-                      height: 26,
-                      child: CustomPaint(
-                        size: const Size(double.infinity, 26),
-                        painter: _VoiceWavePainter(
-                          progress: progress,
-                          played: Colors.white,
-                          rest: Colors.white.withOpacity(.38),
+              child: LayoutBuilder(
+                builder: (context, box) => GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (details) async {
+                    // Not loaded yet: a tap on the wave starts playing.
+                    if (!_ready) {
+                      if (!_loading && !_playing) await _toggle();
+                      return;
+                    }
+                    if (total <= Duration.zero || box.maxWidth <= 0) return;
+                    final ratio =
+                        (details.localPosition.dx / box.maxWidth).clamp(0.0, 1.0);
+                    final to = Duration(
+                        milliseconds: (ratio * total.inMilliseconds).round());
+                    try {
+                      await _player.seek(to);
+                      if (mounted) setState(() => _position = to);
+                    } catch (_) {}
+                  },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Waveform: fixed bars, filled by progress.
+                      SizedBox(
+                        height: 26,
+                        child: CustomPaint(
+                          size: const Size(double.infinity, 26),
+                          painter: _VoiceWavePainter(
+                            progress: progress,
+                            played: onMySide ? Colors.white : BookNestColors.cyan,
+                            rest: fg.withValues(alpha: .32),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${_clock(_playing || _position > Duration.zero ? _position : Duration.zero)}'
-                      ' · ${_clock(total)}',
-                      style: TextStyle(
-                          fontSize: 10.5, color: Colors.white.withOpacity(.75)),
-                    ),
-                  ],
+                      const SizedBox(height: 3),
+                      Text(
+                        '${_clock(_playing || _position > Duration.zero ? _position : Duration.zero)}'
+                        ' · ${total > Duration.zero ? _clock(total) : '--:--'}',
+                        style: TextStyle(fontSize: 10.5, color: fg.withValues(alpha: .75)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1703,14 +1873,14 @@ class _VoiceContentState extends State<_VoiceContent> {
                     const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  color: Colors.white.withOpacity(.14),
+                  color: fg.withValues(alpha: .12),
                 ),
                 child: Text(
                   '${_speeds[_speedIndex].toStringAsFixed(_speeds[_speedIndex] == 2.0 ? 0 : 1)}×',
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
-                      color: Colors.white),
+                      color: fg),
                 ),
               ),
             ),
@@ -1718,8 +1888,7 @@ class _VoiceContentState extends State<_VoiceContent> {
           if (_error != null) ...[
             const SizedBox(height: 4),
             Text(_error!,
-                style: TextStyle(
-                    fontSize: 10.5, color: Colors.white.withOpacity(.7))),
+                style: TextStyle(fontSize: 10.5, color: fg.withValues(alpha: .7))),
           ],
         ],
       ),
@@ -1800,7 +1969,6 @@ class _FileContent extends StatelessWidget {
       final segments = uri.pathSegments;
       if (segments.isNotEmpty) {
         final last = Uri.decodeComponent(segments.last);
-        final dot = last.indexOf('.', last.indexOf('/') == -1 ? 0 : last.length - 8);
         final clean = last.contains('/') ? last.split('/').last : last;
         // Cloudinary appends an extension: 'invoice1234.pdf' stays, hashed
         // ids keep their extension too — show as-is, minus version suffix.
@@ -1824,8 +1992,8 @@ class _FileContent extends StatelessWidget {
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: dark ? Colors.white.withOpacity(.06) : Colors.white,
-          border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+          color: dark ? Colors.white.withValues(alpha: .06) : Colors.white,
+          border: Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1909,8 +2077,8 @@ class _BookShareContent extends StatelessWidget {
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: dark ? Colors.white.withOpacity(.06) : Colors.white,
-          border: Border.all(color: BookNestColors.cyan.withOpacity(.35)),
+          color: dark ? Colors.white.withValues(alpha: .06) : Colors.white,
+          border: Border.all(color: BookNestColors.cyan.withValues(alpha: .35)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1977,10 +2145,10 @@ class ChatDayChip extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
-          color: dark ? Colors.white.withOpacity(.07) : BookNestColors.navyDeep.withOpacity(.07),
+          color: dark ? Colors.white.withValues(alpha: .07) : BookNestColors.navyDeep.withValues(alpha: .07),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: dark ? Colors.white.withOpacity(.08) : BookNestColors.navyDeep.withOpacity(.08),
+            color: dark ? Colors.white.withValues(alpha: .08) : BookNestColors.navyDeep.withValues(alpha: .08),
           ),
         ),
         child: Text(
@@ -1988,7 +2156,7 @@ class ChatDayChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 11.5,
             fontWeight: FontWeight.w700,
-            color: dark ? BookNestColors.darkTextPrimary.withOpacity(.85) : BookNestColors.navyDeep,
+            color: dark ? BookNestColors.darkTextPrimary.withValues(alpha: .85) : BookNestColors.navyDeep,
           ),
         ),
       ),
@@ -2013,10 +2181,12 @@ Future<void> showMessageTranslation(
     return;
   }
   showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
     context: context,
     showDragHandle: true,
     builder: (sheetContext) {
-      return SafeArea(
+      return SheetBody(
         child: FutureBuilder<Map<String, dynamic>?>(
           future: BackendApi.instance.translateText(text, target),
           builder: (context, snap) {
@@ -2077,7 +2247,7 @@ Future<void> showMessageTranslation(
                               height: 1.45,
                               color: dark
                                   ? Colors.white54
-                                  : BookNestColors.navyDeep.withOpacity(.7))),
+                                  : BookNestColors.navyDeep.withValues(alpha: .7))),
                       const SizedBox(height: 12),
                     ],
                     Text(translated,
@@ -2166,9 +2336,9 @@ class BadgedAvatar extends StatelessWidget {
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: dark ? Colors.white.withOpacity(.08) : Colors.white,
+              color: dark ? Colors.white.withValues(alpha: .08) : Colors.white,
               border: Border.all(
-                  color: BookNestColors.cyan.withOpacity(.5), width: .8),
+                  color: BookNestColors.cyan.withValues(alpha: .5), width: .8),
             ),
             child: Icon(icon, size: 10, color: BookNestColors.cyan),
           )
@@ -2251,7 +2421,7 @@ Future<void> showForwardPicker(
                                   return ListTile(
                                     leading: CircleAvatar(
                                       backgroundColor: BookNestColors.cyan
-                                          .withOpacity(.15),
+                                          .withValues(alpha: .15),
                                       child: Icon(
                                         t.isClub
                                             ? Icons.groups_rounded
@@ -2380,11 +2550,13 @@ void showMessageInfo(
     }
   }
   showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
     context: context,
     showDragHandle: true,
     builder: (sheetContext) {
       String labelOf(String uid) => nameOf?.call(uid) ?? 'Reader';
-      return SafeArea(
+      return SheetBody(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
           child: Column(
@@ -2405,7 +2577,7 @@ void showMessageInfo(
                         : Icons.done_all_rounded,
                     size: 18,
                     color: readBy.isEmpty
-                        ? BookNestColors.navyDeep.withOpacity(.5)
+                        ? BookNestColors.navyDeep.withValues(alpha: .5)
                         : BookNestColors.cyan,
                   ),
                   const SizedBox(width: 10),
@@ -2429,7 +2601,7 @@ void showMessageInfo(
                 'Sent ${chatTimeLabel(message['createdAt'])}',
                 style: TextStyle(
                     fontSize: 12.5,
-                    color: dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.6)),
+                    color: dark ? Colors.white54 : BookNestColors.navyDeep.withValues(alpha: .6)),
               ),
               if ((message['type']?.toString() == 'file') &&
                   message['fileSize'] != null) ...[
@@ -2439,7 +2611,7 @@ void showMessageInfo(
                   '${((message['fileSize'] as num?)?.toInt() ?? 0) < 1024 * 1024 ? '${((message['fileSize'] as num?)!.toInt() / 1024).toStringAsFixed(0)} KB' : '${((message['fileSize'] as num?)!.toInt() / (1024 * 1024)).toStringAsFixed(1)} MB'}',
                   style: TextStyle(
                       fontSize: 12.5,
-                      color: dark ? Colors.white54 : BookNestColors.navyDeep.withOpacity(.6)),
+                      color: dark ? Colors.white54 : BookNestColors.navyDeep.withValues(alpha: .6)),
                 ),
               ],
               if (readBy.isNotEmpty) ...[
@@ -2521,9 +2693,6 @@ class ChatComposer extends StatefulWidget {
   /// A recorded-and-uploaded voice note from the mic sheet.
   final Future<void> Function(VoiceNoteResult voice)? onSendVoice;
 
-  /// The reader is typing — throttled ping for the typing indicator.
-  final VoidCallback? onTyping;
-
   /// BookNest emote tapped on our own keyboard — sends instantly,
   /// Snapchat-style.
   final Future<void> Function(EmojiDef emote)? onSendEmote;
@@ -2541,10 +2710,6 @@ class ChatComposer extends StatefulWidget {
     this.enabled = true,
     this.replyTo,
     this.onCancelReply,
-
-    /// Fired (throttled inside) while the reader types — feeds the
-    /// room's typing indicator.
-    this.onTyping,
   });
 
   @override
@@ -2565,7 +2730,19 @@ class _ChatComposerState extends State<ChatComposer> {
   void _onInputChanged() {
     final empty = _input.text.trim().isEmpty;
     if (empty != _inputEmpty) setState(() => _inputEmpty = empty);
+    // Live typing indicator for whoever is in this chat. Only real text
+    // changes count (not cursor moves); clearing the field — or sending,
+    // which clears it — tells the others straight away.
+    if (_input.text == _lastTypingText) return;
+    _lastTypingText = _input.text;
+    if (empty) {
+      TypingBroadcaster.instance.stopped();
+    } else {
+      TypingBroadcaster.instance.iAmTyping();
+    }
   }
+
+  String _lastTypingText = '';
 
   Future<void> _sendEmote(EmojiDef emote) async {
     if (_uploading || widget.onSendEmote == null) return;
@@ -2615,7 +2792,7 @@ class _ChatComposerState extends State<ChatComposer> {
       }
     }
     _input.clear();
-    widget.onTyping?.call();
+    TypingBroadcaster.instance.stopped();
     await widget.onSendText(text);
   }
 
@@ -2743,7 +2920,14 @@ class _ChatComposerState extends State<ChatComposer> {
   /// Any file format, through the BookNest picker.
   Future<void> _recordVoice() async {
     if (_uploading || widget.onSendVoice == null) return;
-    final voice = await showVoiceRecorder(context);
+    // "recording audio…" for the others while the recorder is open.
+    TypingBroadcaster.instance.startRecording();
+    VoiceNoteResult? voice;
+    try {
+      voice = await showVoiceRecorder(context);
+    } finally {
+      TypingBroadcaster.instance.stopped();
+    }
     if (voice == null || !mounted) return;
     setState(() => _uploading = true);
     try {
@@ -2784,9 +2968,11 @@ class _ChatComposerState extends State<ChatComposer> {
 
   void _openAttachSheet() {
     showModalBottomSheet<void>(
+      isScrollControlled: true,
+      useSafeArea: true,
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => SheetBody(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2890,8 +3076,8 @@ class _ChatComposerState extends State<ChatComposer> {
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
-        color: (dark ? BookNestColors.darkChatBackground : Colors.white).withOpacity(.97),
-        border: Border(top: BorderSide(color: theme.dividerColor.withOpacity(.5))),
+        color: (dark ? BookNestColors.darkChatBackground : Colors.white).withValues(alpha: .97),
+        border: Border(top: BorderSide(color: theme.dividerColor.withValues(alpha: .5))),
       ),
       child: SafeArea(
         top: false,
@@ -2972,7 +3158,6 @@ class _ChatComposerState extends State<ChatComposer> {
                 child: TextField(
                   controller: _input,
                   enabled: widget.enabled,
-                  onChanged: (_) => widget.onTyping?.call(),
                   minLines: 1,
                   maxLines: 4,
                   textInputAction: TextInputAction.send,
@@ -3046,10 +3231,10 @@ class ChatAvatar extends StatelessWidget {
   }
 }
 
-/// Uploads any chat attachment (documents, audio, PDFs…) and returns the
-/// hosted URL, or null when the upload could not complete.
+/// Uploads any chat attachment (documents, audio, PDFs, videos) through the
+/// private 3-day R2 relay and returns its link, or null on failure.
 Future<String?> uploadChatFile(String filename, Uint8List bytes) {
-  return CloudinaryService.uploadRaw(bytes: bytes, filename: filename);
+  return ChatRelay.upload(bytes, filename);
 }
 
 /// Uploads chat photos to Cloudinary under the chat folder and returns the
@@ -3488,7 +3673,7 @@ class _ChatThemeSheetState extends State<_ChatThemeSheet> {
                                 ? BookNestColors.cyan
                                 : Theme.of(context)
                                     .dividerColor
-                                    .withOpacity(.6),
+                                    .withValues(alpha: .6),
                           ),
                         ),
                         child: ClipRRect(
@@ -3641,7 +3826,7 @@ class _LinkTextState extends State<_LinkText> {
         style: TextStyle(
             color: widget.linkColor,
             decoration: TextDecoration.underline,
-            decorationColor: widget.linkColor.withOpacity(.5),
+            decorationColor: widget.linkColor.withValues(alpha: .5),
             fontWeight: FontWeight.w600),
         recognizer: recognizer,
       ));
@@ -3732,7 +3917,7 @@ class _LinkPreviewCardState extends State<_LinkPreviewCard> {
             Text('Loading preview…',
                 style: TextStyle(
                     fontSize: 11.5,
-                    color: BookNestColors.cyan.withOpacity(.8))),
+                    color: BookNestColors.cyan.withValues(alpha: .8))),
           ],
         ),
       );
@@ -3745,7 +3930,7 @@ class _LinkPreviewCardState extends State<_LinkPreviewCard> {
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Material(
-        color: Colors.black.withOpacity(.18),
+        color: Colors.black.withValues(alpha: .18),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -3800,6 +3985,145 @@ class _LinkPreviewCardState extends State<_LinkPreviewCard> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// WhatsApp-style bubble at the foot of a chat while someone is typing
+/// (three bouncing dots) or recording a voice note (mic + "recording
+/// audio…"). Takes no space when nobody is. [group] adds names.
+class TypingBubble extends StatelessWidget {
+  final bool group;
+  const TypingBubble({super.key, this.group = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return ValueListenableBuilder<Map<String, TypingActivity>>(
+      valueListenable: TypingBroadcaster.instance.roomActivity,
+      builder: (context, people, _) {
+        final recording =
+            people.isNotEmpty && people.values.every((a) => a.recording);
+        final showText = group || recording;
+        return AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          alignment: Alignment.bottomLeft,
+          child: people.isEmpty
+              ? const SizedBox(width: double.infinity)
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Semantics(
+                      liveRegion: true,
+                      label: TypingBroadcaster.label(people, group: true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: dark ? const Color(0xFF1C2230) : Colors.white,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(18),
+                            topRight: Radius.circular(18),
+                            bottomRight: Radius.circular(18),
+                            bottomLeft: Radius.circular(4),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black
+                                  .withValues(alpha: dark ? .25 : .06),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (recording)
+                              const Icon(Icons.mic_rounded,
+                                  size: 16, color: BookNestColors.cyan)
+                            else
+                              const _TypingDots(),
+                            if (showText) ...[
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  TypingBroadcaster.label(people,
+                                      group: group),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.italic,
+                                    color: Theme.of(context).hintColor,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _TypingDots extends StatefulWidget {
+  const _TypingDots();
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1200))
+    ..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dot = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : BookNestColors.navy;
+    return SizedBox(
+      height: 14,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) => Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: List.generate(3, (i) {
+            final phase = (_c.value - i * 0.18) % 1.0;
+            final lift = phase < .5 ? math.sin(phase * 2 * math.pi) : 0.0;
+            return Padding(
+              padding: EdgeInsets.only(left: i == 0 ? 0 : 4),
+              child: Transform.translate(
+                offset: Offset(0, -4 * lift),
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: dot.withValues(alpha: .35 + .5 * lift),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            );
+          }),
         ),
       ),
     );

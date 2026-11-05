@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../config/theme.dart';
 import '../../../services/backend_api.dart';
-import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 
 /// Reviews hub (author side): every work you've written, ready to inspect.
@@ -19,7 +18,6 @@ class _ReviewsHubScreenState extends State<ReviewsHubScreen> {
   List<Map<String, dynamic>> _works = [];
   bool _loading = true;
 
-  String? get _viewerId => SupabaseService().auth.currentUser?.id;
 
   @override
   void initState() {
@@ -34,7 +32,7 @@ class _ReviewsHubScreenState extends State<ReviewsHubScreen> {
       final rows = (res?['books'] as List?) ?? const [];
       if (!mounted) return;
       setState(() {
-        _works = (rows as List)
+        _works = rows
             .map((row) => Map<String, dynamic>.from(row as Map))
             .toList();
         _loading = false;

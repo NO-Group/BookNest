@@ -1,11 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend_api.dart';
 import 'background_link.dart';
+import 'media_storage.dart';
 import 'notification_service.dart';
 import 'punishment_gate.dart';
+import 'push_service.dart';
 import 'supabase_service.dart';
 
 /// Zero-external message notifications. While BookNest is alive — in hand
@@ -85,6 +88,7 @@ class InboxWatcher {
       final text = last is Map ? (last['text']?.toString() ?? '') : '';
       final known = _seen[id];
       _seen[id] = '$sender|$text';
+      _autoSaveMedia('dm.messages', id, last, known, '$sender|$text');
       if (!_primed || known == null || known == '$sender|$text') continue;
       if (sender == me || sender.isEmpty) continue;
       if (_viewing.contains(id)) continue;
@@ -109,6 +113,7 @@ class InboxWatcher {
       final text = last is Map ? (last['text']?.toString() ?? '') : '';
       final known = _seen['club:$id'];
       _seen['club:$id'] = '$sender|$text';
+      _autoSaveMedia('chat.messages', id, last, known, '$sender|$text');
       if (!_primed || known == null || known == '$sender|$text') continue;
       if (sender == me || sender.isEmpty) continue;
       if (_viewing.contains(id)) continue;
@@ -120,6 +125,36 @@ class InboxWatcher {
         body: _preview(text, fallback: 'New message in the club'),
       );
     }
+  }
+
+  final Set<String> _mediaFetched = <String>{};
+
+  /// New media in a chat the reader has not opened: save it to the BookNest
+  /// media folder now, long before the server copy expires (photos 30
+  /// days, files/voice notes/videos 3 days). Reads only — never marks read.
+  void _autoSaveMedia(String action, String conversationId, Object? last,
+      String? known, String signature) {
+    if (!MediaStorage.autoSave || last is! Map) return;
+    const media = {'image', 'video', 'file', 'voice', 'audio'};
+    if (!media.contains(last['type']?.toString())) return;
+    if (known == signature) return; // nothing new since the last sweep
+    final at = DateTime.tryParse(last['createdAt']?.toString() ?? '');
+    if (at != null && DateTime.now().difference(at) > const Duration(days: 4)) {
+      return; // older than the relay window — nothing left to rescue
+    }
+    if (!_mediaFetched.add('$conversationId|$signature')) return;
+    unawaited(() async {
+      try {
+        final res = await BackendApi.instance
+            .callFresh(action, {'conversationId': conversationId});
+        final list = res?['messages'];
+        if (list is! List) return;
+        MediaStorage.autoSaveFrom([
+          for (final m in list)
+            if (m is Map) Map<String, dynamic>.from(m),
+        ]);
+      } catch (_) {}
+    }());
   }
 
   DateTime? _lastBeat;
@@ -203,6 +238,11 @@ class InboxWatcher {
 
   void _notify(String conversationId,
       {required String title, required String body}) {
+    // With push active, alerts outside the app come from push (Android
+    // shows them even when the app is closed) — never both.
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    final onScreen = lifecycle == null || lifecycle == AppLifecycleState.resumed;
+    if (PushService.instance.active && !onScreen) return;
     // Deterministic id per conversation: follow-ups replace instead of
     // stacking a banner tower.
     NotificationService.instance.showInstant(

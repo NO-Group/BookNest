@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../config/theme.dart';
-import '../../components/report_sheet.dart';
 
 /// Terms of Service — the honest, readable agreement between BookNest and
 /// its readers. Real rules, no boilerplate fog.
@@ -131,10 +130,10 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
         color: Theme.of(context).brightness == Brightness.dark
-            ? Colors.white.withOpacity(.04)
-            : BookNestColors.navyDeep.withOpacity(.03),
+            ? Colors.white.withValues(alpha: .04)
+            : BookNestColors.navyDeep.withValues(alpha: .03),
         border: Border.all(
-            color: BookNestColors.cyan.withOpacity(.18)),
+            color: BookNestColors.cyan.withValues(alpha: .18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

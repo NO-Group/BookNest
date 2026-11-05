@@ -115,12 +115,12 @@ class _WrappedScreenState extends State<WrappedScreen> {
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       gradient: LinearGradient(colors: [
-                                        BookNestColors.cyan.withOpacity(.28),
-                                        BookNestColors.cyanSoft.withOpacity(.16),
+                                        BookNestColors.cyan.withValues(alpha: .28),
+                                        BookNestColors.cyanSoft.withValues(alpha: .16),
                                       ]),
                                       border: Border.all(
                                           color: BookNestColors.cyan
-                                              .withOpacity(.5)),
+                                              .withValues(alpha: .5)),
                                     ),
                                     child: const Icon(
                                         Icons.auto_stories_rounded,

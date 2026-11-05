@@ -4,7 +4,6 @@ import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../config/app_state.dart';
 
 import '../../config/theme.dart';
@@ -71,12 +70,12 @@ class _LoaderPainter extends CustomPainter {
     canvas.drawCircle(
       c + Offset(math.cos(angle) * orbitR, math.sin(angle) * orbitR * .55),
       w * .035,
-      Paint()..color = ink.withOpacity(.9),
+      Paint()..color = ink.withValues(alpha: .9),
     );
     canvas.drawCircle(
       c + Offset(math.cos(angle) * orbitR, math.sin(angle) * orbitR * .55),
       w * .07,
-      Paint()..color = ink.withOpacity(.18),
+      Paint()..color = ink.withValues(alpha: .18),
     );
 
     // Open book: two page fans that breathe with the cycle.
@@ -88,7 +87,7 @@ class _LoaderPainter extends CustomPainter {
       ..shader = ui.Gradient.linear(
         Offset(c.dx - pageW, c.dy - pageH / 2),
         Offset(c.dx + pageW, c.dy + pageH / 2),
-        [ink.withOpacity(.85), ink.withOpacity(.45)],
+        [ink.withValues(alpha: .85), ink.withValues(alpha: .45)],
       );
     final spineX = c.dx;
     final baseY = c.dy + pageH * .42;
@@ -124,7 +123,7 @@ class _LoaderPainter extends CustomPainter {
       start,
       end,
       Paint()
-        ..color = navy.withOpacity(.9)
+        ..color = navy.withValues(alpha: .9)
         ..strokeWidth = w * .03
         ..strokeCap = StrokeCap.round,
     );
@@ -209,7 +208,7 @@ class BookCover extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: BookNestColors.navyDeep.withOpacity(.25),
+            color: BookNestColors.navyDeep.withValues(alpha: .25),
             blurRadius: 12,
             offset: const Offset(0, 5),
           ),
@@ -274,17 +273,35 @@ class SectionHeader extends StatelessWidget {
           child: Text(title,
               style: Theme.of(context)
                   .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800)),
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800, fontSize: 19, letterSpacing: -.4)),
         ),
         if (actionLabel != null)
-          GestureDetector(
+          InkWell(
             onTap: onAction,
-            child: Text(actionLabel!,
-                style: const TextStyle(
-                    color: BookNestColors.cyan,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13)),
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: BookNestColors.cyan.withValues(alpha: .1),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(actionLabel!,
+                    style: TextStyle(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? BookNestColors.cyan
+                            : const Color(0xFF007C90),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5)),
+                const SizedBox(width: 2),
+                Icon(Icons.chevron_right_rounded,
+                    size: 16,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? BookNestColors.cyan
+                        : const Color(0xFF007C90)),
+              ]),
+            ),
           ),
       ],
     );
@@ -320,8 +337,8 @@ class EmptyState extends StatelessWidget {
               height: 76,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: BookNestColors.cyan.withOpacity(.1),
-                border: Border.all(color: BookNestColors.cyan.withOpacity(.3)),
+                color: BookNestColors.cyan.withValues(alpha: .1),
+                border: Border.all(color: BookNestColors.cyan.withValues(alpha: .3)),
               ),
               child: Icon(icon, color: BookNestColors.cyan, size: 34),
             ),
@@ -361,8 +378,8 @@ class StatTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: BookNestColors.cyan.withOpacity(.08),
-        border: Border.all(color: BookNestColors.cyan.withOpacity(.22)),
+        color: BookNestColors.cyan.withValues(alpha: .08),
+        border: Border.all(color: BookNestColors.cyan.withValues(alpha: .22)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -409,10 +426,10 @@ class GlassSheet extends StatelessWidget {
             height: MediaQuery.sizeOf(context).height * heightFactor,
             decoration: BoxDecoration(
               color: (dark ? BookNestColors.darkChatBackground : Colors.white)
-                  .withOpacity(.96),
+                  .withValues(alpha: .96),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(30)),
-              border: Border.all(color: BookNestColors.cyan.withOpacity(.22)),
+              border: Border.all(color: BookNestColors.cyan.withValues(alpha: .22)),
             ),
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
             child: Column(
@@ -460,7 +477,7 @@ class GradientButton extends StatelessWidget {
       height: 52,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(26),
           gradient: const LinearGradient(
             colors: [BookNestColors.cyanSoft, BookNestColors.cyan],
             begin: Alignment.centerLeft,
@@ -468,7 +485,7 @@ class GradientButton extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: BookNestColors.cyan.withOpacity(.28),
+              color: BookNestColors.cyan.withValues(alpha: .28),
               blurRadius: 16,
               offset: const Offset(0, 7),
             ),
@@ -479,8 +496,7 @@ class GradientButton extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.transparent,
             shadowColor: Colors.transparent,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
+            shape: const StadiumBorder(),
           ),
           icon: busy
               ? const SizedBox(
@@ -528,7 +544,7 @@ class TagChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           color: selected ? BookNestColors.cyan : Colors.transparent,
           border: Border.all(
-            color: selected ? BookNestColors.cyan : BookNestColors.cyan.withOpacity(.4),
+            color: selected ? BookNestColors.cyan : BookNestColors.cyan.withValues(alpha: .4),
           ),
         ),
         child: Text(
@@ -711,7 +727,7 @@ class _ShimmerBoxState extends State<ShimmerBox> with SingleTickerProviderStateM
             gradient: LinearGradient(
               begin: Alignment(-1 + 2 * _controller.value, 0),
               end: Alignment(0 + 2 * _controller.value, 0),
-              colors: [base, glow.withOpacity(.45), base],
+              colors: [base, glow.withValues(alpha: .45), base],
             ),
           ),
         );
@@ -787,10 +803,10 @@ class GlassPanel extends StatelessWidget {
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: base.withOpacity(opacity),
+            color: base.withValues(alpha: opacity),
             borderRadius: BorderRadius.circular(radius),
             border: border ??
-                Border.all(color: BookNestColors.cyan.withOpacity(.2)),
+                Border.all(color: BookNestColors.cyan.withValues(alpha: .2)),
           ),
           child: child,
         ),
@@ -826,10 +842,10 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
           filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
           child: Container(
             decoration: BoxDecoration(
-              color: base.withOpacity(.66),
+              color: base.withValues(alpha: .66),
               border: Border(
                 bottom: BorderSide(
-                    color: BookNestColors.cyan.withOpacity(.15)),
+                    color: BookNestColors.cyan.withValues(alpha: .15)),
               ),
             ),
           ),

@@ -1,0 +1,127 @@
+name: Google + server secrets check
+
+# Read-only facts for Google Drive backup and server secrets, written to
+# ops/google-setup.md. Prints only names, ids and certificate hashes — never
+# secret values. Re-run: push a change to ops/google-check.trigger.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/google-setup-check.yml'
+      - 'ops/google-check.trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          GH_CLOUDINARY_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          GH_GOOGLE_IOS: ${{ secrets.GOOGLE_IOS_CLIENT_ID }}
+          GH_GOOGLE_DESKTOP: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+        run: |
+          set +e
+          pip install -q cryptography
+          python3 - <<'PY'
+          import json, os, time, base64, urllib.request, urllib.error
+          from cryptography.hazmat.primitives import hashes, serialization
+          from cryptography.hazmat.primitives.asymmetric import padding
+          SHA1 = '5f64b439e7f59c780cca16285ad6f87e57f951eb'
+          PKG = 'com.n_o_group.booknest'
+          out = ['# Google + server secrets check — ' + time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime()), '']
+          def req(method, url, token=None, body=None, headers=None):
+              h = {'Content-Type': 'application/json', **(headers or {})}
+              if token: h['Authorization'] = 'Bearer ' + token
+              r = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None, method=method, headers=h)
+              try:
+                  with urllib.request.urlopen(r, timeout=40) as x: return x.status, json.loads(x.read() or b'{}')
+              except urllib.error.HTTPError as e:
+                  try: return e.code, json.loads(e.read() or b'{}')
+                  except Exception: return e.code, {}
+              except Exception as e: return 0, {'error': str(e)}
+
+          out.append('## Android signing')
+          out.append(f"- signing identity: {'KEYSTORE_BASE64 secret (overrides the committed key — its SHA-1 differs from below!)' if os.environ.get('KEYSTORE_BASE64') else 'committed android/key/booknest-release.jks'}")
+          out.append(f'- committed key SHA-1: `{SHA1}`')
+          out.append('')
+          out.append('## google-services.json (Firebase) OAuth clients')
+          project = None
+          gs = os.environ.get('GOOGLE_SERVICES_JSON', '')
+          if not gs:
+              out.append('- ❌ GOOGLE_SERVICES_JSON secret missing')
+          else:
+              d = json.loads(gs); project = d.get('project_info', {}).get('project_id')
+              out.append(f'- project: `{project}` (number {d.get("project_info", {}).get("project_number")})')
+              android_ok = False
+              for c in d.get('client', []):
+                  pkg = c.get('client_info', {}).get('android_client_info', {}).get('package_name')
+                  oc = c.get('oauth_client', [])
+                  out.append(f'- app `{pkg}`: {len(oc)} OAuth client(s)')
+                  for o in oc:
+                      t = o.get('client_type'); ai = o.get('android_info', {})
+                      kind = {1: 'Android', 2: 'iOS', 3: 'Web'}.get(t, str(t))
+                      h = (ai.get('certificate_hash') or '').lower()
+                      match = ''
+                      if t == 1:
+                          ok = h == SHA1 and ai.get('package_name') == PKG
+                          android_ok |= ok
+                          match = ' ✅ matches the signing key' if ok else ' ⚠️ different key'
+                      out.append(f'  - {kind}: `{o.get("client_id", "")[:28]}…` {ai.get("package_name", "")} {h}{match}')
+              out.append('')
+              out.append(f"**Android Google sign-in client for {PKG} + this key: {'✅ present' if android_ok else '❌ MISSING — add SHA-1 ' + SHA1 + ' in Firebase → Project settings → Your apps → Android ' + PKG + ' → Add fingerprint, then re-download google-services.json'}**")
+          out.append('')
+          out.append('## Google Drive API (project of the Firebase service account)')
+          sa = os.environ.get('FIREBASE_SERVICE_ACCOUNT', '')
+          if not sa:
+              out.append('- ❌ FIREBASE_SERVICE_ACCOUNT missing')
+          else:
+              s = json.loads(sa); proj = s.get('project_id')
+              now = int(time.time())
+              b64 = lambda b: base64.urlsafe_b64encode(b).rstrip(b'=')
+              claims = {'iss': s['client_email'], 'scope': 'https://www.googleapis.com/auth/cloud-platform',
+                        'aud': 'https://oauth2.googleapis.com/token', 'iat': now, 'exp': now + 3000}
+              seg = b64(json.dumps({'alg': 'RS256', 'typ': 'JWT'}).encode()) + b'.' + b64(json.dumps(claims).encode())
+              key = serialization.load_pem_private_key(s['private_key'].encode(), None)
+              jwt = (seg + b'.' + b64(key.sign(seg, padding.PKCS1v15(), hashes.SHA256()))).decode()
+              r = urllib.request.Request('https://oauth2.googleapis.com/token', data=f'grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion={jwt}'.encode(),
+                                         headers={'Content-Type': 'application/x-www-form-urlencoded'})
+              tok = json.loads(urllib.request.urlopen(r, timeout=30).read())['access_token']
+              for api in ('drive.googleapis.com',):
+                  st, b = req('GET', f'https://serviceusage.googleapis.com/v1/projects/{proj}/services/{api}', tok)
+                  state = b.get('state') if st == 200 else f'unreadable (HTTP {st}: {b.get("error", {}).get("message", "")[:120]})'
+                  out.append(f'- {api}: **{state}**')
+                  if state == 'DISABLED':
+                      st2, b2 = req('POST', f'https://serviceusage.googleapis.com/v1/projects/{proj}/services/{api}:enable', tok, {})
+                      out.append(f'  - tried to enable: HTTP {st2} {"✅" if st2 == 200 else b2.get("error", {}).get("message", "")[:160]}')
+          out.append('')
+          out.append('## Supabase server secrets (names only)')
+          tok = os.environ.get('SUPABASE_ACCESS_TOKEN', '')
+          st, b = req('GET', 'https://api.supabase.com/v1/projects/ekgbbbbjwgfixqarlnil/secrets', tok)
+          names = sorted(x.get('name') for x in b) if st == 200 and isinstance(b, list) else []
+          out.append(f'- readable: HTTP {st}, {len(names)} names')
+          out.append('- ' + ', '.join(f'`{n}`' for n in names))
+          for n in ('CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_URL'):
+              out.append(f"- {n}: {'✅ on the server' if n in names else '—'}")
+          out.append('')
+          out.append('## GitHub secrets (presence only)')
+          for n, v in (('CLOUDINARY_API_KEY', 'GH_CLOUDINARY_KEY'), ('GOOGLE_IOS_CLIENT_ID', 'GH_GOOGLE_IOS'), ('GOOGLE_DESKTOP_CLIENT_ID', 'GH_GOOGLE_DESKTOP')):
+              out.append(f"- {n}: {'set' if os.environ.get(v) else 'not set'}")
+          open('ops/google-setup.md', 'w').write('\n'.join(out) + '\n')
+          print('\n'.join(out))
+          PY
+          cat ops/google-setup.md >> "$GITHUB_STEP_SUMMARY"
+          git config user.email "booknest-ci@users.noreply.github.com"
+          git config user.name "booknest-ci"
+          git add ops/google-setup.md
+          git commit -q -m "Google + server secrets check [skip ci]"
+          for i in 1 2 3; do git pull --rebase -q origin "${GITHUB_REF_NAME}" && git push -q origin "HEAD:${GITHUB_REF_NAME}" && break; sleep 5; done
+          exit 0

@@ -1,6 +1,6 @@
 // lib/presentation/screens/feed/feed_screen.dart
 
-import 'dart:async' show unawaited;
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 
@@ -17,6 +17,7 @@ import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 import '../../components/skeleton_kit.dart';
 import '../../components/report_sheet.dart';
+import 'feed_side_panel.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
@@ -64,14 +65,26 @@ class _FeedScreenState extends State<FeedScreen>
       CurvedAnimation(parent: _stylusController, curve: Curves.easeOutBack),
     );
     _loadPosts();
+    // A background refresh found new posts — repaint from the cache.
+    _cacheSub = BackendApi.instance.cacheUpdates
+        .where((action) => action == 'posts.list')
+        .listen((_) {
+      if (mounted) _loadPosts();
+    });
   }
 
-  Future<void> _loadPosts() async {
+  StreamSubscription<String>? _cacheSub;
+
+  Future<void> _loadPosts({bool fresh = false}) async {
     // Cutover: the feed lives on the app's own data store now; the legacy
     // SQL read remains as a graceful fallback while devices update.
+    // Normal opens answer from the device cache instantly (a rev-checked
+    // refresh follows in the background); pull-to-refresh asks the server.
     List<dynamic> response;
     try {
-      final res = await BackendApi.instance.callFresh('posts.list');
+      final res = fresh
+          ? await BackendApi.instance.callFresh('posts.list')
+          : await BackendApi.instance.call('posts.list');
       response = (res?['posts'] as List?) ?? const [];
     } catch (_) {
       response = const [];
@@ -85,12 +98,18 @@ class _FeedScreenState extends State<FeedScreen>
             .order('created_at', ascending: false);
       } catch (_) {}
     }
+    final ids = <String>[];
+    for (final p in response) {
+      if (p is Map && p['id'] != null) ids.add(p['id'].toString());
+    }
+    if (!mounted) return;
+    // Paint the posts first — like counts follow without holding the screen.
+    setState(() {
+      _posts = response;
+      _filteredPosts = response;
+      _isLoading = false;
+    });
     try {
-      // Attach cloud like stats (best-effort — the feed never blocks on it).
-      final ids = <String>[];
-      for (final p in response) {
-        if (p is Map && p['id'] != null) ids.add(p['id'].toString());
-      }
       final stats = ids.isNotEmpty
           ? await SupabaseService().feedStats(ids)
           : <String, Map<String, dynamic>>{};
@@ -102,20 +121,13 @@ class _FeedScreenState extends State<FeedScreen>
           p['liked_by_me'] = s['likedByMe'];
         }
       }
-
-      setState(() {
-        _posts = response;
-        _filteredPosts = response;
-        _isLoading = false;
-      });
-      // Count this visit's views (the cloud dedupes per reader per day).
-      if (ids.isNotEmpty) {
-        BackendApi.instance
-            .call('posts.view', {'postIds': ids})
-            .catchError((_) => null);
-      }
-    } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted && stats.isNotEmpty) setState(() {});
+    } catch (_) {}
+    // Count this visit's views (the cloud dedupes per reader per day).
+    if (ids.isNotEmpty) {
+      BackendApi.instance
+          .call('posts.view', {'postIds': ids})
+          .catchError((_) => null);
     }
   }
 
@@ -150,8 +162,8 @@ class _FeedScreenState extends State<FeedScreen>
     }
   }
 
-  Future<void> _onPostTypeTap(_PostType type) async {
-    _toggleStylus();
+  Future<void> _onPostTypeTap(_PostType type, {bool toggle = true}) async {
+    if (toggle) _toggleStylus();
     switch (type.label) {
       case 'Quote':
         await context.push('/create/quote');
@@ -169,17 +181,137 @@ class _FeedScreenState extends State<FeedScreen>
         await context.push('/editor');
         break;
     }
-    _loadPosts();
+    _loadPosts(fresh: true);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Main content
-          SafeArea(
-            child: Column(
+    return LayoutBuilder(builder: (context, box) {
+      // PC: posts in a centred column + a side panel (create, trending
+      // books, shortcuts). Phones keep the single column + stylus button.
+      final panel = box.maxWidth >= 1000;
+      final column = box.maxWidth > 760
+          ? Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: _feedColumn(context),
+              ),
+            )
+          : _feedColumn(context);
+      return Scaffold(
+        body: Stack(
+          children: [
+            SafeArea(
+              child: panel
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: column),
+                        SizedBox(
+                          width: box.maxWidth >= 1300 ? 360 : 320,
+                          child: FeedSidePanel(
+                            postTypes: [
+                              for (final t in _postTypes)
+                                FeedCreateType(t.label, t.icon, t.color),
+                            ],
+                            onCreate: (label) => _onPostTypeTap(
+                                _postTypes.firstWhere((t) => t.label == label),
+                                toggle: false),
+                          ),
+                        ),
+                      ],
+                    )
+                  : column,
+            ),
+            if (!panel)
+              // Stylus FAB with vertical stack (phones / narrow windows)
+              Positioned(
+              right: 20,
+              bottom: 100,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // Post type buttons (vertical stack above stylus)
+                  AnimatedOpacity(
+                    opacity: _isStylusOpen ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutBack,
+                      height: _isStylusOpen
+                          ? min(_postTypes.length * 64.0,
+                              MediaQuery.sizeOf(context).height * .38)
+                          : 0,
+                      child: SingleChildScrollView(
+                        physics: _isStylusOpen
+                            ? const ClampingScrollPhysics()
+                            : const NeverScrollableScrollPhysics(),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: _postTypes.map((type) {
+                            return _buildPostTypeButton(type);
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Main stylus button
+                  GestureDetector(
+                    onTap: _toggleStylus,
+                    child: AnimatedBuilder(
+                      animation: _stylusRotation,
+                      builder: (context, child) {
+                        return Transform.rotate(
+                          angle: _stylusRotation.value * 3.14159,
+                          child: Container(
+                            width: 58,
+                            height: 58,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [BookNestColors.cyanSoft, BookNestColors.cyan],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: BookNestColors.navyDeep.withValues(alpha: .25),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: BookNestColors.cyan.withValues(alpha: 0.35),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: SvgPicture.asset(
+                                'assets/logo/stylus_polished.svg',
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _feedColumn(BuildContext context) {
+    return Column(
               children: [
                 // Header
                 Padding(
@@ -266,7 +398,7 @@ class _FeedScreenState extends State<FeedScreen>
                           ? _buildEmptyState()
                           : RefreshIndicator(
                               color: BookNestColors.cyan,
-                              onRefresh: _loadPosts,
+                              onRefresh: () => _loadPosts(fresh: true),
                               child: ListView.builder(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 16, vertical: 8),
@@ -285,91 +417,7 @@ class _FeedScreenState extends State<FeedScreen>
                             ),
                 ),
               ],
-            ),
-          ),
-
-          // Stylus FAB with vertical stack
-          Positioned(
-            right: 20,
-            bottom: 100,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Post type buttons (vertical stack above stylus)
-                AnimatedOpacity(
-                  opacity: _isStylusOpen ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOutBack,
-                    height: _isStylusOpen
-                        ? min(_postTypes.length * 64.0,
-                            MediaQuery.sizeOf(context).height * .38)
-                        : 0,
-                    child: SingleChildScrollView(
-                      physics: _isStylusOpen
-                          ? const ClampingScrollPhysics()
-                          : const NeverScrollableScrollPhysics(),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: _postTypes.map((type) {
-                          return _buildPostTypeButton(type);
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Main stylus button
-                GestureDetector(
-                  onTap: _toggleStylus,
-                  child: AnimatedBuilder(
-                    animation: _stylusRotation,
-                    builder: (context, child) {
-                      return Transform.rotate(
-                        angle: _stylusRotation.value * 3.14159,
-                        child: Container(
-                          width: 58,
-                          height: 58,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [BookNestColors.cyanSoft, BookNestColors.cyan],
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: BookNestColors.navyDeep.withOpacity(.25),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: BookNestColors.cyan.withOpacity(0.35),
-                                blurRadius: 18,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: SvgPicture.asset(
-                              'assets/logo/stylus_polished.svg',
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+            );
   }
 
   Widget _buildPostTypeButton(_PostType type) {
@@ -388,10 +436,10 @@ class _FeedScreenState extends State<FeedScreen>
               color: (dark
                       ? BookNestColors.darkChatBackground
                       : Colors.white)
-                  .withOpacity(.55),
+                  .withValues(alpha: .55),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                  color: BookNestColors.cyan.withOpacity(.24)),
+                  color: BookNestColors.cyan.withValues(alpha: .24)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -425,6 +473,7 @@ class _FeedScreenState extends State<FeedScreen>
 
   @override
   void dispose() {
+    _cacheSub?.cancel();
     _stylusController.dispose();
     super.dispose();
   }
@@ -497,7 +546,7 @@ class _QuotePostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: BookNestColors.cyan.withOpacity(0.1),
+              color: BookNestColors.cyan.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -642,7 +691,7 @@ class _NewsPostCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: BookNestColors.navy.withOpacity(0.1),
+                    color: BookNestColors.navy.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
@@ -738,7 +787,7 @@ class _PollPostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: BookNestColors.cyan.withOpacity(0.1),
+              color: BookNestColors.cyan.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -837,7 +886,7 @@ class _EventPostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: BookNestColors.navy.withOpacity(0.1),
+              color: BookNestColors.navy.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -936,7 +985,7 @@ class _ArticlePostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: BookNestColors.navy.withOpacity(0.1),
+              color: BookNestColors.navy.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -1118,6 +1167,7 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('Delete this post?'),
         content: const Text(
             'It disappears for every reader, along with its comments, likes '
@@ -1217,7 +1267,7 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
       alignment: WrapAlignment.end,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Icon(Icons.visibility_outlined, color: muted.withOpacity(.8), size: 18),
+        Icon(Icons.visibility_outlined, color: muted.withValues(alpha: .8), size: 18),
         const SizedBox(width: 4),
         AnimatedCount(
           value: _views,
@@ -1286,7 +1336,7 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
         if (_mine)
           IconButton(
             icon: Icon(Icons.delete_outline_rounded,
-                color: muted.withOpacity(.7), size: 18),
+                color: muted.withValues(alpha: .7), size: 18),
             tooltip: 'Delete post',
             visualDensity: VisualDensity.compact,
             padding: const EdgeInsets.all(4),
@@ -1296,7 +1346,7 @@ class _PostActionButtonsState extends State<_PostActionButtons> {
         else
           IconButton(
             icon: Icon(Icons.flag_outlined,
-                color: muted.withOpacity(.7), size: 18),
+                color: muted.withValues(alpha: .7), size: 18),
             tooltip: 'Report post',
           visualDensity: VisualDensity.compact,
           padding: const EdgeInsets.all(4),
@@ -1459,7 +1509,7 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
               width: 44,
               height: 4,
               decoration: BoxDecoration(
-                color: Theme.of(context).hintColor.withOpacity(.4),
+                color: Theme.of(context).hintColor.withValues(alpha: .4),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -1481,7 +1531,7 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
                                   size: 34,
                                   color: Theme.of(context)
                                       .hintColor
-                                      .withOpacity(.5)),
+                                      .withValues(alpha: .5)),
                               const SizedBox(height: 10),
                               Text(
                                 'Start the thread — say something first',
@@ -1535,7 +1585,7 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
                   children: [
                     Icon(Icons.subdirectory_arrow_right_rounded,
                         size: 15,
-                        color: BookNestColors.cyan.withOpacity(.9)),
+                        color: BookNestColors.cyan.withValues(alpha: .9)),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -1553,7 +1603,7 @@ class _PostCommentsSheetState extends State<_PostCommentsSheet> {
                           size: 16,
                           color:
                               Theme.of(context).colorScheme.onSurface
-                                  .withOpacity(.6)),
+                                  .withValues(alpha: .6)),
                     ),
                   ],
                 ),
@@ -1649,8 +1699,8 @@ class _ThreadTile extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         color: dark
-            ? Colors.white.withOpacity(.05)
-            : BookNestColors.navyDeep.withOpacity(.04),
+            ? Colors.white.withValues(alpha: .05)
+            : BookNestColors.navyDeep.withValues(alpha: .04),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1683,7 +1733,7 @@ class _ThreadTile extends StatelessWidget {
                           color: Theme.of(context)
                               .colorScheme
                               .onSurface
-                              .withOpacity(.5))),
+                              .withValues(alpha: .5))),
                 ),
               ),
             for (final reply in replies)
@@ -1759,7 +1809,7 @@ class _CommentRow extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w700,
-                      color: BookNestColors.cyan.withOpacity(.85))),
+                      color: BookNestColors.cyan.withValues(alpha: .85))),
             ),
           ],
         ),
@@ -1773,7 +1823,7 @@ class _CommentRow extends StatelessWidget {
                     color: Theme.of(context)
                         .colorScheme
                         .onSurface
-                        .withOpacity(.55))),
+                        .withValues(alpha: .55))),
           ),
         const SizedBox(height: 6),
         Text(comment['text']?.toString() ?? '',
@@ -1792,13 +1842,14 @@ void _showEventDetails(BuildContext context, dynamic post) {
   showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
+      scrollable: true,
       backgroundColor: (Theme.of(dialogContext).brightness == Brightness.dark
               ? BookNestColors.darkChatBackground
               : Colors.white)
-          .withOpacity(.88),
+          .withValues(alpha: .88),
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(22),
-          side: BorderSide(color: BookNestColors.cyan.withOpacity(.3))),
+          side: BorderSide(color: BookNestColors.cyan.withValues(alpha: .3))),
       title: Text(post?['title']?.toString() ?? 'Event'),
       content: Column(
         mainAxisSize: MainAxisSize.min,

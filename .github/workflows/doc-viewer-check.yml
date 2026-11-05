@@ -1,0 +1,58 @@
+name: Document viewer check
+
+# Opens every file in test/fixtures/docs with BookNest's document reader
+# (lib/services/doc_extract.dart — pure Dart) and checks the expected text
+# comes out: Word/Excel/PowerPoint (old and new), OpenDocument, EPUB, MOBI,
+# FB2, RTF, HTML, CSV, JSON, archives and unknown binaries. Runs against
+# both major versions of package:archive. Takes about a minute.
+# Report: ops/doc-viewer-check.md
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a106c8-booknest
+    paths:
+      - 'lib/services/doc_extract.dart'
+      - 'tool/doc_check/**'
+      - 'test/fixtures/docs/**'
+      - '.github/workflows/doc-viewer-check.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Run the reader on every fixture
+        run: |
+          set +e
+          SRC=lib/services/doc_extract.dart
+          [ -f "$SRC" ] || SRC=tool/doc_check/doc_extract.dart
+          R="$GITHUB_WORKSPACE/doc-viewer-check.md"
+          echo "# Document viewer check — $(date -u +%F' '%H:%M) UTC · $(dart --version 2>&1)" > "$R"
+          FAIL=0
+          for AV in '^3.6.1' '^4.0.0'; do
+            D="$RUNNER_TEMP/dc-${AV//[^0-9]/}"
+            mkdir -p "$D/bin"
+            printf 'name: dc\nenvironment:\n  sdk: ">=3.0.0 <4.0.0"\ndependencies:\n  archive: "%s"\n' "$AV" > "$D/pubspec.yaml"
+            cp "$SRC" "$D/bin/doc_extract.dart"
+            cp tool/doc_check/check.dart "$D/bin/check.dart"
+            ( cd "$D" && dart pub get ) > pg.txt 2>&1 || { echo "pub get failed:"; cat pg.txt; } >> "$R"
+            V="$(cd "$D" && grep -A3 '^  archive:' pubspec.lock 2>/dev/null | grep version | head -1 | tr -d ' ')"
+            echo "" >> "$R"; echo "## archive $AV ($V)" >> "$R"
+            ( cd "$D" && dart analyze bin 2>&1 | grep -E "error|warning" | head -40 ) > an.txt || true
+            if [ -s an.txt ]; then echo '```text' >> "$R"; cat an.txt >> "$R"; echo '```' >> "$R"; fi
+            ( cd "$D" && dart run bin/check.dart "$GITHUB_WORKSPACE/test/fixtures/docs" ) >> "$R" 2>&1 || FAIL=1
+          done
+          cat "$R"; cat "$R" >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p ops && cp "$R" ops/doc-viewer-check.md
+          git config user.email "booknest-ci@users.noreply.github.com"; git config user.name "booknest-ci"
+          git add -f ops/doc-viewer-check.md && git commit -q -m "Document viewer check report [skip ci]" && \
+            for i in 1 2 3; do git pull -q --rebase --autostash origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break; sleep 5; done || true
+          exit $FAIL

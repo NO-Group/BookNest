@@ -96,7 +96,6 @@ class _ReportSheetState extends State<_ReportSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SafeArea(
@@ -112,7 +111,7 @@ class _ReportSheetState extends State<_ReportSheet> {
                   width: 44,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Theme.of(context).hintColor.withOpacity(.4),
+                    color: Theme.of(context).hintColor.withValues(alpha: .4),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -234,6 +233,7 @@ Future<void> confirmBlock(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
+      scrollable: true,
       title: Text(currentlyBlocked ? 'Unblock $peerName?' : 'Block $peerName?'),
       content: Text(currentlyBlocked
           ? '$peerName will be able to message you again.'

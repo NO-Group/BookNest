@@ -9,7 +9,6 @@ import '../../../config/theme.dart';
 import '../../../core/utils/auth_guard.dart';
 import '../../../services/book_repository.dart';
 import '../../../state/book_providers.dart';
-import '../../../services/supabase_service.dart';
 import '../../components/booknest_ui.dart';
 import 'book_details_screen.dart' show BookShareSheet;
 
@@ -255,7 +254,7 @@ class _PublishDetailsScreenState extends ConsumerState<PublishDetailsScreen> {
                   fontFamily: fontFamily,
                 ),
                 p: TextStyle(
-                  color: onSurface.withOpacity(.85),
+                  color: onSurface.withValues(alpha: .85),
                   fontSize: 16 * scale,
                   height: lineHeight,
                   fontFamily: fontFamily,
@@ -271,7 +270,7 @@ class _PublishDetailsScreenState extends ConsumerState<PublishDetailsScreen> {
                       left: BorderSide(color: BookNestColors.cyan, width: 3)),
                 ),
                 blockquote: TextStyle(
-                    color: onSurface.withOpacity(.85),
+                    color: onSurface.withValues(alpha: .85),
                     fontSize: 15 * scale,
                     height: lineHeight),
                 horizontalRuleDecoration: BoxDecoration(
@@ -339,12 +338,12 @@ class _PublishDetailsScreenState extends ConsumerState<PublishDetailsScreen> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                     selected: selected,
-                    selectedTileColor: BookNestColors.cyan.withOpacity(.1),
+                    selectedTileColor: BookNestColors.cyan.withValues(alpha: .1),
                     leading: CircleAvatar(
                       radius: 16,
                       backgroundColor: selected
                           ? BookNestColors.cyan
-                          : BookNestColors.cyan.withOpacity(.15),
+                          : BookNestColors.cyan.withValues(alpha: .15),
                       child: Text('$number',
                           style: TextStyle(
                               color: selected

@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "tether" "\0"
+            VALUE "CompanyName", "N.O Group" "\0"
+            VALUE "FileDescription", "BookNest" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "tether" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "tether.exe" "\0"
-            VALUE "ProductName", "tether" "\0"
+            VALUE "InternalName", "booknest" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 N.O Group. All rights reserved." "\0"
+            VALUE "OriginalFilename", "booknest.exe" "\0"
+            VALUE "ProductName", "BookNest" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

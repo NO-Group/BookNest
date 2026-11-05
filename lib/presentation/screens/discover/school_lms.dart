@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -50,6 +48,7 @@ class _SchoolClassesSectionState extends State<SchoolClassesSection> {
     final created = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('New class'),
         content: TextField(
           controller: nameCtrl,
@@ -83,7 +82,7 @@ class _SchoolClassesSectionState extends State<SchoolClassesSection> {
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not create the class — try again.'
+            ? BackendApi.instance.errorOr('Could not create the class — try again.')
             : '"$name" is open for enrolment.')));
     if (res != null) _load();
   }
@@ -101,8 +100,8 @@ class _SchoolClassesSectionState extends State<SchoolClassesSection> {
     if (res == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(klass['joined'] == true
-              ? 'Could not leave the class — try again.'
-              : 'Could not join the class — try again.')));
+              ? BackendApi.instance.errorOr('Could not leave the class — try again.')
+              : BackendApi.instance.errorOr('Could not join the class — try again.'))));
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -156,7 +155,7 @@ class _SchoolClassesSectionState extends State<SchoolClassesSection> {
                         'live inside classes.'
                     : 'No classes yet.',
                 style: TextStyle(
-                    fontSize: 12.5, color: onSurface.withOpacity(.55)),
+                    fontSize: 12.5, color: onSurface.withValues(alpha: .55)),
               ),
             )
           else
@@ -203,7 +202,7 @@ class _SchoolClassesSectionState extends State<SchoolClassesSection> {
                             '${klass['teacherName']} · ${(klass['members'] as num?)?.toInt() ?? 0} student${((klass['members'] as num?)?.toInt() ?? 0) == 1 ? '' : 's'}',
                             style: TextStyle(
                                 fontSize: 11.5,
-                                color: onSurface.withOpacity(.55)),
+                                color: onSurface.withValues(alpha: .55)),
                           ),
                         ]),
                   ),
@@ -396,7 +395,7 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not create the assignment — try again.'
+            ? BackendApi.instance.errorOr('Could not create the assignment — try again.')
             : 'Assignment set for the class.')));
     if (res != null) _load();
   }
@@ -410,8 +409,8 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not update — try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(BackendApi.instance.errorOr('Could not update — try again.'))));
       return;
     }
     _load();
@@ -461,7 +460,7 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
                         'even a book to read.'
                     : 'No assignments yet.',
                 style: TextStyle(
-                    fontSize: 12.5, color: onSurface.withOpacity(.55)),
+                    fontSize: 12.5, color: onSurface.withValues(alpha: .55)),
               ),
             )
           else
@@ -472,10 +471,10 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    color: onSurface.withOpacity(.04),
+                    color: onSurface.withValues(alpha: .04),
                     border: a['done'] == true
                         ? Border.all(
-                            color: BookNestColors.cyan.withOpacity(.35))
+                            color: BookNestColors.cyan.withValues(alpha: .35))
                         : null,
                   ),
                   child: Column(
@@ -486,7 +485,7 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2.5),
                             decoration: BoxDecoration(
-                              color: BookNestColors.cyan.withOpacity(.13),
+                              color: BookNestColors.cyan.withValues(alpha: .13),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -506,8 +505,8 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
                                       ? Theme.of(context)
                                           .colorScheme
                                           .error
-                                          .withOpacity(.8)
-                                      : onSurface.withOpacity(.5))),
+                                          .withValues(alpha: .8)
+                                      : onSurface.withValues(alpha: .5))),
                         ]),
                         const SizedBox(height: 8),
                         Row(children: [
@@ -520,7 +519,7 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
                               size: 21,
                               color: a['done'] == true
                                   ? BookNestColors.cyan
-                                  : onSurface.withOpacity(.4),
+                                  : onSurface.withValues(alpha: .4),
                             ),
                           ),
                           const SizedBox(width: 9),
@@ -538,7 +537,7 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
                             '${(a['doneCount'] as num?)?.toInt() ?? 0} done',
                             style: TextStyle(
                                 fontSize: 11,
-                                color: onSurface.withOpacity(.5)),
+                                color: onSurface.withValues(alpha: .5)),
                           ),
                         ]),
                         if ((a['body']?.toString() ?? '').isNotEmpty)
@@ -548,7 +547,7 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
                                 style: TextStyle(
                                     fontSize: 12.5,
                                     height: 1.4,
-                                    color: onSurface.withOpacity(.8))),
+                                    color: onSurface.withValues(alpha: .8))),
                           ),
                         if (a['book'] is Map) ...[
                           const SizedBox(height: 8),
@@ -559,7 +558,7 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(10),
-                                color: BookNestColors.cyan.withOpacity(.08),
+                                color: BookNestColors.cyan.withValues(alpha: .08),
                               ),
                               child: Row(children: [
                                 const Icon(Icons.menu_book_rounded,
@@ -581,238 +580,6 @@ class _SchoolAssignmentsSectionState extends State<SchoolAssignmentsSection> {
                         ],
                       ]),
                 ),
-              ),
-        ]),
-      ),
-    );
-  }
-}
-
-/// ── School LMS, part III: Exam countdowns ───────────────────────────────
-class SchoolExamsSection extends StatefulWidget {
-  const SchoolExamsSection({required this.state, super.key});
-
-  final GroupBaseScreenState state;
-
-  @override
-  State<SchoolExamsSection> createState() => _SchoolExamsSectionState();
-}
-
-class _SchoolExamsSectionState extends State<SchoolExamsSection> {
-  List<Map<String, dynamic>> _exams = [];
-  bool _loading = true;
-  bool _busy = false;
-  Timer? _ticker;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-    // Live countdowns: tick every minute while the page is open.
-    _ticker = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _ticker?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    final res = await BackendApi.instance
-        .call('schools.exam.list', {'schoolId': widget.state.groupId});
-    if (!mounted) return;
-    setState(() {
-      _exams = ((res?['exams'] as List?) ?? const [])
-          .map((row) => Map<String, dynamic>.from(row as Map))
-          .toList();
-      _loading = false;
-    });
-  }
-
-  Future<void> _addExam() async {
-    final titleCtrl = TextEditingController();
-    final subjectCtrl = TextEditingController();
-    DateTime? at;
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialog) => AlertDialog(
-          title: const Text('Schedule an exam'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-              controller: titleCtrl,
-              maxLength: 160,
-              decoration: const InputDecoration(
-                  hintText: 'e.g. WAEC Mock — Mathematics', counterText: ''),
-            ),
-            TextField(
-              controller: subjectCtrl,
-              maxLength: 60,
-              decoration: const InputDecoration(
-                  hintText: 'Subject (optional)', counterText: ''),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  firstDate: DateTime.now(),
-                  initialDate: DateTime.now().add(const Duration(days: 14)),
-                  lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
-                );
-                if (date == null || !dialogContext.mounted) return;
-                final time = await showTimePicker(
-                  context: context,
-                  initialTime: const TimeOfDay(hour: 9, minute: 0),
-                );
-                if (time == null) return;
-                setDialog(() => at = DateTime(
-                    date.year, date.month, date.day, time.hour, time.minute));
-              },
-              icon: const Icon(Icons.event_rounded, size: 17),
-              label: Text(at == null
-                  ? 'Pick date & time'
-                  : '${at!.month}/${at!.day} · ${at!.hour}:${at!.minute.toString().padLeft(2, '0')}'),
-            ),
-          ]),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancel')),
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Schedule',
-                    style: TextStyle(
-                        color: BookNestColors.cyan,
-                        fontWeight: FontWeight.w800))),
-          ],
-        ),
-      ),
-    );
-    if (saved != true) return;
-    final title = titleCtrl.text.trim();
-    if (title.isEmpty) return;
-    setState(() => _busy = true);
-    final res = await BackendApi.instance.call('schools.exam.create', {
-      'schoolId': widget.state.groupId,
-      'title': title,
-      'subject': subjectCtrl.text.trim(),
-      if (at != null) 'at': at!.toIso8601String(),
-    });
-    if (!mounted) return;
-    setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(res == null
-            ? 'Could not schedule — try again.'
-            : 'Exam on the calendar — countdown is live.')));
-    if (res != null) _load();
-  }
-
-  String _countdown(Map<String, dynamic> exam) {
-    final at = DateTime.tryParse(exam['at']?.toString() ?? '');
-    if (at == null) return 'Date to be set';
-    final diff = at.difference(DateTime.now());
-    if (diff.isNegative) return 'Written ✅';
-    final days = diff.inDays;
-    final hours = diff.inHours % 24;
-    final minutes = diff.inMinutes % 60;
-    if (days >= 1) return '$days d · ${hours}h to go';
-    if (hours >= 1) return '$hours h · ${minutes}m to go';
-    return '${minutes.clamp(1, 59)} min to go!';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    return GlassPanel(
-      radius: 24,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Icon(Icons.timer_rounded,
-                size: 19, color: BookNestColors.cyan),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text('Exam countdowns · ${_exams.length}',
-                  style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w800,
-                      color: onSurface)),
-            ),
-            if (widget.state.isManager)
-              IconButton(
-                onPressed: _busy ? null : _addExam,
-                icon: const Icon(Icons.add_circle_rounded,
-                    color: BookNestColors.cyan, size: 24),
-                tooltip: 'Schedule exam',
-              ),
-          ]),
-          const SizedBox(height: 6),
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: BookNestColors.cyan)),
-            )
-          else if (_exams.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              child: Text(
-                widget.state.isManager
-                    ? 'Put the first exam on the calendar — every student '
-                        'sees a live countdown.'
-                    : 'No exams scheduled.',
-                style: TextStyle(
-                    fontSize: 12.5, color: onSurface.withOpacity(.55)),
-              ),
-            )
-          else
-            for (final exam in _exams)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Row(children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: BookNestColors.cyan.withOpacity(.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.quiz_outlined,
-                        size: 19, color: BookNestColors.cyan),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(exam['title']?.toString() ?? 'Exam',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: onSurface)),
-                          const SizedBox(height: 2),
-                          if ((exam['subject']?.toString() ?? '').isNotEmpty)
-                            Text(exam['subject'].toString(),
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: onSurface.withOpacity(.5))),
-                        ]),
-                  ),
-                  Text(_countdown(exam),
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: BookNestColors.cyan)),
-                ]),
               ),
         ]),
       ),
@@ -871,7 +638,7 @@ class _GroupReadingListSectionState extends State<GroupReadingListSection> {
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res == null
-            ? 'Could not add it right now — try again.'
+            ? BackendApi.instance.errorOr('Could not add it right now — try again.')
             : '"${book['title']}" added to the reading list.')));
     if (res != null) await state.reload();
     if (mounted) setState(() => _list = _fromDoc());
@@ -889,8 +656,8 @@ class _GroupReadingListSectionState extends State<GroupReadingListSection> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (res == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not remove it — try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(BackendApi.instance.errorOr('Could not remove it — try again.'))));
       return;
     }
     await state.reload();
@@ -933,7 +700,7 @@ class _GroupReadingListSectionState extends State<GroupReadingListSection> {
                     ? 'Curate the shelf your members should read — add the first book.'
                     : 'No books on the list yet.',
                 style: TextStyle(
-                    fontSize: 12.5, color: onSurface.withOpacity(.55)),
+                    fontSize: 12.5, color: onSurface.withValues(alpha: .55)),
               ),
             )
           else
@@ -975,7 +742,7 @@ class _GroupReadingListSectionState extends State<GroupReadingListSection> {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                   fontSize: 10,
-                                  color: onSurface.withOpacity(.55))),
+                                  color: onSurface.withValues(alpha: .55))),
                         ],
                       ),
                     ),
@@ -989,7 +756,7 @@ class _GroupReadingListSectionState extends State<GroupReadingListSection> {
               child: Text(
                 'Hold a cover to remove it from the list.',
                 style: TextStyle(
-                    fontSize: 10.5, color: onSurface.withOpacity(.45)),
+                    fontSize: 10.5, color: onSurface.withValues(alpha: .45)),
               ),
             ),
         ]),
@@ -1057,7 +824,7 @@ class _GroupLeaderboardSectionState extends State<GroupLeaderboardSection> {
             IconButton(
               onPressed: _loading ? null : _load,
               icon: Icon(Icons.refresh_rounded,
-                  size: 19, color: onSurface.withOpacity(.6)),
+                  size: 19, color: onSurface.withValues(alpha: .6)),
               tooltip: 'Refresh',
             ),
           ]),
@@ -1076,7 +843,7 @@ class _GroupLeaderboardSectionState extends State<GroupLeaderboardSection> {
               child: Text(
                 'No reading activity yet — open a book from the list to lead the board.',
                 style: TextStyle(
-                    fontSize: 12.5, color: onSurface.withOpacity(.55)),
+                    fontSize: 12.5, color: onSurface.withValues(alpha: .55)),
               ),
             )
           else
@@ -1094,7 +861,7 @@ class _GroupLeaderboardSectionState extends State<GroupLeaderboardSection> {
                       style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
-                          color: onSurface.withOpacity(.75)),
+                          color: onSurface.withValues(alpha: .75)),
                     ),
                   ),
                   const SizedBox(width: 6),
