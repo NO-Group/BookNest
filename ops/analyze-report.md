@@ -1,8 +1,8 @@
-# flutter analyze — 2026-11-01T15:11Z · 7cdb061
+# flutter analyze — 2026-11-05T17:34Z · f69a747
 
 Flutter 3.47.9 • channel stable • https://github.com/flutter/flutter.git
 
-Exit 0 · **0 errors · 12 warnings · 82 infos**
+Exit 0 · **0 errors · 11 warnings · 82 infos**
 
 ## Errors
 ```text
@@ -15,13 +15,12 @@ warning • The value of the field '_editStatus' isn't used. Try removing the fi
 warning • The value of the field '_publishedChapters' isn't used. Try removing the field, or using it • lib/presentation/screens/books/book_editor_screen.dart:90:7 • unused_field
 warning • The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand • lib/presentation/screens/chat/media_viewer_screen.dart:241:23 • dead_null_aware_expression
 warning • The value of the field '_loading' isn't used. Try removing the field, or using it • lib/presentation/screens/discover/school_lms.dart:605:8 • unused_field
-warning • The value of the field '_searching' isn't used. Try removing the field, or using it • lib/presentation/screens/dms/dm_list_screen.dart:550:8 • unused_field
+warning • The value of the field '_searching' isn't used. Try removing the field, or using it • lib/presentation/screens/dms/dm_list_screen.dart:573:8 • unused_field
 warning • The value of the field '_restoredScroll' isn't used. Try removing the field, or using it • lib/presentation/screens/reader/reader_screen.dart:57:8 • unused_field
 warning • The value of the field '_pageIndex' isn't used. Try removing the field, or using it • lib/presentation/screens/reader/reader_screen.dart:71:7 • unused_field
 warning • The value of the field '_lastSize' isn't used. Try removing the field, or using it • lib/presentation/screens/settings/chat_backup_screen.dart:29:7 • unused_field
 warning • The value of the field '_diskMaxEntryChars' isn't used. Try removing the field, or using it • lib/services/backend_api.dart:80:20 • unused_field
 warning • Unnecessary type check; the result is always 'true'. Try correcting the type check, or removing the type check • lib/services/inbox_watcher.dart:266:11 • unnecessary_type_check
-warning • Unnecessary type check; the result is always 'false'. Try correcting the type check, or removing the type check • lib/services/typing_broadcaster.dart:44:13 • unnecessary_type_check
 ```
 
 ## Infos by rule
